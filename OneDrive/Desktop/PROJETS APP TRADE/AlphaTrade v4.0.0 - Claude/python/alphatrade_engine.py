@@ -1401,6 +1401,13 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         if broker_step > 0:
             effective = math.floor((effective + 1e-12) / broker_step) * broker_step
         effective = round(effective, 8)
+        # Si le cap global est inférieur au lot minimum du broker mais que le lot configuré
+        # le couvre, on utilise le lot configuré (cas des synthétiques Deriv min 0.20)
+        if effective < broker_min and broker_min <= configured and (symbol_cap <= 0 or broker_min <= symbol_cap):
+            effective = min(configured, symbol_cap) if symbol_cap > 0 else configured
+            if broker_step > 0:
+                effective = math.floor((effective + 1e-12) / broker_step) * broker_step
+            effective = round(effective, 8)
         rejected = effective < broker_min or effective <= 0
         result[key] = {
             "configured_lot": configured,
