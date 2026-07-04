@@ -1,0 +1,53 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (ex: v4.0.1)'
+        required: true
+        default: 'v4.0.1'
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python packages
+        run: |
+          pip install --target=python requests anthropic openai numpy joblib scikit-learn
+
+      - name: Install Node dependencies
+        run: npm install
+        working-directory: electron
+
+      - name: Build macOS DMG
+        run: npm run build:mac
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: MyAlphaTrade/alphatrade-releases
+          tag_name: ${{ github.event.inputs.version }}
+          files: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/latest-mac.yml
+          token: ${{ secrets.RELEASES_TOKEN }}
+          fail_on_unmatched_files: false
