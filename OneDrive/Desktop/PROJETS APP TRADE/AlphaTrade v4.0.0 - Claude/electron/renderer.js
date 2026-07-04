@@ -175,10 +175,17 @@ function renderTradingView(force = false) {
   }
   if (container.dataset.loaded === 'true') return;
   container.dataset.loaded = 'true';
-  const symbol = encodeURIComponent(
-    activeSymbol === 'BOOM1000'  ? 'DERIV:BOOM1000' :
-    activeSymbol === 'CRASH1000' ? 'DERIV:CRASH1000' : 'OANDA:XAUUSD'
-  );
+  const isSynthetic = activeSymbol === 'BOOM1000' || activeSymbol === 'CRASH1000';
+  if (isSynthetic) {
+    container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;color:var(--muted);font-size:13px;text-align:center;padding:24px">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/></svg>
+      <div style="font-weight:600;color:var(--text)">${activeSymbol}</div>
+      <div>Graphique non disponible sur TradingView.<br>Les indices synthétiques Deriv ne sont pas listés sur cette plateforme.</div>
+      <div style="font-size:11px;opacity:.6">L'analyse IA et le trading fonctionnent normalement via MT5.</div>
+    </div>`;
+    return;
+  }
+  const symbol = encodeURIComponent('OANDA:XAUUSD');
   const locale = currentLanguage === 'en' ? 'en' : 'fr';
   container.innerHTML = `<iframe title="TradingView" allowtransparency="true" scrolling="no"
     src="https://s.tradingview.com/widgetembed/?symbol=${symbol}&interval=5&theme=dark&style=1&toolbar_bg=%23070d09&hide_side_toolbar=0&allow_symbol_change=1&save_image=1&locale=${locale}"></iframe>`;

@@ -42,6 +42,11 @@ SYMBOLS = {
         "label": "BOOM1000",
         "market": "synthetic",
     },
+    "CRASH1000": {
+        "aliases": ["Crash 1000 Index", "CRASH1000", "Crash 1000 Index.", "CRASH1000."],
+        "label": "CRASH1000",
+        "market": "synthetic",
+    },
 }
 
 DEFAULT_PARAMS = {
@@ -123,6 +128,29 @@ DEFAULT_PARAMS = {
             "stop_before_end_min": 10,
         },
         "BOOM1000": {
+            "lot": 0.20,
+            "lot_min": 0.20,
+            "lot_max": 0.50,
+            "tp_pips": 15,
+            "max_positions": 3,
+            "max_position_loss": 150,
+            "max_floating_loss": 300,
+            "timeframe": "M1",
+            "confidence_min": 55,
+            "cadence_sec": 30,
+            "max_trades_hour": 40,
+            "max_hold_sec": 60,
+            "position_review_sec": 120,
+            "profit_target": 1.00,
+            "profit_lock_trigger": 3.00,
+            "profit_lock_drawdown": 1.00,
+            "emergency_loss_limit": 150.00,
+            "min_positive_exit": 0.09,
+            "signal_reversal_margin": 9,
+            "cooldown_after_loss_sec": 120,
+            "session_filter_enabled": False,
+        },
+        "CRASH1000": {
             "lot": 0.20,
             "lot_min": 0.20,
             "lot_max": 0.50,
