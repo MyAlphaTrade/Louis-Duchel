@@ -8,9 +8,6 @@ on:
         required: true
         default: 'v4.0.1'
 
-env:
-  PROJECT: "OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
-
 jobs:
   build-mac:
     runs-on: macos-latest
@@ -29,18 +26,31 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Verify source files
+        run: |
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          echo "=== Fichiers electron ==="
+          ls -la "$PROJECT/electron/"
+          echo "=== package.json ==="
+          cat "$PROJECT/electron/package.json"
+
       - name: Install Python packages
         run: |
-          pip install --target="${{ env.PROJECT }}/python" \
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          pip install --target="$PROJECT/python" \
             requests anthropic openai numpy joblib scikit-learn
 
       - name: Install Node dependencies
-        run: npm install
-        working-directory: "${{ env.PROJECT }}/electron"
+        run: |
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          cd "$PROJECT/electron"
+          npm install
 
       - name: Build macOS DMG
-        run: npm run build:mac
-        working-directory: "${{ env.PROJECT }}/electron"
+        run: |
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          cd "$PROJECT/electron"
+          npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
@@ -50,8 +60,8 @@ jobs:
           repository: MyAlphaTrade/alphatrade-releases
           tag_name: ${{ github.event.inputs.version }}
           files: |
-            ${{ env.PROJECT }}/dist/*.dmg
-            ${{ env.PROJECT }}/dist/*.dmg.blockmap
-            ${{ env.PROJECT }}/dist/latest-mac.yml
+            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/*.dmg
+            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/*.dmg.blockmap
+            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/latest-mac.yml
           token: ${{ secrets.RELEASES_TOKEN }}
           fail_on_unmatched_files: false
