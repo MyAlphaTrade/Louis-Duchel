@@ -7,7 +7,7 @@
     "start": "electron .",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac --publish never"
   },
   "build": {
     "appId": "com.myalphatrade.app",
