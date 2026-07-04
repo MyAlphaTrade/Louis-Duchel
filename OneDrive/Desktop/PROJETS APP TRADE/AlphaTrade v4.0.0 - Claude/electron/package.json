@@ -28,7 +28,6 @@
       "target": [
         { "target": "dmg", "arch": ["x64", "arm64"] }
       ],
-      "icon": "assets/icon.ico",
       "category": "public.app-category.finance"
     },
     "dmg": {
@@ -64,14 +63,10 @@
       }
     ],
     "files": [
-      "main.js",
-      "preload.js",
-      "renderer.js",
-      "index.html",
-      "styles.css",
-      "assets/**/*",
-      "i18n/**/*",
-      "package.json"
+      "**/*",
+      "!node_modules/.bin",
+      "!**/__pycache__/**",
+      "!**/*.pyc"
     ]
   },
   "devDependencies": {
