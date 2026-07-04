@@ -22,7 +22,7 @@ from market_microstructure import MicrostructureObserver
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
-VERSION = "0.2.0"
+VERSION = "4.0.2"
 HARD_REAL_LOT_CAP = 0.10
 HARD_DEMO_LOT_CAP = 0.10
 HARD_RISK_PCT_CAP = 0.50
@@ -151,6 +151,7 @@ DEFAULT_PARAMS = {
             "session_filter_enabled": False,
         },
         "CRASH1000": {
+            "enabled": False,
             "lot": 0.20,
             "lot_min": 0.20,
             "lot_max": 0.50,
@@ -182,8 +183,9 @@ STRATEGY_PROFILES = {
         "description": "Plus reactif: petits gains frequents, signaux courts et sorties rapides.",
         "global": {"lookback_candles": 120, "min_score_gap": 8, "edge_zone_pct": 18},
         "symbols": {
-            "XAUUSD": {"timeframe": "M5", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60, "profit_target": 3.00, "max_hold_sec": 600},
-            "EURUSD": {"timeframe": "M5", "confidence_min": 60, "cadence_sec": 20, "position_review_sec": 60, "profit_target": 1.00, "max_hold_sec": 300},
+            "XAUUSD":   {"timeframe": "M5", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 3.00,  "max_hold_sec": 600},
+            "BOOM1000":  {"timeframe": "M1", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 5.00,  "max_hold_sec": 60},
+            "CRASH1000": {"timeframe": "M1", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 5.00,  "max_hold_sec": 60},
         },
     },
     "scalping_safe": {
@@ -191,8 +193,9 @@ STRATEGY_PROFILES = {
         "description": "Moins de trades: confirmations plus propres et filtres de risque plus stricts.",
         "global": {"lookback_candles": 200, "min_score_gap": 10, "edge_zone_pct": 20},
         "symbols": {
-            "XAUUSD": {"timeframe": "M5", "confidence_min": 60, "cadence_sec": 15, "position_review_sec": 120, "profit_target": 5.00, "max_hold_sec": 1800},
-            "EURUSD": {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 45, "position_review_sec": 120, "profit_target": 2.00, "max_hold_sec": 600},
+            "XAUUSD":   {"timeframe": "M5", "confidence_min": 60, "cadence_sec": 15, "position_review_sec": 120, "profit_target": 5.00,  "max_hold_sec": 1800},
+            "BOOM1000":  {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 20, "position_review_sec": 120, "profit_target": 10.00, "max_hold_sec": 120},
+            "CRASH1000": {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 20, "position_review_sec": 120, "profit_target": 10.00, "max_hold_sec": 120},
         },
     },
     "long_analysis": {
@@ -200,8 +203,9 @@ STRATEGY_PROFILES = {
         "description": "Moins d'entrees: lecture multi-timeframe, objectif par trade plus eleve.",
         "global": {"lookback_candles": 300, "min_score_gap": 12, "edge_zone_pct": 24},
         "symbols": {
-            "XAUUSD": {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 60, "position_review_sec": 300, "profit_target": 10.0, "max_hold_sec": 3600, "max_positions": 3},
-            "EURUSD": {"timeframe": "H1", "confidence_min": 70, "cadence_sec": 120, "position_review_sec": 300, "profit_target": 5.0, "max_hold_sec": 3600, "max_positions": 2},
+            "XAUUSD":   {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 60, "position_review_sec": 300, "profit_target": 10.0,  "max_hold_sec": 3600, "max_positions": 3},
+            "BOOM1000":  {"timeframe": "M5",  "confidence_min": 65, "cadence_sec": 30, "position_review_sec": 180, "profit_target": 20.00, "max_hold_sec": 300,  "max_positions": 2},
+            "CRASH1000": {"timeframe": "M5",  "confidence_min": 65, "cadence_sec": 30, "position_review_sec": 180, "profit_target": 20.00, "max_hold_sec": 300,  "max_positions": 2},
         },
     },
     "combined": {
@@ -209,8 +213,19 @@ STRATEGY_PROFILES = {
         "description": "Scalping seulement si la tendance longue ne contredit pas le signal court.",
         "global": {"lookback_candles": 240, "min_score_gap": 8, "edge_zone_pct": 20},
         "symbols": {
-            "XAUUSD": {"timeframe": "M5", "confidence_min": 58, "cadence_sec": 12, "position_review_sec": 120, "profit_target": 5.00, "max_hold_sec": 1800},
-            "EURUSD": {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 40, "position_review_sec": 120, "profit_target": 2.00, "max_hold_sec": 900},
+            "XAUUSD":   {"timeframe": "M5", "confidence_min": 58, "cadence_sec": 12, "position_review_sec": 120, "profit_target": 5.00, "max_hold_sec": 1800},
+            "BOOM1000":  {"timeframe": "M1", "confidence_min": 58, "cadence_sec": 15, "position_review_sec": 90,  "profit_target": 8.00, "max_hold_sec": 90},
+            "CRASH1000": {"timeframe": "M1", "confidence_min": 58, "cadence_sec": 15, "position_review_sec": 90,  "profit_target": 8.00, "max_hold_sec": 90},
+        },
+    },
+    "synthetic_scalp": {
+        "label": "Scalping synthetiques",
+        "description": "Profil dedie aux indices synthetiques Deriv (BOOM1000): signaux M1 rapides, haute confiance requise.",
+        "global": {"lookback_candles": 150, "min_score_gap": 10, "edge_zone_pct": 18},
+        "symbols": {
+            "XAUUSD":   {"timeframe": "M5", "confidence_min": 62, "cadence_sec": 30, "position_review_sec": 120, "profit_target": 5.00,  "max_hold_sec": 600, "max_positions": 2},
+            "BOOM1000":  {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 10.00, "max_hold_sec": 90,  "max_positions": 3},
+            "CRASH1000": {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 10.00, "max_hold_sec": 90,  "max_positions": 3},
         },
     },
 }
@@ -272,7 +287,16 @@ def write_json(name: str, payload: dict) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, ensure_ascii=True, separators=(",", ":"))
-        os.replace(tmp, path)
+        # Windows peut refuser le rename si le fichier est temporairement verrouillé par Electron.
+        # On retente jusqu'à 5 fois avec un court delai avant de propager l'erreur.
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05)
     finally:
         if os.path.exists(tmp):
             try:
@@ -896,7 +920,7 @@ def symbol_analysis(symbol: str, params: dict, symbol_key: str | None = None, le
         mtf_weight = 18.0
     elif strategy_mode == "combined":
         mtf_weight = 12.0
-    elif strategy_mode == "scalping_safe":
+    elif strategy_mode in ("scalping_safe", "synthetic_scalp"):
         mtf_weight = 10.0
     if mtf_bias == "BULLISH":
         buy += mtf_weight
@@ -1048,6 +1072,7 @@ def live_positions(symbol_names: dict[str, str]) -> list[dict]:
                 "profit": round(float(p.profit), 2),
                 "open_timestamp": int(p.time),
                 "open_time": datetime.fromtimestamp(int(p.time)).isoformat(timespec="seconds"),
+                "comment": str(getattr(p, "comment", "")),
             }
         )
     return rows
@@ -1627,11 +1652,20 @@ def track_position_contexts(
 
 
 def money_price_distance(symbol: str, direction: str, volume: float, price: float, info, money_target: float) -> float:
+    """Calcule la distance de prix (en unités de prix) pour atteindre money_target en profit.
+    Utilise order_calc_profit en priorité, puis trade_tick_value/trade_tick_size si le premier
+    échoue (cas des indices synthétiques Deriv où order_calc_profit peut retourner None)."""
     point = float(info.point)
     order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
     probe_close = price - point if direction == "BUY" else price + point
     probe = mt5.order_calc_profit(order_type, symbol, volume, price, probe_close)
     loss_per_point = abs(float(probe or 0))
+    if loss_per_point <= 0:
+        # Fallback: utilise les specs du contrat (fiable pour synthétiques Deriv)
+        tick_size = float(getattr(info, "trade_tick_size", 0) or point)
+        tick_value = float(getattr(info, "trade_tick_value", 0) or 0)
+        if tick_value > 0 and tick_size > 0:
+            loss_per_point = volume * tick_value * (point / tick_size)
     if loss_per_point <= 0:
         return max(point, float(getattr(info, "trade_stops_level", 0)) * point)
     points = max(1.0, abs(money_target) / loss_per_point)
@@ -1674,7 +1708,7 @@ def send_deal(request: dict):
     return last_result
 
 
-def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool):
+def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL"):
     account = mt5.account_info()
     if not account:
         return False, "Compte MT5 indisponible.", None
@@ -1717,7 +1751,7 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
         "tp": round(tp, int(info.digits)),
         "deviation": 30,
         "magic": MAGIC,
-        "comment": f"AlphaTrade {VERSION}",
+        "comment": f"AlphaTrade {VERSION} {position_type}" if position_type != "NORMAL" else f"AlphaTrade {VERSION}",
         "type_time": mt5.ORDER_TIME_GTC,
     }
     started = time.perf_counter()
@@ -2110,6 +2144,26 @@ def auto_rebond_step(
     if not rebond_enabled:
         return {"rebond_active": False, "reason": "Module Capture Rebond désactivé."}
 
+    # Récupération après redémarrage/mise à jour
+    bot_flag_r = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
+    if not REBOND_STATE.get("active"):
+        recovered_r = next(
+            (p for p in positions
+             if p.get("symbol_key") == symbol_key
+             and p.get("origin", "").upper() in bot_flag_r
+             and "REBOND" in str(p.get("comment", "")).upper()),
+            None,
+        )
+        if recovered_r:
+            REBOND_STATE.update({
+                "active": True,
+                "ticket": int(recovered_r["ticket"]),
+                "direction": recovered_r.get("direction"),
+                "main_direction": "BUY" if recovered_r.get("direction") == "SELL" else "SELL",
+                "last_rebond_at": 0,
+            })
+            log(f"[REBOND] État restauré après redémarrage — ticket #{recovered_r['ticket']}", "INFO")
+
     # ── 1. Fermeture du rebond en cours ──────────────────────────────────────
     if REBOND_STATE.get("active") and REBOND_STATE.get("ticket"):
         ticket = int(REBOND_STATE["ticket"])
@@ -2198,6 +2252,7 @@ def auto_rebond_step(
         lot_info_rebond,
         analysis,
         allow_real,
+        position_type="REBOND",
     )
     if ok_open and event:
         # Retrouver le ticket de la position qu'on vient d'ouvrir
@@ -2264,6 +2319,21 @@ def auto_drift_follower_step(
     bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
     drift_ticket = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
 
+    # Récupération après redémarrage/mise à jour
+    if not DRIFT_FOLLOWER_STATE.get("active"):
+        recovered = next(
+            (p for p in positions
+             if p.get("symbol_key") == symbol_key
+             and p.get("direction") == "SELL"
+             and p.get("origin", "").upper() in bot_flag
+             and "DRIFT" in str(p.get("comment", "")).upper()),
+            None,
+        )
+        if recovered:
+            DRIFT_FOLLOWER_STATE.update({"active": True, "ticket": int(recovered["ticket"]), "last_drift_at": 0})
+            drift_ticket = int(recovered["ticket"])
+            log(f"[DRIFT] État restauré après redémarrage — ticket #{recovered['ticket']}", "INFO")
+
     # ── 1. Gestion de la position drift en cours ──────────────────────────────
     if DRIFT_FOLLOWER_STATE.get("active") and drift_ticket:
         drift_pos = next(
@@ -2305,10 +2375,13 @@ def auto_drift_follower_step(
     if not triggered:
         return {"drift_active": False, "reason": f"Aucun BUY <= {trigger_threshold}$ sur {symbol_key}."}
 
-    # ── 4. Ouvrir un SELL — même lot que le BUY principal ────────────────────
+    # ── 4. Ouvrir un SELL — lot = lot principal × lot_multiplicateur_rebond ──
     sym_params = params.get("symbols", {}).get(symbol_key, {})
-    lot = float(triggered.get("lot") or sym_params.get("lot", 0.01))
-    lot_info = {"effective_lot": lot, "reason": "Drift Follower BOOM1000"}
+    base_lot = float(triggered.get("lot") or sym_params.get("lot", 0.01))
+    mult_rebond = float(sym_params.get("lot_multiplicateur_rebond", 1.0))
+    lot_max = float(sym_params.get("lot_max", base_lot))
+    lot = round(min(base_lot * mult_rebond, lot_max), 3) if mult_rebond > 1.0 else base_lot
+    lot_info = {"effective_lot": lot, "reason": f"Drift Follower BOOM1000 x{mult_rebond}"}
 
     # Override profit_target → 1.0$ sans modifier les params globaux
     drift_params = {
@@ -2319,7 +2392,7 @@ def auto_drift_follower_step(
         },
     }
 
-    ok, msg, event = open_position(symbol_key, symbol, "SELL", drift_params, lot_info, {}, allow_real)
+    ok, msg, event = open_position(symbol_key, symbol, "SELL", drift_params, lot_info, {}, allow_real, position_type="DRIFT")
     if ok:
         time.sleep(0.2)
         fresh = live_positions({symbol_key: symbol})
@@ -2415,6 +2488,20 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 state["last_error"] = message
             save_trading_state(state)
             return state
+
+    # ── Module Drift Follower BOOM1000 (indépendant du signal eligible) ────────
+    if symbol and active == "BOOM1000":
+        drift_result = auto_drift_follower_step(
+            active,
+            symbol,
+            positions,
+            params,
+            bool(demo or state.get("real_confirmed")),
+            demo,
+        )
+        state["drift_follower"] = drift_result
+        save_trading_state(state)
+    # ── Fin module Drift Follower ───────────────────────────────────────────────
 
     now = time.time()
     # Exclure les positions secondaires (rebond + drift) du comptage
@@ -2527,6 +2614,21 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         except ValueError:
             pass
     lot_info = payload.get("lot_safety", {}).get(active, {})
+    # Renfort: lot de base par défaut. lot_multiplicateur_renfort s'applique
+    # uniquement si la confiance IA dépasse un seuil élevé (configurable).
+    if symbol_main_positions:
+        mult_renfort = float(symbol_params.get("lot_multiplicateur_renfort", 1.0))
+        if mult_renfort > 1.0:
+            conf_renfort = float(analysis.get("confidence") or 0)
+            thresh_renfort = float(analysis.get("learned_threshold") or symbol_params.get("confidence_min", 62))
+            high_conf_min = float(symbol_params.get("renfort_high_confidence_min", thresh_renfort + 15))
+            if conf_renfort >= high_conf_min:
+                base = float(lot_info.get("effective_lot", 0))
+                lot_max = float(symbol_params.get("lot_max", base))
+                renfort_lot = round(min(base * mult_renfort, lot_max), 8)
+                broker_min = float(lot_info.get("broker_min", 0))
+                if renfort_lot >= max(0.001, broker_min):
+                    lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
     approved_by_server, server_reply = server_trade_confirmation(
         params,
         active,
@@ -2586,20 +2688,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         state["rebond"] = rebond_result
         save_trading_state(state)
     # ── Fin module Capture Rebond ──────────────────────────────────────────────
-
-    # ── Module Drift Follower BOOM1000 ────────────────────────────────────────
-    if symbol and active == "BOOM1000":
-        drift_result = auto_drift_follower_step(
-            active,
-            symbol,
-            positions,
-            params,
-            bool(demo or state.get("real_confirmed")),
-            demo,
-        )
-        state["drift_follower"] = drift_result
-        save_trading_state(state)
-    # ── Fin module Drift Follower ──────────────────────────────────────────────
 
     return state
 
@@ -2952,13 +3040,31 @@ def main() -> int:
     save_trading_state(startup_state)
     account_key = (int(account.login), str(account.server)) if account else None
     symbol_names = {}
+    _startup_params = merge_params()
     for key in SYMBOLS:
+        _sym_enabled = _startup_params.get("symbols", {}).get(key, {}).get("enabled", True)
+        if not _sym_enabled:
+            log(f"Symbole {key} desactive (enabled=false dans les parametres).", "INFO")
+            continue
         name = resolve_symbol(key)
         if name:
             symbol_names[key] = name
-            log(f"Symbole actif: {key} -> {name}", "SUCCESS")
+            log(f"Symbole disponible sur MT5: {key} -> {name}", "SUCCESS")
         else:
-            log(f"Symbole introuvable: {key}", "WARNING")
+            log(f"Symbole introuvable sur MT5: {key}", "WARNING")
+
+    # Précharger l'historique de chaque symbole au démarrage.
+    # MT5 télécharge les données de façon asynchrone après symbol_select — sans ce
+    # premier appel, copy_rates_from_pos retourne None pendant les premières minutes,
+    # ce qui force l'analyse en mode COLLECTING (BUY/SELL = 0%).
+    for _key, _name in symbol_names.items():
+        _sym_params = {**params, **params.get("symbols", {}).get(_key, {})}
+        _tf = tf_const(_sym_params.get("timeframe", "M1"))
+        _rates = mt5.copy_rates_from_pos(_name, _tf, 0, 300)
+        if _rates is None or len(_rates) < 30:
+            log(f"Historique {_key} en cours de telechargement — analyse disponible sous 30s.", "INFO")
+        else:
+            log(f"Historique {_key} pret: {len(_rates)} bougies chargees.", "SUCCESS")
 
     last_history = 0.0
     last_ai_sync = 0.0
@@ -3020,13 +3126,16 @@ def main() -> int:
                 f"Changement de compte MT5 detecte: {live_account.login if live_account else '?'} - "
                 f"{live_account.server if live_account else '?'}"
             )
+            _live_params = merge_params()
             for key in SYMBOLS:
+                if not _live_params.get("symbols", {}).get(key, {}).get("enabled", True):
+                    continue
                 name = resolve_symbol(key)
                 if name:
                     symbol_names[key] = name
-                    log(f"Symbole actif: {key} -> {name}", "SUCCESS")
+                    log(f"Symbole disponible sur MT5: {key} -> {name}", "SUCCESS")
                 else:
-                    log(f"Symbole introuvable: {key}", "WARNING")
+                    log(f"Symbole introuvable sur MT5: {key}", "WARNING")
             if live_account:
                 reset_session_state(int(live_account.login), 0.0)
                 log("Nouvelle session AlphaTrade initialisee pour ce compte.", "SUCCESS")
@@ -3045,8 +3154,6 @@ def main() -> int:
             bot_positions = [position for position in positions if position.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
             if state_now.get("daily_locked"):
                 log("Nouvelle session refusee: la protection journaliere est verrouillee.", "WARNING")
-            elif bot_positions:
-                log("Nouvelle session refusee: des positions AlphaTrade sont encore ouvertes.", "WARNING")
             else:
                 reset_session_state(
                     account_login,
@@ -3096,6 +3203,9 @@ def main() -> int:
         if bool(params.get("reinforcement_enabled", True)):
             track_position_contexts(positions, trades, preliminary_analyses, preliminary_learning)
         payload = status_payload(params, symbol_names, trades, positions)
+        # Conserver l'analyse du premier appel — le deuxième appel (après trades)
+        # peut retourner {} vide pour les synthétiques, écrasant les vraies valeurs.
+        _first_analysis = dict(payload.get("analysis") or {})
         payload["microstructure"] = microstructure.snapshot()
         if args.once:
             auto_state = load_trading_state()
@@ -3106,6 +3216,9 @@ def main() -> int:
             positions = live_positions(symbol_names)
             payload = status_payload(params, symbol_names, trades, positions)
             payload["microstructure"] = microstructure.snapshot()
+            # Restaurer l'analyse du premier appel pour l'affichage temps réel.
+            if _first_analysis:
+                payload["analysis"] = _first_analysis
         payload["auto_trading"] = auto_state
         write_json("status.json", payload)
         if args.once:

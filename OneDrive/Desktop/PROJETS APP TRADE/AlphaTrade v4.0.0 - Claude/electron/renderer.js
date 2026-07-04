@@ -116,6 +116,19 @@ const defaults = {
       seuil_perte_alerte: -150, lot_multiplicateur_rebond: 1.0,
       max_renforts_per_basket: 2, renfort_min_interval: 300,
       rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500
+    },
+    CRASH1000: {
+      lot: .20, lot_min: .01, lot_max: .20, tp_pips: 15, max_positions: 3,
+      max_position_loss: 150, max_floating_loss: 300, timeframe: 'M1',
+      confidence_min: 70, cadence_sec: 30, max_trades_hour: 40,
+      max_hold_sec: 60, position_review_sec: 120,
+      profit_target: 5.0, profit_lock_trigger: 3.0, profit_trail_pct: 20,
+      emergency_loss_limit: 150, min_positive_exit: .05,
+      signal_reversal_margin: 9, cooldown_after_loss_sec: 120,
+      session_filter_enabled: false, session_start_utc: 7, session_end_utc: 20, stop_before_end_min: 30,
+      seuil_perte_alerte: -150, lot_multiplicateur_rebond: 1.0,
+      max_renforts_per_basket: 2, renfort_min_interval: 300,
+      rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500
     }
   }
 };
@@ -136,6 +149,10 @@ const strategyProfiles = {
   combined: {
     labelFr: 'Mode combiné', labelEn: 'Combined mode',
     values: { risk_pct: .25, auto_max_positions: 2, max_trades_hour: 35, cadence_sec: 30, max_hold_sec: 300, confidence_min: 70, session_target: 15 }
+  },
+  synthetic_scalp: {
+    labelFr: 'Scalping synthétiques', labelEn: 'Synthetic scalping',
+    values: { risk_pct: .30, auto_max_positions: 3, max_trades_hour: 60, cadence_sec: 10, max_hold_sec: 90, confidence_min: 60, session_target: 25 }
   }
 };
 
@@ -416,18 +433,17 @@ $('monitorBtn').addEventListener('click', async () => {
 $('tradeBtn').addEventListener('click', () => {
   const button = $('tradeBtn');
   button.classList.add('busy');
-  button.textContent = currentLanguage === 'en' ? 'Stopping...' : 'Arrêt...';
-  alpha.command('STOP_MONITOR');
+  button.textContent = currentLanguage === 'en' ? 'Pausing...' : 'Pause...';
+  alpha.command('DISABLE_TRADING');
 });
 $('newSessionBtn').addEventListener('click', () => {
   const positions = (currentStatus?.positions || []).filter(position =>
     String(position.origin || '').toUpperCase() === 'BOT'
   );
   if (positions.length) {
-    addLogs(['[WARNING] Nouvelle session impossible tant qu une position AlphaTrade reste ouverte.']);
-    return;
+    const msg = `${positions.length} position(s) AlphaTrade en cours.\nÊtes-vous sûr de vouloir démarrer une nouvelle session ?`;
+    if (!window.confirm(msg)) return;
   }
-  if (!window.confirm('Démarrer une nouvelle session ? Le gain journalier et l historique seront conservés.')) return;
   alpha.command('NEW_SESSION');
   addLogs(['[INFO] Demande de nouvelle session envoyée.']);
 });
@@ -823,10 +839,11 @@ function renderActiveMarket() {
   const analysis = currentStatus.analysis?.[activeSymbol] || {};
   $('signalBanner').textContent = `${analysis.signal || 'WAIT'} ${analysis.confidence ? `- ${analysis.confidence}%` : ''}`;
   $('signalBanner').className = `signal ${(analysis.signal || 'WAIT').toLowerCase()}`;
-  $('buyScore').textContent = `${Number(analysis.score_buy || 0).toFixed(0)}%`;
-  $('sellScore').textContent = `${Number(analysis.score_sell || 0).toFixed(0)}%`;
-  $('buyBar').style.width = `${analysis.score_buy || 0}%`;
-  $('sellBar').style.width = `${analysis.score_sell || 0}%`;
+  const isCollecting = analysis.trend === 'COLLECTING';
+  $('buyScore').textContent = isCollecting ? '—' : `${Number(analysis.score_buy || 0).toFixed(0)}%`;
+  $('sellScore').textContent = isCollecting ? '—' : `${Number(analysis.score_sell || 0).toFixed(0)}%`;
+  $('buyBar').style.width = isCollecting ? '0%' : `${analysis.score_buy || 0}%`;
+  $('sellBar').style.width = isCollecting ? '0%' : `${analysis.score_sell || 0}%`;
   $('rsi').textContent = analysis.rsi ?? '-';
   $('trend').textContent = analysis.trend ?? '-';
   $('ema9').textContent = analysis.ema9 ?? '-';
@@ -1645,7 +1662,8 @@ function fillSettings(values) {
     ...JSON.parse(JSON.stringify(source)),
     symbols: {
       XAUUSD: { ...defaults.symbols.XAUUSD, ...(source.symbols?.XAUUSD || {}) },
-      BOOM1000: { ...defaults.symbols.BOOM1000, ...(source.symbols?.BOOM1000 || {}) }
+      BOOM1000: { ...defaults.symbols.BOOM1000, ...(source.symbols?.BOOM1000 || {}) },
+      CRASH1000: { ...defaults.symbols.CRASH1000, ...(source.symbols?.CRASH1000 || {}) }
     }
   };
   const form = $('settingsForm');

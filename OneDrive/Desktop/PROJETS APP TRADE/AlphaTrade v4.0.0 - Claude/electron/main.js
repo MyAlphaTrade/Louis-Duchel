@@ -12,7 +12,7 @@ try {
   autoUpdater.autoInstallOnAppQuit = true;
 } catch (_) {}
 
-const APP_VERSION = '4.0.1';
+const APP_VERSION = '4.0.2';
 const DATA_DIR    = process.env.ALPHATRADE_DATA_DIR || path.join(os.homedir(), 'AlphaTrade', 'v4.0.0');
 
 let win    = null;
@@ -56,8 +56,8 @@ function flattenBaskets(data) {
    Si le moteur a déjà écrit la structure imbriquée, on passe directement. */
 function translateStatus(s) {
   if (!s) return {};
-  // Le moteur v4 écrit déjà decision/analysis/protection — retour direct
-  if (s.decision && s.analysis && s.protection) return s;
+  // Le moteur v4 écrit déjà simulated_decision/analysis/protection — retour direct
+  if (s.simulated_decision && s.analysis && s.protection) return s;
 
   // Fallback pour états sans structure complète (warmup initial, erreur)
   const state   = s.state || 'disconnected';
