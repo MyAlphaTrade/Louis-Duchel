@@ -1,0 +1,79 @@
+{
+  "name": "alphatrade",
+  "version": "4.1.0",
+  "description": "AlphaTrade v4.1.0 - Trading IA MetaTrader 5",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir",
+    "build:mac": "electron-builder --mac --publish never"
+  },
+  "build": {
+    "appId": "com.myalphatrade.app.410",
+    "productName": "AlphaTrade 4.1.0",
+    "asar": true,
+    "compression": "maximum",
+    "directories": {
+      "output": "../dist"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "category": "public.app-category.finance"
+    },
+    "dmg": {
+      "title": "AlphaTrade 4.1.0"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AlphaTrade 4.1.0"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "myalphatrade",
+      "repo": "alphatrade-releases",
+      "private": false
+    },
+    "extraResources": [
+      {
+        "from": "../python/",
+        "to": "python/",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/*.pyi",
+          "!**/tests/**",
+          "!**/test_*.py",
+          "!**/*.dist-info/**",
+          "!**/*.whl"
+        ]
+      }
+    ],
+    "files": [
+      "**/*",
+      "!node_modules/.bin",
+      "!**/__pycache__/**",
+      "!**/*.pyc"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

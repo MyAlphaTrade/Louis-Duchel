@@ -1,0 +1,39 @@
+# Fichiers personnels home directory
+.bash_history
+.bash_profile
+.bashrc
+.profile
+.zshrc
+NTUSER.DAT*
+ntuser.*
+AppData/
+.cache/
+.npm/
+.nvm/
+.pnpm/
+.config/
+.vscode/
+.cursor/
+Documents/
+Downloads/
+Pictures/
+Videos/
+Music/
+Searches/
+*.xml
+*.lnk
+
+# Build artifacts (jamais commiter)
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Python embeddable (téléchargé en CI, pas commité)
+**/python/python-win/
+
+# Paquets Python installés localement via pip --target (réinstallés en CI)
+# Seuls alphatrade_engine.py et alphatrade_ai_server.py doivent être commités
+**/python/*/
+**/python/*.pyd

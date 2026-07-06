@@ -1,0 +1,4 @@
+requests>=2.31.0
+MetaTrader5>=5.0.45; sys_platform == "win32"
+anthropic>=0.25.0
+openai>=1.30.0

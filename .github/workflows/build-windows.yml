@@ -1,0 +1,81 @@
+name: Build Windows
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (ex: v4.1.0)'
+        required: true
+        default: 'v4.1.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup embedded Python 3.10
+        shell: pwsh
+        run: |
+          $pyDir = "OneDrive\Desktop\PROJETS APP TRADE\MyAlphatrade\AlphaTrade v4.1.0 - Claude\python\python-win"
+          New-Item -ItemType Directory -Force -Path $pyDir
+
+          # Télécharger Python embeddable AMD64
+          $zipPath = "$pyDir\python.zip"
+          Invoke-WebRequest "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip" -OutFile $zipPath
+          Expand-Archive $zipPath -DestinationPath $pyDir
+          Remove-Item $zipPath
+
+          # Activer site-packages dans le fichier _pth
+          $pthFile = Get-ChildItem $pyDir -Filter "*._pth" | Select-Object -First 1
+          if ($pthFile) {
+            $content = Get-Content $pthFile.FullName -Raw
+            $content = $content -replace '#import site', 'import site'
+            if ($content -notmatch 'import site') { $content += "`nimport site" }
+            Set-Content $pthFile.FullName $content
+          }
+
+          # Installer pip
+          Invoke-WebRequest "https://bootstrap.pypa.io/get-pip.py" -OutFile "$pyDir\get-pip.py"
+          & "$pyDir\python.exe" "$pyDir\get-pip.py" --no-warn-script-location
+
+          # Installer les dépendances Python via requirements.txt
+          $reqFile = "OneDrive\Desktop\PROJETS APP TRADE\MyAlphatrade\AlphaTrade v4.1.0 - Claude\python\requirements.txt"
+          & "$pyDir\python.exe" -m pip install -r $reqFile --no-warn-script-location
+
+      - name: Install Node dependencies
+        shell: bash
+        run: |
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
+          cd "$PROJECT/electron"
+          npm install
+
+      - name: Build Windows installer
+        shell: bash
+        run: |
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
+          cd "$PROJECT/electron"
+          npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload installer to alphatrade-releases
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: MyAlphaTrade/alphatrade-releases
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          files: |
+            OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude/dist/*.exe
+            OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude/dist/latest.yml
+          token: ${{ secrets.RELEASES_TOKEN }}
+          fail_on_unmatched_files: false

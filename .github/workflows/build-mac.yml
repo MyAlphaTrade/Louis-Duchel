@@ -1,12 +1,15 @@
 name: Build macOS
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (ex: v4.0.1)'
+        description: 'Version tag (ex: v4.1.0)'
         required: true
-        default: 'v4.0.1'
+        default: 'v4.1.0'
 
 jobs:
   build-mac:
@@ -21,14 +24,9 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
       - name: Verify source files
         run: |
-          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
           echo "=== Fichiers electron ==="
           ls -la "$PROJECT/electron/"
           echo "=== package.json ==="
@@ -36,19 +34,18 @@ jobs:
 
       - name: Install Python packages
         run: |
-          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
-          pip install --target="$PROJECT/python" \
-            requests anthropic openai numpy joblib scikit-learn
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
+          pip3 install --target="$PROJECT/python" -r "$PROJECT/python/requirements.txt"
 
       - name: Install Node dependencies
         run: |
-          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
           cd "$PROJECT/electron"
           npm install
 
       - name: Build macOS DMG
         run: |
-          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude"
+          PROJECT="OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude"
           cd "$PROJECT/electron"
           npm run build:mac
         env:
@@ -58,10 +55,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           repository: MyAlphaTrade/alphatrade-releases
-          tag_name: ${{ github.event.inputs.version }}
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
           files: |
-            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/*.dmg
-            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/*.dmg.blockmap
-            OneDrive/Desktop/PROJETS APP TRADE/AlphaTrade v4.0.0 - Claude/dist/latest-mac.yml
+            OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude/dist/*.dmg
+            OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude/dist/*.dmg.blockmap
+            OneDrive/Desktop/PROJETS APP TRADE/MyAlphatrade/AlphaTrade v4.1.0 - Claude/dist/latest-mac.yml
           token: ${{ secrets.RELEASES_TOKEN }}
           fail_on_unmatched_files: false
