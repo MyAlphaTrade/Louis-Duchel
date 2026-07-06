@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AlphaTrade</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand"><img class="brand-logo" src="../assets/logo.png" alt="Logo AlphaTrade"><strong>AlphaTrade</strong><small>v1.0.0</small></div>
+    <div class="account">
+      <span id="demoBadge" class="badge">DEMO</span>
+      <span id="realBadge" class="badge">RÉEL</span>
+      <span id="accountNumber">Compte -</span>
+      <span id="serverName"></span>
+    </div>
+    <div class="drag"></div>
+    <div class="gmt-header" title="Heure universelle GMT">
+      <small>GMT</small>
+      <strong id="gmtHeaderClock">--:--:--</strong>
+    </div>
+    <div id="headerSession" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#a0b0c0;padding:0 8px">
+      <span id="headerSessionName" style="color:#d4af37;font-weight:700">--</span>
+      <span id="headerSessionState" style="color:#556"></span>
+    </div>
+    <div id="clock" class="clock"></div>
+    <div id="tbAccountCard" class="tb-account-card" style="display:none" onclick="window.showAccountSection()">
+      <div id="tbAccountAvatar" class="tb-account-avatar">A</div>
+      <span id="tbAccountLabel">Mon compte</span>
+    </div>
+    <button id="tbLogoutBtn" class="tb-logout-btn" style="display:none" onclick="window.doLogout()" title="Déconnexion">⏻</button>
+    <div class="language-switch">
+      <button id="langFr" class="active" type="button">FRA</button>
+      <button id="langEn" type="button">EN</button>
+    </div>
+    <div class="window-buttons">
+      <button onclick="alpha.minimize()">-</button>
+      <button onclick="alpha.maximize()">□</button>
+      <button class="close" onclick="alpha.close()">×</button>
+    </div>
+  </header>
+
+  <section class="metrics">
+    <article><label>Solde</label><strong id="balance">$0.00</strong><small>Réalisé MT5</small></article>
+    <article><label>Équité</label><strong id="equity">$0.00</strong><small>Solde + flottant</small></article>
+    <article><label>Profit net</label><strong id="netProfit">$0.00</strong><small id="netProfitDetail">Session AlphaTrade</small></article>
+    <article><label>Profit flottant</label><strong id="floating">$0.00</strong><small>Positions AlphaTrade</small></article>
+    <article><label>Précision</label><strong id="winrate">—</strong><small id="winrateDetail">Aucun trade AlphaTrade fermé</small></article>
+    <article><label>Espérance</label><strong id="expectancy">—</strong><small id="expectancyDetail">Disponible après une fermeture</small></article>
+  </section>
+
+  <nav class="tabs">
+    <button class="active" data-page="dashboard">Tableau de bord</button>
+    <button data-page="trades">Trades</button>
+    <button data-page="analysis">Sessions IA</button>
+    <button data-page="microstructure">Microstructure</button>
+    <button data-page="marketSessions">Sessions marché</button>
+    <button data-page="calendar">Calendrier</button>
+    <button data-page="settings">Paramètres</button>
+    <button data-page="journal">Journal</button>
+    <button data-page="assistant">Assistant IA</button>
+  </nav>
+
+  <main>
+    <section id="dashboard" class="page active dashboard-grid">
+      <aside class="left-column">
+        <article class="panel controls">
+          <div class="panel-title">Contrôle</div>
+          <div class="control-row">
+            <button id="monitorBtn" class="primary">Démarrer</button>
+            <button id="tradeBtn" class="danger" type="button">Arrêter</button>
+          </div>
+          <div class="manual-trade-row">
+            <input id="manualLot" type="number" step="0.001" min="0.001" value="0.01" class="manual-lot-input" title="Lot manuel">
+            <button id="manualBuyBtn" class="manual-buy" type="button">▲ BUY</button>
+            <button id="manualSellBtn" class="manual-sell" type="button">▼ SELL</button>
+          </div>
+          <div id="connectionState" class="state offline"><i></i> Déconnecté</div>
+          <div id="simulationState" class="simulation-state">
+            <strong>Décision IA</strong>
+            <span id="simulationDecision">En attente</span>
+            <small id="simulationReason">Connexion à MT5 en cours.</small>
+          </div>
+          <p class="notice">L’application se connecte à MT5 en lecture au démarrage. Démarrer autorise l’IA à analyser et prendre de nouvelles positions. Arrêter bloque les nouvelles entrées sans fermer les positions déjà ouvertes.</p>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">Protection de session AlphaTrade</div>
+          <div class="kv"><span>Réalisé</span><b id="sessionRealized">$0.00</b></div>
+          <div class="kv"><span>Session courante</span><b id="currentSessionProfit">$0.00</b></div>
+          <div class="kv"><span>Flottant</span><b id="sessionFloating">$0.00</b></div>
+          <div class="kv"><span>Objectif</span><b id="sessionTarget">$25.00</b></div>
+          <div class="kv"><span>Pic</span><b id="sessionPeak">$0.00</b></div>
+          <div class="kv"><span>Plancher</span><b id="sessionFloor">-</b></div>
+          <div id="protectionBadge" class="protection-badge inactive">Inactive</div>
+          <p id="protectionReason" class="mini-help">En attente des données de session.</p>
+          <div class="progress"><span id="targetProgress"></span></div>
+          <button id="newSessionBtn" class="new-session-btn" type="button" hidden>Nouvelle session</button>
+          <div id="accountCard" class="account-card" style="display:none">
+            <div class="account-card-plan" id="acPlanName">—</div>
+            <div class="account-card-email" id="acEmail">—</div>
+            <div class="account-card-expires">Expire le <span id="acExpires">—</span></div>
+            <div id="acExpireWarn" class="account-card-warn" style="display:none">Abonnement bientôt expiré</div>
+          </div>
+        </article>
+
+        <span id="currentMarketSession" hidden></span>
+        <span id="currentMarketClock" hidden></span>
+        <span id="currentMarketHours" hidden></span>
+        <span id="currentMarketState" hidden></span>
+        <span id="currentMarketCountdown" hidden></span>
+
+      </aside>
+
+      <section class="center-column">
+        <article class="panel market-panel">
+          <div class="panel-title">Graphique TradingView</div>
+          <div id="tradingViewChart" class="tradingview-chart tradingview-full"></div>
+        </article>
+
+        <article class="panel recent">
+          <div class="panel-title">Trades MT5 récents <small>toutes origines · max 12</small></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Type</th><th>Origine</th><th>Symbole</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
+              <tbody id="recentTrades"><tr><td colspan="8" class="empty">Aucun trade MT5 synchronisé</td></tr></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <aside class="right-column">
+        <article class="panel analysis-live">
+          <div class="panel-title">Analyse en temps réel</div>
+          <p class="mini-help">Signal du marché calculé avec RSI, EMA, MACD et la zone récente. Il ne représente pas le volume réel des acheteurs et vendeurs.</p>
+          <div id="signalBanner" class="signal wait">WAIT</div>
+          <div class="quant-consensus">
+            <span>Consensus quantitatif</span>
+            <b id="quantSignal">WAIT</b>
+            <small id="quantReason">Collecte des données</small>
+          </div>
+          <div class="score-row"><span>BUY</span><div><i id="buyBar"></i></div><b id="buyScore">0%</b></div>
+          <div class="score-row sell"><span>SELL</span><div><i id="sellBar"></i></div><b id="sellScore">0%</b></div>
+          <div class="analysis-grid">
+            <span>RSI <b id="rsi">-</b></span>
+            <span>Tendance <b id="trend">-</b></span>
+            <span>EMA 9 <b id="ema9">-</b></span>
+            <span>EMA 21 <b id="ema21">-</b></span>
+            <span>MACD <b id="macd">-</b></span>
+            <span>Zone <b id="edge">-</b></span>
+            <span>Risque régime <b id="quantRisk">-</b></span>
+          </div>
+          <div class="microstructure-card">
+            <div><span>Microstructure</span><b id="microMode">OBSERVATION</b></div>
+            <small id="microSource">En attente du flux MT5</small>
+            <div class="microstructure-grid">
+              <span>OBI <b id="microObi">-</b></span>
+              <span>OFI <b id="microOfi">-</b></span>
+              <span>Kyle λ <b id="microKyle">-</b></span>
+              <span>POC <b id="microPoc">-</b></span>
+            </div>
+            <small>Aucun ordre ne peut être envoyé par ce module.</small>
+          </div>
+        </article>
+
+        <article class="panel quality">
+          <div class="panel-title">Qualité du compte MT5</div>
+          <p class="mini-help">Vue globale de toutes les origines. Les évaluations AlphaKaris, IA externe et manuelle restent séparées dans Sessions IA.</p>
+          <div class="quality-item"><span>Profit factor</span><b id="profitFactor">0.00</b></div>
+          <div class="quality-item"><span>Gain moyen</span><b id="avgWin">$0.00</b></div>
+          <div class="quality-item"><span>Perte moyenne</span><b id="avgLoss">$0.00</b></div>
+          <div class="quality-item"><span>Gagnés / Perdus</span><b id="winsLosses">0 / 0</b></div>
+          <p id="qualityMessage" class="notice">Les statistiques apparaîtront après synchronisation.</p>
+        </article>
+
+        <article class="panel positions-panel">
+          <div class="panel-title">Positions MT5 · toutes origines <span id="positionCount">0</span></div>
+          <div id="positionCards" class="position-cards"><p class="empty">Aucune position ouverte</p></div>
+        </article>
+      </aside>
+    </section>
+
+    <section id="trades" class="page trades-page">
+      <article class="panel" style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="panel-title" style="margin:0">Historique MT5 réel</div>
+          <div class="trade-summary" style="gap:12px">
+            <span>Trades <b id="tradeCount">0</b></span>
+            <span>Gains <b id="tradeWins">0</b></span>
+            <span>Pertes <b id="tradeLosses">0</b></span>
+            <span>Total <b id="tradeTotal">$0.00</b></span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+          <div class="trade-filters">
+            <button data-filter="30m" type="button">30m</button>
+            <button class="active" data-filter="1h" type="button">1h</button>
+            <button data-filter="24h" type="button">24h</button>
+            <button data-filter="month" type="button">Mois</button>
+            <button data-filter="all" type="button">Tous</button>
+          </div>
+          <div class="trade-filters origin-filters">
+            <button class="active" data-origin-filter="all" type="button">Toutes origines</button>
+            <button data-origin-filter="BOT" type="button">AlphaTrade</button>
+            <button data-origin-filter="EXTERNAL_AI" type="button">IA externe</button>
+            <button data-origin-filter="MANUAL" type="button">Manuel</button>
+          </div>
+        </div>
+        <div class="table-wrap tall">
+          <table>
+            <thead><tr><th>Heure</th><th>Type</th><th>Origine</th><th>Symbole</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
+            <tbody id="allTrades"><tr><td colspan="9" class="empty">Aucun trade fermé</td></tr></tbody>
+          </table>
+        </div>
+        <p class="mini-help" style="margin-top:6px">Clic = détails · Shift+clic = sélection plage</p>
+      </article>
+      <article class="panel" style="width:280px;flex-shrink:0">
+        <div class="panel-title">Détail du trade</div>
+        <div id="tradeDetail" class="tradeDetail">
+          <p style="color:var(--muted);font-size:12px;text-align:center;margin-top:20px">Cliquez sur un trade<br>pour voir les détails</p>
+        </div>
+      </article>
+    </section>
+
+    <section id="analysis" class="page analysis-page">
+      <article class="panel">
+        <div class="panel-title">Sessions IA et apprentissage contrôlé</div>
+        <h2>Apprendre sans contourner les limites</h2>
+        <p>AlphaKaris enregistre chaque décision, le résultat, l'excursion favorable et l'excursion défavorable. Les mémoires XAU/USD et EUR/USD restent séparées et les ajustements sont volontairement progressifs.</p>
+        <div class="analysis-cards">
+          <div><label>Précision AlphaKaris</label><b id="iaWinrate">0.0%</b></div>
+          <div><label>Profit factor</label><b id="iaProfitFactor">0.00</b></div>
+          <div><label>Espérance</label><b id="iaExpectancy">$0.000</b></div>
+          <div><label>État</label><b id="learningState">Actif</b></div>
+        </div>
+        <div class="learning-report">
+          <header>
+            <strong>Bilan d'apprentissage de la session</strong>
+            <span id="learningReportState">En attente</span>
+          </header>
+          <div class="learning-report-grid">
+            <article>
+              <label>Ce que le moteur a observé</label>
+              <p id="learningObserved">Les observations apparaîtront après les premiers trades AlphaKaris.</p>
+            </article>
+            <article>
+              <label>Ce qu'il a appris</label>
+              <p id="learningLearned">Aucun ajustement mesurable pour le moment.</p>
+            </article>
+            <article>
+              <label>Difficultés détectées</label>
+              <p id="learningDifficulties">Aucune difficulté évaluée pour le moment.</p>
+            </article>
+            <article>
+              <label>Amélioration proposée</label>
+              <p id="learningNextStep">Continuer la collecte sans modifier les garde-fous.</p>
+            </article>
+          </div>
+          <small>Ce rapport explique les données réellement enregistrées. Il ne prétend pas connaître le mouvement futur du marché.</small>
+        </div>
+        <div class="server-learning">
+          <article>
+            <header><strong>Serveur IA</strong><span id="aiServerMode">Observation</span></header>
+            <div><label>Connexion</label><b id="aiServerConnection">Hors ligne</b></div>
+            <div><label>Adresse</label><b id="aiServerUrl">127.0.0.1</b></div>
+            <div><label>Dernière synchronisation</label><b id="aiServerSync">-</b></div>
+            <p id="aiServerMessage">Le moteur local reste prioritaire et continue de fonctionner hors ligne.</p>
+          </article>
+          <article>
+            <header><strong>Modèle XAU/USD</strong><span>Serveur</span></header>
+            <div><label>Version active</label><b id="serverXauVersion">-</b></div>
+            <div><label>Échantillon</label><b id="serverXauSamples">0</b></div>
+            <div><label>Score chronologique</label><b id="serverXauScore">-</b></div>
+            <div><label>Signal observé</label><b id="serverXauSignal">WAIT</b></div>
+          </article>
+          <article>
+            <header><strong>Modèle EUR/USD</strong><span>Serveur</span></header>
+            <div><label>Version active</label><b id="serverVixVersion">-</b></div>
+            <div><label>Échantillon</label><b id="serverVixSamples">0</b></div>
+            <div><label>Score chronologique</label><b id="serverVixScore">-</b></div>
+            <div><label>Signal observé</label><b id="serverVixSignal">WAIT</b></div>
+          </article>
+        </div>
+        <div class="origin-learning">
+          <article>
+            <header><strong>Évaluation AlphaKaris</strong><span>Trades BOT uniquement</span></header>
+            <div><label>Note indicative</label><b id="botScore">0%</b></div>
+            <div><label>Trades / Gagnés / Perdus</label><b id="botRecord">0 / 0 / 0</b></div>
+            <div><label>Profit net</label><b id="botProfit">$0.00</b></div>
+            <div><label>Gain / perte moyens</label><b id="botAverages">$0.00 / $0.00</b></div>
+            <p id="botAdvice">L’apprentissage commencera après les premiers trades automatiques.</p>
+          </article>
+          <article>
+            <header><strong>Observation IA externe</strong><span>Ava et autres robots MT5</span></header>
+            <div><label>Note indicative</label><b id="externalScore">0%</b></div>
+            <div><label>Trades / Gagnés / Perdus</label><b id="externalRecord">0 / 0 / 0</b></div>
+            <div><label>Profit net</label><b id="externalProfit">$0.00</b></div>
+            <div><label>Gain / perte moyens</label><b id="externalAverages">$0.00 / $0.00</b></div>
+            <p id="externalAdvice">Aucun trade d’une IA externe n’a encore été identifié.</p>
+          </article>
+          <article>
+            <header><strong>Évaluation manuelle</strong><span>Vos trades MT5</span></header>
+            <div><label>Note indicative</label><b id="manualScore">0%</b></div>
+            <div><label>Trades / Gagnés / Perdus</label><b id="manualRecord">0 / 0 / 0</b></div>
+            <div><label>Profit net</label><b id="manualProfit">$0.00</b></div>
+            <div><label>Gain / perte moyens</label><b id="manualAverages">$0.00 / $0.00</b></div>
+            <p id="manualAdvice">Vos trades manuels sont analysés séparément et ne modifient pas le bot.</p>
+          </article>
+        </div>
+        <div class="symbol-learning">
+          <article>
+            <header><strong>XAU/USD</strong><span>24/5</span></header>
+            <div><label>Trades fermés</label><b id="iaXauTrades">0</b></div>
+            <div><label>Win rate</label><b id="iaXauWinrate">0.0%</b></div>
+            <div><label>Profit net</label><b id="iaXauProfit">$0.00</b></div>
+            <div><label>Échantillon appris</label><b id="iaXauQuality">0 décision</b></div>
+            <div><label>Seuil adapté</label><b id="iaXauThreshold">62.0%</b></div>
+            <div><label>MAE / MFE moyens</label><b id="iaXauExcursions">$0.00 / $0.00</b></div>
+          </article>
+          <article>
+            <header><strong>EUR/USD</strong><span>Forex 24/5</span></header>
+            <div><label>Trades fermés</label><b id="iaVixTrades">0</b></div>
+            <div><label>Win rate</label><b id="iaVixWinrate">0.0%</b></div>
+            <div><label>Profit net</label><b id="iaVixProfit">$0.00</b></div>
+            <div><label>Échantillon appris</label><b id="iaVixQuality">0 décision</b></div>
+            <div><label>Seuil adapté</label><b id="iaVixThreshold">62.0%</b></div>
+            <div><label>MAE / MFE moyens</label><b id="iaVixExcursions">$0.00 / $0.00</b></div>
+          </article>
+        </div>
+        <div class="guardrail">
+          <strong>Garde-fous</strong>
+          <p>L'IA pourra proposer un seuil ou une cadence. Elle ne pourra pas supprimer la perte maximale, activer le réel, augmenter seule le lot maximum ou lancer une martingale.</p>
+          <button id="resetLearningBtn" class="danger" type="button">Réinitialiser la mémoire IA</button>
+        </div>
+      </article>
+    </section>
+
+    <section id="microstructure" class="page microstructure-page">
+      <article class="panel microstructure-hero">
+        <div>
+          <div class="panel-title">Microstructure du marché</div>
+          <h2>Flux normalisés et pression acheteurs / vendeurs</h2>
+          <p>Module d'observation uniquement. Il enregistre et compare les données, mais ne peut ouvrir, fermer ou modifier aucune position.</p>
+        </div>
+        <div class="micro-mode-badge">
+          <span>Mode</span>
+          <b id="microPageMode">OBSERVATION</b>
+        </div>
+      </article>
+      <div class="micro-overview">
+        <article class="panel">
+          <div class="panel-title">Source active</div>
+          <strong id="microPageSource">En attente du flux MT5</strong>
+          <p id="microPageFreshness">Dernière mise à jour : -</p>
+        </article>
+        <article class="panel">
+          <div class="panel-title">Pression du carnet</div>
+          <div class="micro-metric"><span>OBI</span><b id="microPageObi">-</b></div>
+          <div class="micro-meter"><i id="microObiMeter"></i></div>
+          <small id="microObiMeaning">Équilibre indéterminé</small>
+        </article>
+        <article class="panel">
+          <div class="panel-title">Flux récent</div>
+          <div class="micro-metric"><span>OFI</span><b id="microPageOfi">-</b></div>
+          <div class="micro-meter"><i id="microOfiMeter"></i></div>
+          <small id="microOfiMeaning">Variation indéterminée</small>
+        </article>
+        <article class="panel">
+          <div class="panel-title">Impact et volume</div>
+          <div class="micro-metric"><span>Kyle λ</span><b id="microPageKyle">-</b></div>
+          <div class="micro-metric"><span>POC</span><b id="microPagePoc">-</b></div>
+          <small>Le POC est la zone de prix la plus active dans l'échantillon local.</small>
+        </article>
+      </div>
+      <article class="panel micro-diagnostic">
+        <div class="panel-title">Diagnostic de décision</div>
+        <div class="diagnostic-grid">
+          <div><label>Signal détecté</label><b id="microDecisionSignal">WAIT</b></div>
+          <div><label>État de l'entrée</label><b id="microDecisionState">En attente</b></div>
+          <div><label>Blocages observés</label><b id="microBlockedCount">0</b></div>
+          <div><label>Durée du blocage actuel</label><b id="microBlockedDuration">-</b></div>
+        </div>
+        <p id="microDecisionReason">Aucune décision disponible.</p>
+      </article>
+      <article class="panel micro-sources">
+        <div class="panel-title">Sources et séparation des marchés</div>
+        <div class="source-row"><b>MT5 · XAU/USD / EUR/USD</b><span id="microMt5State">En attente</span><small>Flux du broker utilisé pour les actifs tradés.</small></div>
+        <div class="source-row"><b>Hyperliquid · BTC / ETH</b><span id="microHyperState">Désactivé</span><small>Laboratoire crypto séparé; ne remplace pas les données Gold.</small></div>
+        <p id="microError" class="notice">Aucune erreur de collecte.</p>
+      </article>
+    </section>
+
+    <section id="marketSessions" class="page sessions-page">
+      <article class="panel session-period">
+        <div class="panel-title">Période analysée</div>
+        <label>Du <input id="sessionDateFrom" type="date"></label>
+        <label>Au <input id="sessionDateTo" type="date"></label>
+        <button id="sessionPeriodReset" type="button">Toute la période</button>
+      </article>
+      <div id="sessionCards" class="session-cards"></div>
+      <article class="panel session-performance">
+        <div class="panel-title">Performance cumulée par session GMT</div>
+        <div class="analysis-cards">
+          <div><label>Sydney</label><b id="perfSydney">$0.00</b></div>
+          <div><label>Tokyo</label><b id="perfTokyo">$0.00</b></div>
+          <div><label>Londres</label><b id="perfLondon">$0.00</b></div>
+          <div><label>New York</label><b id="perfNewYork">$0.00</b></div>
+        </div>
+        <p class="notice">Une opération chevauchant deux sessions est classée selon son heure d’ouverture GMT.</p>
+      </article>
+    </section>
+
+    <section id="calendar" class="page calendar-page">
+      <article class="panel calendar-main">
+        <div class="calendar-nav">
+          <h2 id="calendarTitle">Calendrier</h2>
+          <div>
+            <button id="calendarPrev" type="button">←</button>
+            <button id="calendarToday" type="button">Aujourd’hui</button>
+            <button id="calendarNext" type="button">→</button>
+          </div>
+        </div>
+        <div class="calendar-week">
+          <span>Dim</span><span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span>
+        </div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </article>
+      <article class="panel calendar-detail">
+        <div class="panel-title">Résumé de la journée</div>
+        <div id="calendarDetail" class="calendar-empty">Sélectionnez une journée pour afficher les trades.</div>
+      </article>
+    </section>
+
+    <section id="settings" class="page">
+      <form id="settingsForm" class="settings-grid">
+        <div class="settings-scroll">
+        <div class="settings-toolbar">
+          <span>Réglages essentiels affichés</span>
+          <label class="strategy-toolbar-control">Mode stratégie
+            <select id="strategyModeToolbar">
+              <option value="scalping_fast">Scalping rapide</option>
+              <option value="scalping_safe">Scalping prudent</option>
+              <option value="long_analysis">Analyse longue</option>
+              <option value="combined">Mode combiné</option>
+            </select>
+          </label>
+          <span id="strategyAppliedState" class="strategy-applied-state">Profil actif</span>
+          <button id="advancedSettingsToggle" type="button">Afficher les réglages avancés</button>
+        </div>
+        <article class="panel">
+          <div class="panel-title">Connexion et profil actif</div>
+          <label>Terminal MT5<input name="mt5_path" type="text"></label>
+          <label>Symbole actif<select name="active_symbol"><option value="XAUUSD">XAU/USD</option><option value="EURUSD">EUR/USD</option></select></label>
+          <p class="mini-help">Les paramètres de cadence et de signal sont maintenant propres à chaque actif. Les profils avancés seront réservés aux forfaits Custom et Elite dans la version commerciale.</p>
+        </article>
+        <article class="panel advanced-setting">
+          <div class="panel-title">Filtre de marché</div>
+          <label class="check"><input name="anti_top_bottom" type="checkbox"> Éviter achat au sommet / vente au creux</label>
+          <label>Bougies analysées<input name="lookback_candles" type="number" min="5" max="500"></label>
+          <label>Zone de bord %<input name="edge_zone_pct" type="number" min="5" max="45"></label>
+          <label>Écart BUY/SELL minimum<input name="min_score_gap" type="number" min="5" max="40"></label>
+          <label>Profit minimum $<input name="min_profit" type="number" min="0" step="0.01"></label>
+          <label class="check"><input name="reinforcement_enabled" type="checkbox"> Apprentissage adaptatif actif</label>
+        </article>
+        <article class="panel settings-full-width advanced-setting">
+          <div class="panel-title">Serveur IA - validation</div>
+          <label class="check"><input name="ai_server_enabled" type="checkbox"> Activer le serveur d'apprentissage</label>
+          <label>Adresse du serveur<input name="ai_server_url" type="text"></label>
+          <label>Clé privée du serveur<input name="ai_server_token" type="password" autocomplete="off"></label>
+          <label>Synchronisation (s)<input name="ai_sync_interval_sec" type="number" min="2" max="300"></label>
+          <label>Réentraînement (min)<input name="ai_retrain_interval_min" type="number" min="30" max="10080"></label>
+          <label class="check"><input name="ai_server_trade_confirmation" type="checkbox"> Valider les entrées avec AlphaKarisIA serveur</label>
+          <label class="check"><input name="ai_observation_mode" type="checkbox" disabled checked> Le moteur local garde la sécurité finale</label>
+          <p class="mini-help">Le serveur peut confirmer ou bloquer une entrée candidate. Il ne peut jamais ouvrir, fermer ou modifier une position sans validation du moteur local.</p>
+        </article>
+        <article class="panel settings-full-width advanced-setting">
+          <div class="panel-title">Flux et microstructure</div>
+          <label class="check"><input name="microstructure_enabled" type="checkbox"> Activer l'observation microstructure</label>
+          <label>Intervalle d'analyse (s)<input name="microstructure_interval_sec" type="number" min="1" max="60"></label>
+          <label class="check"><input name="hyperliquid_observer_enabled" type="checkbox"> Observer Hyperliquid (données publiques gratuites)</label>
+          <p class="mini-help">OBI, OFI, impact de Kyle et profil de volume sont enregistrés séparément. Hyperliquid observe BTC/ETH et n'améliore pas directement le flux XAU/USD. Aucun identifiant ni droit de trading n'est utilisé.</p>
+        </article>
+        <article class="panel settings-full-width risk-session-panel">
+          <div class="panel-title">Risque et session</div>
+          <label>Risque / trade %<input name="risk_pct" type="number" min="0.01" max="0.5" step="0.01"></label>
+          <label>Objectif session $<input name="session_target" type="number" min="1" step="1"></label>
+          <label>Objectif journalier $<input name="daily_target" type="number" min="1" step="1"></label>
+          <label>Perte max session $<input name="session_max_loss" type="number" max="-1" step="1"></label>
+          <label>Lot max compte réel<input name="real_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
+          <label>Lot max compte démo<input name="demo_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
+          <label>Positions auto max<input name="auto_max_positions" type="number" min="1" max="8" step="1"></label>
+          <label>Giveback $<input name="giveback" type="number" min="1" step="1"></label>
+          <p class="mini-help">La valeur par défaut reste 2. Vous pouvez l’augmenter jusqu’à 8 ; les renforts restent soumis à une confirmation forte et concordante.</p>
+          <label>Écart confiance renfort %<input name="reinforcement_min_confidence_margin" type="number" min="4" max="30" step="1"></label>
+          <label>Écart score renfort<input name="reinforcement_min_score_gap" type="number" min="12" max="50" step="1"></label>
+          <label>Pause entre renforts (s)<input name="reinforcement_cooldown_sec" type="number" min="10" max="300" step="5"></label>
+          <label class="check"><input name="rebond_enabled" type="checkbox"> Capture Rebond activé</label>
+          <label>Signal minimum rebond %<input name="rebond_min_signal_pct" type="number" min="50" max="95" step="1"></label>
+          <label>Cooldown rebond (s)<input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
+          <label class="check"><input name="profit_protection_enabled" type="checkbox"> Protection du profit active</label>
+          <label>Activation protection $<input name="profit_protection_start" type="number" min="0" step="1"></label>
+          <label>Recul depuis pic %<input name="profit_drawdown_pct" type="number" min="1" max="90" step="1"></label>
+          <label>Recul minimum $<input name="profit_drawdown_min" type="number" min="0" step="1"></label>
+          <label>Zone avertissement %<input name="profit_warning_ratio" type="number" min="0.1" max="0.95" step="0.05"></label>
+          <label>Délai IA max (s)<input name="profit_ai_grace_sec" type="number" min="0" max="300" step="5"></label>
+          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer.</p>
+        </article>
+        <article class="panel symbol-settings asset-card" data-asset-card="XAUUSD">
+          <div class="panel-title">XAU/USD - Or</div>
+          <p class="mini-help">Réglages XAU/USD uniquement. Marché 24/5 avec sa propre volatilité.</p>
+          <label>Lot fixe<input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
+          <label>Lot minimum<input data-sym="XAUUSD" name="lot_min" type="number" step="0.001"></label>
+          <label>Lot maximum<input data-sym="XAUUSD" name="lot_max" type="number" step="0.001"></label>
+          <label>TP pips<input data-sym="XAUUSD" name="tp_pips" type="number"></label>
+          <label>Positions max<input data-sym="XAUUSD" name="max_positions" type="number" min="1" max="8"></label>
+          <label>Perte max / position $<input data-sym="XAUUSD" name="max_position_loss" type="number" step="0.1"></label>
+          <label>Flottant max $<input data-sym="XAUUSD" name="max_floating_loss" type="number" step="0.1"></label>
+          <label>Timeframe<select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
+          <label>Seuil confiance %<input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
+          <label>Cadence min (s)<input data-sym="XAUUSD" name="cadence_sec" type="number" min="1" max="600"></label>
+          <label>Max trades / heure<input data-sym="XAUUSD" name="max_trades_hour" type="number" min="1" max="500"></label>
+          <label>Max hold (s)<input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
+          <label>Délai de réanalyse (s)<input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
+          <label>Cible profit $<input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
+          <label>Verrou profit dès $<input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
+          <label>Recul du verrou $<input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.01" step="0.01"></label>
+          <label>Protection catastrophe $<input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
+          <label>Profit min. sortie $<input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
+          <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
+          <label class="check"><input data-sym="XAUUSD" name="session_filter_enabled" type="checkbox"> Trader uniquement pendant la session de Londres</label>
+          <label>Ouverture UTC<input data-sym="XAUUSD" name="session_start_utc" type="number" min="0" max="23"></label>
+          <label>Fermeture UTC<input data-sym="XAUUSD" name="session_end_utc" type="number" min="1" max="24"></label>
+          <label>Stop avant fin (min)<input data-sym="XAUUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
+        </article>
+        <article class="panel symbol-settings asset-card" data-asset-card="EURUSD">
+          <div class="panel-title">EUR/USD - Forex</div>
+          <p class="mini-help">Réglages EUR/USD uniquement. Marché 24/5 avec contrôle renforcé du risque.</p>
+          <label>Lot fixe<input data-sym="EURUSD" name="lot" type="number" step="0.001"></label>
+          <label>Lot minimum<input data-sym="EURUSD" name="lot_min" type="number" step="0.001"></label>
+          <label>Lot maximum<input data-sym="EURUSD" name="lot_max" type="number" step="0.001"></label>
+          <label>TP pips<input data-sym="EURUSD" name="tp_pips" type="number"></label>
+          <label>Positions max<input data-sym="EURUSD" name="max_positions" type="number" min="1" max="8"></label>
+          <label>Perte max / position $<input data-sym="EURUSD" name="max_position_loss" type="number" step="0.1"></label>
+          <label>Flottant max $<input data-sym="EURUSD" name="max_floating_loss" type="number" step="0.1"></label>
+          <label>Timeframe<select data-sym="EURUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
+          <label>Seuil confiance %<input data-sym="EURUSD" name="confidence_min" type="number" min="50" max="95"></label>
+          <label>Cadence min (s)<input data-sym="EURUSD" name="cadence_sec" type="number" min="1" max="600"></label>
+          <label>Max trades / heure<input data-sym="EURUSD" name="max_trades_hour" type="number" min="1" max="500"></label>
+          <label>Max hold (s)<input data-sym="EURUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
+          <label>Délai de réanalyse (s)<input data-sym="EURUSD" name="position_review_sec" type="number" min="30" max="900"></label>
+          <label>Cible profit $<input data-sym="EURUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
+          <label>Verrou profit dès $<input data-sym="EURUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
+          <label>Recul du verrou $<input data-sym="EURUSD" name="profit_lock_drawdown" type="number" min="0.01" step="0.01"></label>
+          <label>Protection catastrophe $<input data-sym="EURUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
+          <label>Profit min. sortie $<input data-sym="EURUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
+          <label>Pause après perte (s)<input data-sym="EURUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
+          <label class="check"><input data-sym="EURUSD" name="session_filter_enabled" type="checkbox"> Trader pendant Londres et New York</label>
+          <label>Ouverture UTC<input data-sym="EURUSD" name="session_start_utc" type="number" min="0" max="23"></label>
+          <label>Fermeture UTC<input data-sym="EURUSD" name="session_end_utc" type="number" min="1" max="24"></label>
+          <label>Stop avant fin (min)<input data-sym="EURUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
+        </article>
+        </div>
+        <div class="settings-actions">
+          <button class="save-settings" type="submit">Sauvegarder</button>
+          <button id="saveDefaultSettings" class="default-settings" type="button">Définir par défaut</button>
+          <button id="resetSettings" class="reset-settings" type="button">Réinitialiser</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="journal" class="page">
+      <article class="panel full journal-panel">
+        <div class="panel-title">Journal AlphaTrade</div>
+        <pre id="journalText">Démarrage de l'interface...</pre>
+      </article>
+    </section>
+
+    <section id="assistant" class="page assistant-page">
+      <article class="panel assistant-shell">
+        <div class="assistant-hero">
+          <div class="voice-orb" id="voiceOrb" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div>
+            <div class="panel-title">Assistant IA AlphaKaris</div>
+            <h2>Parlez avec votre copilote de trading</h2>
+            <p>Posez une question sur les signaux, les positions, les paramètres ou les raisons d’un blocage. Cette première version répond à partir des données locales AlphaKaris.</p>
+          </div>
+        </div>
+        <div class="assistant-chat" id="assistantChat">
+          <div class="assistant-message bot">
+            Bonjour Louis. Je suis AlphaKarisIA. Je connais le projet AlphaKaris, les marchés suivis, les paramètres, les signaux, les protections, le site web et la feuille de route. Posez-moi une question.
+          </div>
+        </div>
+        <form id="assistantForm" class="assistant-input">
+          <button id="voiceButton" type="button" class="ghost-voice">Voix</button>
+          <input id="assistantQuestion" type="text" placeholder="Exemple : Pourquoi tu ne prends pas de position ?" autocomplete="off">
+          <button type="submit">Demander</button>
+        </form>
+        <p class="mini-help">Reconnaissance vocale réelle et voix serveur prévues dans une prochaine version. Cette base prépare déjà la section dédiée.</p>
+      </article>
+    </section>
+
+    <section id="account" class="page account-page">
+      <div class="account-page-grid">
+        <article class="panel account-hero-panel">
+          <div class="account-hero-top">
+            <div class="account-avatar" id="acAvatar">A</div>
+            <div>
+              <div class="account-hero-name" id="acHeroName">—</div>
+              <div class="account-hero-email" id="acHeroEmail">—</div>
+            </div>
+          </div>
+          <div class="account-plan-badge" id="acHeroPlan">—</div>
+          <div class="account-hero-expires">Abonnement actif jusqu'au <strong id="acHeroExpires">—</strong></div>
+          <div id="acHeroWarn" class="account-hero-warn" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Votre abonnement expire bientôt. Contactez le support pour renouveler.
+          </div>
+        </article>
+
+        <article class="panel account-limits-panel">
+          <div class="panel-title">Limites du plan</div>
+          <div class="account-limits-grid">
+            <div class="account-limit-item">
+              <span class="account-limit-label">Capital minimum</span>
+              <span class="account-limit-val" id="acCapitalMin">—</span>
+            </div>
+            <div class="account-limit-item">
+              <span class="account-limit-label">Lot maximum</span>
+              <span class="account-limit-val" id="acLotMax">—</span>
+            </div>
+            <div class="account-limit-item">
+              <span class="account-limit-label">Positions max</span>
+              <span class="account-limit-val" id="acMaxPos">—</span>
+            </div>
+            <div class="account-limit-item">
+              <span class="account-limit-label">Gain par session</span>
+              <span class="account-limit-val" id="acGainSession">—</span>
+            </div>
+            <div class="account-limit-item">
+              <span class="account-limit-label">Gain journalier</span>
+              <span class="account-limit-val" id="acGainDaily">—</span>
+            </div>
+            <div class="account-limit-item">
+              <span class="account-limit-label">Stratégie Rebond</span>
+              <span class="account-limit-val" id="acRebond">—</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel account-info-panel">
+          <div class="panel-title">Informations du compte</div>
+          <div class="account-info-row"><span>Plan actif</span><b id="acInfoPlan" style="color:var(--green)">—</b></div>
+          <div class="account-info-row"><span>Date d'expiration</span><b id="acInfoExpires">—</b></div>
+          <div class="account-info-row"><span>Version app</span><b>v1.0.0</b></div>
+          <p class="mini-help" style="margin-top:10px">Pour changer de plan, contactez le support à <strong>alphatrade.com</strong></p>
+        </article>
+
+        <article class="panel account-edit-panel">
+          <div class="panel-title">Modifier le profil</div>
+          <label class="ac-label">Nom complet</label>
+          <input type="text" id="acEditName" class="ac-input" placeholder="Votre nom">
+          <label class="ac-label">Adresse email</label>
+          <input type="email" id="acEditEmail" class="ac-input" placeholder="votre@email.com">
+          <label class="ac-label">Numéro de téléphone</label>
+          <input type="tel" id="acEditPhone" class="ac-input" placeholder="+1 234 567 8900">
+          <label class="ac-label">Pays</label>
+          <select id="acEditCountry" class="ac-input">
+            <option value="">— Sélectionner un pays —</option>
+            <optgroup label="Europe">
+              <option>France</option><option>Belgique</option><option>Suisse</option>
+              <option>Luxembourg</option><option>Canada</option>
+            </optgroup>
+            <optgroup label="Afrique francophone">
+              <option>Côte d'Ivoire</option><option>Sénégal</option><option>Cameroun</option>
+              <option>Mali</option><option>Burkina Faso</option><option>Niger</option>
+              <option>Guinée</option><option>Bénin</option><option>Togo</option>
+              <option>Congo</option><option>RD Congo</option><option>Madagascar</option>
+              <option>Rwanda</option><option>Burundi</option><option>Gabon</option>
+              <option>Tchad</option><option>Mauritanie</option><option>Djibouti</option>
+              <option>Comores</option>
+            </optgroup>
+            <optgroup label="Maghreb">
+              <option>Maroc</option><option>Algérie</option><option>Tunisie</option>
+            </optgroup>
+            <optgroup label="Autres">
+              <option>Haïti</option><option>Maurice</option><option>Autre</option>
+            </optgroup>
+          </select>
+          <div class="ac-separator"></div>
+          <div class="panel-title" style="margin-top:4px">Changer le mot de passe</div>
+          <label class="ac-label">Mot de passe actuel</label>
+          <input type="password" id="acEditCurrentPwd" class="ac-input" placeholder="••••••••">
+          <label class="ac-label">Nouveau mot de passe</label>
+          <input type="password" id="acEditNewPwd" class="ac-input" placeholder="••••••••">
+          <div id="acEditError" style="color:#ff4444;font-size:11px;min-height:16px;margin-top:6px"></div>
+          <div id="acEditSuccess" style="color:var(--green);font-size:11px;min-height:16px;margin-top:2px"></div>
+          <button class="ac-save-btn" onclick="saveProfile()">Enregistrer les modifications</button>
+          <button class="ac-logout-btn" onclick="doLogout()">Se déconnecter</button>
+        </article>
+      </div>
+    </section>
+  </main>
+  <script src="renderer.js"></script>
+
+<!-- ── ÉCRAN DE CONNEXION ──────────────────────────────────────────── -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="../assets/logo.png" alt="" onerror="this.style.display='none'">
+      <span>AlphaTrade</span>
+      <small>v1.0.0</small>
+    </div>
+    <h2>Connexion</h2>
+    <p class="login-sub">Connectez-vous avec votre compte AlphaTrade</p>
+
+    <label class="login-label">Adresse email</label>
+    <input type="email" id="loginEmail" class="login-input" placeholder="votre@email.com" autocomplete="email">
+
+    <label class="login-label">Mot de passe</label>
+    <input type="password" id="loginPassword" class="login-input" placeholder="••••••••" autocomplete="current-password">
+
+    <div id="loginError" class="login-error"></div>
+
+    <button id="loginBtn" class="login-btn" onclick="doLogin()">Se connecter</button>
+
+    <div id="loginStatus" class="login-status">Vérification de la connexion...</div>
+
+    <div class="login-footer">
+      <a href="#" onclick="alpha && alpha.openExternal && alpha.openExternal('http://alphatrade.com')">Pas encore de compte ? alphatrade.com</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

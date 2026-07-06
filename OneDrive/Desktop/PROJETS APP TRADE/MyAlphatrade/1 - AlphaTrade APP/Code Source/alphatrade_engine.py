@@ -2902,6 +2902,23 @@ def main() -> int:
             trades = sync_history(conn, symbol_names)
             write_json("trades.json", {"trades": trades, "ts": int(time.time())})
             last_history = now
+        if cmd.get("command") == "MANUAL_ORDER" and is_new_command:
+            payload = cmd.get("payload") or {}
+            direction = str(payload.get("direction", "")).upper()
+            req_key = str(payload.get("symbol_key", ""))
+            lot = float(payload.get("lot", 0.01))
+            mt5_sym = symbol_names.get(req_key)
+            if direction not in ("BUY", "SELL"):
+                log(f"[MANUAL] Direction invalide: {direction}", "ERROR")
+            elif not mt5_sym:
+                log(f"[MANUAL] Symbole non resolu: {req_key}", "ERROR")
+            else:
+                ts_manual = load_trading_state()
+                acct_manual = mt5.account_info()
+                allow_r = bool(acct_manual and (is_demo_account(acct_manual) or ts_manual.get("real_confirmed")))
+                lot_info_manual = {"effective_lot": lot, "reason": "Ordre manuel depuis l'application"}
+                ok_m, msg_m, _ = open_position(req_key, mt5_sym, direction, params, lot_info_manual, {}, allow_r)
+                log(f"[MANUAL] {direction} {lot} {req_key}: {msg_m}", "SUCCESS" if ok_m else "ERROR")
         if cmd.get("command") == "NEW_SESSION" and is_new_command:
             account_now = mt5.account_info()
             account_login = int(account_now.login) if account_now else None

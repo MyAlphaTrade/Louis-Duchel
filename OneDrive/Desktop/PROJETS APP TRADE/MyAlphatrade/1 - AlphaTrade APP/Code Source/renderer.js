@@ -391,6 +391,16 @@ $('newSessionBtn').addEventListener('click', () => {
   alpha.command('NEW_SESSION');
   addLogs(['[INFO] Demande de nouvelle session envoyée.']);
 });
+function sendManualOrder(direction) {
+  const lot = parseFloat($('manualLot').value);
+  if (!lot || lot <= 0) { addLogs(['[WARNING] Lot manuel invalide.']); return; }
+  const sym = activeSymbol || 'XAUUSD';
+  if (!window.confirm(`Ouvrir ${direction} ${lot} lot(s) sur ${sym} ?`)) return;
+  alpha.command('MANUAL_ORDER', { direction, lot, symbol_key: sym });
+  addLogs([`[MANUAL] Ordre ${direction} ${lot} lot(s) ${sym} envoyé.`]);
+}
+$('manualBuyBtn').addEventListener('click', () => sendManualOrder('BUY'));
+$('manualSellBtn').addEventListener('click', () => sendManualOrder('SELL'));
 $('resetLearningBtn')?.addEventListener('click', () => {
   const message = currentLanguage === 'en'
     ? 'Reset the learned XAUUSD and EURUSD memories? Trading history will remain available.'
