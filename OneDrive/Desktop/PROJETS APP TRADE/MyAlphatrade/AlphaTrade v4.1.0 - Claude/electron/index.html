@@ -589,7 +589,17 @@
           <label>Délai de réanalyse (s)<input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
           <label>Cible profit $<input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
           <label>Verrou profit dès $<input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
-          <label>Trailing stop % du pic<input data-sym="XAUUSD" name="profit_trail_pct" type="number" min="5" max="50" step="1" title="Ferme si le profit recule de X% depuis son pic. Ex: 20% → pic $1.00 → ferme à $0.80"></label>
+          <label>Recul max profit<input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01" title="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic"></label>
+          <p class="mini-help">Trail dynamique Phase 2.1 — 4 paliers (seuil en $ / recul en fraction)</p>
+          <label>Palier 1 — seuil $<input data-sym="XAUUSD" name="trail_l1_above" type="number" min="0.10" step="0.05"></label>
+          <label>Palier 1 — recul<input data-sym="XAUUSD" name="trail_l1_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 2 — seuil $<input data-sym="XAUUSD" name="trail_l2_above" type="number" min="0.50" step="0.50"></label>
+          <label>Palier 2 — recul<input data-sym="XAUUSD" name="trail_l2_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 3 — seuil $<input data-sym="XAUUSD" name="trail_l3_above" type="number" min="1.00" step="1.00"></label>
+          <label>Palier 3 — recul<input data-sym="XAUUSD" name="trail_l3_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 4 — seuil $<input data-sym="XAUUSD" name="trail_l4_above" type="number" min="5.00" step="1.00"></label>
+          <label>Palier 4 — recul<input data-sym="XAUUSD" name="trail_l4_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Score momentum sortie<input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
           <label>Protection catastrophe $<input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Profit min. sortie $<input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
@@ -624,7 +634,7 @@
           <label>Délai de réanalyse (s)<input data-sym="BOOM1000" name="position_review_sec" type="number" min="30" max="900"></label>
           <label>Cible profit $<input data-sym="BOOM1000" name="profit_target" type="number" min="0.05" step="0.05"></label>
           <label>Verrou profit dès $<input data-sym="BOOM1000" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
-          <label>Trailing stop % du pic<input data-sym="BOOM1000" name="profit_trail_pct" type="number" min="5" max="50" step="1" title="Ferme si le profit recule de X% depuis son pic. Ex: 20% → pic $1.00 → ferme à $0.80"></label>
+          <label>Recul max profit<input data-sym="BOOM1000" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01" title="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic"></label>
           <label>Protection catastrophe $<input data-sym="BOOM1000" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Profit min. sortie $<input data-sym="BOOM1000" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Pause après perte (s)<input data-sym="BOOM1000" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>

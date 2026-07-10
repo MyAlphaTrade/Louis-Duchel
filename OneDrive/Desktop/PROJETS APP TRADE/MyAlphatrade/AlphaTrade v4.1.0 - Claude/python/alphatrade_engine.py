@@ -93,8 +93,8 @@ DEFAULT_PARAMS = {
     "ai_sync_interval_sec": 5,
     "ai_retrain_interval_min": 360,
     "rebond_enabled": True,
-    "rebond_min_zone_strength": 35,
-    "rebond_cooldown_sec": 180,
+    "rebond_min_zone_strength": 28,
+    "rebond_cooldown_sec": 60,
     "rebond_max_hold_sec": 90,
     "rebond_stop_pips": 2.00,
     "rebond_max_active": 3,
@@ -120,6 +120,11 @@ DEFAULT_PARAMS = {
             "profit_target": 5.00,
             "profit_lock_trigger": 0.50,
             "profit_lock_drawdown": 0.20,
+            "trail_l1_above": 0.50,  "trail_l1_pct": 0.20,
+            "trail_l2_above": 5.00,  "trail_l2_pct": 0.15,
+            "trail_l3_above": 10.00, "trail_l3_pct": 0.10,
+            "trail_l4_above": 25.00, "trail_l4_pct": 0.07,
+            "momentum_exit_score": 55,
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
             "signal_reversal_margin": 99,
@@ -1850,6 +1855,37 @@ def close_bot_position(position: dict, reason: str):
     return False, f"Fermeture {ticket} {reason}: REFUSEE ({retcode}: {detail})."
 
 
+def log_trade_exit(
+    ticket: int,
+    symbol_key: str,
+    direction: str,
+    open_timestamp: float,
+    reason: str,
+    profit: float,
+    peak_profit: float,
+    age: float,
+) -> None:
+    entry_at = None
+    if open_timestamp:
+        try:
+            entry_at = datetime.fromtimestamp(open_timestamp, tz=timezone.utc).isoformat()
+        except Exception:
+            pass
+    captured_pct = round(profit / peak_profit * 100, 1) if peak_profit > 0 else 0.0
+    append_jsonl("trade_exits.jsonl", {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "ticket": ticket,
+        "symbol": symbol_key,
+        "direction": direction,
+        "entry_at": entry_at,
+        "age_sec": round(age, 1),
+        "reason": reason,
+        "profit": round(profit, 2),
+        "peak_profit": round(peak_profit, 2),
+        "captured_pct": captured_pct,
+    })
+
+
 def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
     """Fermeture partielle progressive basée sur le profit_target."""
     global PARTIAL_TP_STATE
@@ -1972,11 +2008,30 @@ def position_exit_reason(
         return "PROTECTION"
     if session_state_name in {"PRECLOSE", "CLOSED"}:
         return "SESSION"
-    if peak >= float(pos_params.get("profit_lock_trigger", 0.30)):
+    trail_steps = [
+        (float(pos_params.get("trail_l1_above", 0.0)), float(pos_params.get("trail_l1_pct", 0.0))),
+        (float(pos_params.get("trail_l2_above", 0.0)), float(pos_params.get("trail_l2_pct", 0.0))),
+        (float(pos_params.get("trail_l3_above", 0.0)), float(pos_params.get("trail_l3_pct", 0.0))),
+        (float(pos_params.get("trail_l4_above", 0.0)), float(pos_params.get("trail_l4_pct", 0.0))),
+    ]
+    trail_pct = 0.0
+    for threshold, pct in trail_steps:
+        if threshold > 0 and peak >= threshold:
+            trail_pct = pct
+    if trail_pct > 0:
+        if profit > 0 and profit <= peak - peak * trail_pct:
+            return "PROFIT_TRAIL"
+    elif peak >= float(pos_params.get("profit_lock_trigger", 0.30)):
         drawdown = float(pos_params.get("profit_lock_drawdown", 0.12))
         if profit > 0 and profit <= peak - drawdown:
             return "PROFIT_TRAIL"
     min_positive_exit = max(0.0, float(pos_params.get("min_positive_exit", 0.05)))
+    # Sortie sur perte de momentum — actif même quand rebond_enabled=True
+    momentum_exit_score = float(pos_params.get("momentum_exit_score", 0))
+    if momentum_exit_score > 0 and profit >= min_positive_exit:
+        opp_key = "score_sell" if position.get("direction") == "BUY" else "score_buy"
+        if float(position_analysis.get(opp_key, 0)) >= momentum_exit_score:
+            return "MOMENTUM_EXIT"
     # Si le module Capture Rebond est actif, on ne ferme JAMAIS sur signal inversé.
     # La position principale reste ouverte — le rebond est géré par auto_rebond_step.
     rebond_enabled = bool(pos_params.get("rebond_enabled", True))
@@ -2133,10 +2188,12 @@ def should_open_rebond(
     Retourne (ok, raison, info_rebond_ou_None)."""
     global REBOND_STATES, REBOND_META
     rebond_max = int(params.get("rebond_max_active", 3))
-    if len(REBOND_STATES) >= rebond_max:
-        return False, f"Maximum {rebond_max} rebonds simultanés actifs.", None
-    cooldown = float(params.get("rebond_cooldown_sec", 180))
-    if time.time() - float(REBOND_META.get("last_rebond_at", 0)) < cooldown:
+    sym_rebond_count = sum(1 for s in REBOND_STATES if s.get("symbol_key") == symbol_key)
+    if sym_rebond_count >= rebond_max:
+        return False, f"Maximum {rebond_max} rebonds simultanés actifs sur {symbol_key}.", None
+    cooldown = float(params.get("rebond_cooldown_sec", 60))
+    sym_meta = REBOND_META.get(symbol_key, {"last_rebond_at": 0.0})
+    if time.time() - float(sym_meta.get("last_rebond_at", 0)) < cooldown:
         return False, "Cooldown rebond en cours.", None
     # Pas de zones identifiées
     if not zones:
@@ -2170,8 +2227,16 @@ def should_open_rebond(
     else:
         contra_score = score_sell
         rsi_ok = rsi_val >= 65
-    if contra_score < 65 and not rsi_ok:
-        return False, f"Signal contra ({contra_score:.0f}%) insuffisant pour rebond.", None
+    if contra_score < 55 and not rsi_ok:
+        reason_reject = f"Signal contra ({contra_score:.0f}%) insuffisant et RSI non extrême — rebond refusé."
+        append_jsonl("rebond_log.jsonl", {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
+            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+            "zone_count": len(zones), "zone_strength": None,
+        })
+        return False, reason_reject, None
     # Obtenir le prix actuel via le nom MT5 résolu
     tick = mt5.symbol_info_tick(symbol) if mt5 else None
     if tick is None:
@@ -2179,7 +2244,15 @@ def should_open_rebond(
     current_price = float(tick.bid if contra_dir == "SELL" else tick.ask)
     obstacle = nearest_obstacle(current_price, contra_dir, zones)
     if obstacle is None:
-        return False, f"Aucune zone obstacle trouvée en {contra_dir}.", None
+        reason_reject = f"Aucune zone obstacle trouvée en {contra_dir}."
+        append_jsonl("rebond_log.jsonl", {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
+            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+            "zone_count": len(zones), "zone_strength": None,
+        })
+        return False, reason_reject, None
     zone = obstacle["zone"]
     target = obstacle["target_price"]
     pip_potential = abs(target - current_price)
@@ -2189,11 +2262,35 @@ def should_open_rebond(
         if rs.get("direction") == contra_dir and abs(float(rs.get("target_price", 0)) - target) < zone_tolerance:
             return False, f"Zone déjà couverte par rebond actif (ticket #{rs.get('ticket')}).", None
     # Le potentiel de pip doit valoir le coup (minimum 8 pips pour XAU)
-    if pip_potential < 0.80:  # 0.80 = ~8 pips XAUUSD
-        return False, f"Potentiel rebond trop faible ({pip_potential:.2f} pts).", None
+    if pip_potential < 0.80:
+        reason_reject = f"Potentiel rebond trop faible ({pip_potential:.2f} pts)."
+        append_jsonl("rebond_log.jsonl", {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
+            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+            "zone_count": len(zones), "zone_strength": zone["strength"],
+        })
+        return False, reason_reject, None
     # Zone suffisamment forte
-    if zone["strength"] < float(params.get("rebond_min_zone_strength", 35)):
-        return False, f"Zone trop faible (force {zone['strength']}).", None
+    if zone["strength"] < float(params.get("rebond_min_zone_strength", 28)):
+        reason_reject = f"Zone trop faible (force {zone['strength']})."
+        append_jsonl("rebond_log.jsonl", {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
+            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+            "zone_count": len(zones), "zone_strength": zone["strength"],
+        })
+        return False, reason_reject, None
+    append_jsonl("rebond_log.jsonl", {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "symbol": symbol_key, "result": "OK", "reason": "Rebond autorisé.",
+        "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+        "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+        "zone_count": len(zones), "zone_strength": zone["strength"],
+        "contra_dir": contra_dir, "pip_potential": round(pip_potential, 3),
+    })
     return True, "Rebond autorisé.", {
         "direction": contra_dir,
         "target_price": target,
@@ -2330,7 +2427,7 @@ def auto_rebond_step(
                 ok, msg = close_bot_position(rebond_pos, f"REBOND_{close_reason[:20]}")
                 if ok:
                     log(f"[REBOND] Fermé ticket #{ticket}: {close_reason} | Profit: {rebond_profit:.2f}", "SUCCESS")
-                    REBOND_META["last_rebond_at"] = time.time()
+                    REBOND_META[symbol_key]["last_rebond_at"] = time.time()
                     if "Cible" in close_reason and rebond_profit > 0:
                         main_dir = rs.get("main_direction")
                         if main_dir in ("BUY", "SELL"):
@@ -2347,17 +2444,18 @@ def auto_rebond_step(
                     still_active.append(rs)
             else:
                 log(f"[REBOND] Ticket #{ticket} déjà fermé par MT5 (TP).", "INFO")
-                REBOND_META["last_rebond_at"] = time.time()
+                REBOND_META.setdefault(symbol_key, {"zones": [], "last_scan": 0.0, "last_rebond_at": 0.0})["last_rebond_at"] = time.time()
         else:
             still_active.append(rs)
     REBOND_STATES[:] = still_active
 
     # ── 2. Scan des zones S&D (toutes les 30 secondes) ─────────────────────────
     now = time.time()
-    if now - float(REBOND_META.get("last_scan", 0)) >= 30:
-        REBOND_META["zones"] = detect_sd_zones(symbol, ["M5", "M15", "M30", "H1"])
-        REBOND_META["last_scan"] = now
-    zones = REBOND_META.get("zones", [])
+    sym_meta_r = REBOND_META.setdefault(symbol_key, {"zones": [], "last_scan": 0.0, "last_rebond_at": 0.0})
+    if now - float(sym_meta_r.get("last_scan", 0)) >= 30:
+        sym_meta_r["zones"] = detect_sd_zones(symbol, ["M5", "M15", "M30", "H1"])
+        sym_meta_r["last_scan"] = now
+    zones = sym_meta_r.get("zones", [])
 
     # ── 3. Décision d'ouverture ─────────────────────────────────────────────────
     ok, reason, rebond_info = should_open_rebond(symbol_key, symbol, positions, analysis, zones, params)
@@ -2404,7 +2502,7 @@ def auto_rebond_step(
             "opened_at": time.time(),
         }
         REBOND_STATES.append(new_entry)
-        REBOND_META["last_rebond_at"] = time.time()
+        REBOND_META[symbol_key]["last_rebond_at"] = time.time()
         log(
             f"[REBOND] {direction} {lot:.3f} ouvert @ {rebond_info['current_price']:.2f} "
             f"| Cible: {target_price:.2f} | Zone {rebond_info['zone']['type']} "
@@ -2621,6 +2719,17 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         )
         if close_reason:
             ok, message = close_bot_position(position, close_reason)
+            if ok:
+                log_trade_exit(
+                    ticket=int(position.get("ticket", 0)),
+                    symbol_key=str(position.get("symbol_key", "")),
+                    direction=str(position.get("direction", "")),
+                    open_timestamp=float(position.get("open_timestamp") or 0),
+                    reason=close_reason,
+                    profit=float(position.get("profit") or 0),
+                    peak_profit=peak,
+                    age=age,
+                )
             if "en attente avant nouvelle tentative" not in message:
                 log(message, "SUCCESS" if ok else "ERROR")
             state["last_action"] = message
