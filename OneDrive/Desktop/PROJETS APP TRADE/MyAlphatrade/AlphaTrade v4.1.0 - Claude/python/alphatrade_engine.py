@@ -189,6 +189,44 @@ DEFAULT_PARAMS = {
             "qpc_tier2_age_sec": 45,
             "qpc_tier2_pips": 5,               # provisoire observation
             "qpc_extended_reduction_pct": 30,
+            # ── Opportunity Engine v5 — valeurs provisoires observation ─────────
+            "oe_enabled": False,
+            "oe_level_accum": 35,
+            "oe_level_exhaust": 55,
+            "oe_level_prespike": 75,
+            "oe_decel_exhaust_min": 0.35,
+            "oe_decel_prespike_min": 0.55,
+            "oe_w_c_trending": 0.25, "oe_w_d_trending": 0.50, "oe_w_dec_trending": 0.25,
+            "oe_w_c_accum": 0.40,   "oe_w_d_accum": 0.35,   "oe_w_dec_accum": 0.25,
+            "oe_w_c_exhaust": 0.30, "oe_w_d_exhaust": 0.30,  "oe_w_dec_exhaust": 0.40,
+            "oe_w_c_prespike": 0.30, "oe_w_d_prespike": 0.35, "oe_w_dec_prespike": 0.35,
+            "oe_w_c_post": 0.50,    "oe_w_d_post": 0.30,     "oe_w_dec_post": 0.20,
+            "oe_candles_ref": 40,
+            "oe_lot_ratio_min": 0.10,
+            "oe_lot_cap_accumulation": 0.50,
+            "oe_lot_cap_exhaustion": 0.80,
+            "oe_lot_cap_prespike": 1.00,
+            "oe_basket_risk_ref": 50.0,
+            "oe_impulse_ratio": 1.5,
+            "oe_max_sell_count_accum": 3,
+            "oe_max_sell_count_exhaust": 2,
+            "oe_max_sell_count_prespike": 0,
+            "oe_block_sell_on_buy": False,
+            "oe_spike_amplitude_pts": 150.0,
+            "oe_sell_amplitude_pts": 50.0,
+            "oe_pip_value_per_lot": 0.01,
+            "oe_use_observed_stats": False,
+            "oe_min_obs_for_stats": 30,
+            "oe_priority_margin": 1.20,
+            # ── Spike Detector ──────────────────────────────────────────────────
+            "spike_detector_enabled": False,
+            "spike_candle_ratio": 2.5,
+            # ── Spike SELL Guard ────────────────────────────────────────────────
+            "spike_sell_guard_enabled": False,
+            "spike_sell_profit_pips_per_lot": 5.0,
+            "spike_sell_max_loss_pips_per_lot": 15.0,
+            "spike_sell_timeout_sec": 30,
+            "spike_sell_max_count": 2,
         },
         "CRASH1000": {
             "enabled": False,
@@ -316,6 +354,9 @@ CYCLE_MANAGER_STATE: dict = {
         "bppl_positions_closed": [],  # [{"ticket": int, "profit": float}]
         "bppl_profit_secured": 0.0,
         "last_bppl_at": 0.0,
+        "oe_market_state": "TRENDING_DOWN",
+        "oe_memory": {},
+        "oe_post_spike_until": 0.0,
     },
 }
 
@@ -3010,6 +3051,376 @@ def _qpc_step(
         return {"active": False, "action": "error"}
 
 
+# ── Opportunity Engine BOOM1000 (Phase 2.3 v5) ─────────────────────────────────
+
+
+def _oe_memory_update(symbol_key: str, memory: dict, spike_stats: dict) -> dict:
+    """Met à jour la Market Memory avec l'amplitude du spike observé."""
+    if not spike_stats.get("is_spike"):
+        return memory
+    amp = float(spike_stats.get("amplitude_pts", 0))
+    if amp <= 0:
+        return memory
+    memory.setdefault("spike_amplitudes", [])
+    memory["spike_amplitudes"].append(amp)
+    if len(memory["spike_amplitudes"]) > 200:
+        memory["spike_amplitudes"] = memory["spike_amplitudes"][-200:]
+    n = len(memory["spike_amplitudes"])
+    memory["n_obs"] = n
+    memory["avg_amplitude"] = sum(memory["spike_amplitudes"]) / n
+    memory["p90_amplitude"] = sorted(memory["spike_amplitudes"])[int(n * 0.90)]
+    return memory
+
+
+def _oe_dynamic_weights(market_state: str, sym_params: dict) -> dict:
+    """Retourne les poids dynamiques (candles, distance, decel) selon l'état de marché."""
+    s = market_state.lower()
+    if s == "trending_down":
+        return {
+            "candles": float(sym_params.get("oe_w_c_trending", 0.25)),
+            "distance": float(sym_params.get("oe_w_d_trending", 0.50)),
+            "decel": float(sym_params.get("oe_w_dec_trending", 0.25)),
+        }
+    if s == "accumulation":
+        return {
+            "candles": float(sym_params.get("oe_w_c_accum", 0.40)),
+            "distance": float(sym_params.get("oe_w_d_accum", 0.35)),
+            "decel": float(sym_params.get("oe_w_dec_accum", 0.25)),
+        }
+    if s == "exhaustion":
+        return {
+            "candles": float(sym_params.get("oe_w_c_exhaust", 0.30)),
+            "distance": float(sym_params.get("oe_w_d_exhaust", 0.30)),
+            "decel": float(sym_params.get("oe_w_dec_exhaust", 0.40)),
+        }
+    if s == "pre_spike":
+        return {
+            "candles": float(sym_params.get("oe_w_c_prespike", 0.30)),
+            "distance": float(sym_params.get("oe_w_d_prespike", 0.35)),
+            "decel": float(sym_params.get("oe_w_dec_prespike", 0.35)),
+        }
+    return {  # post_spike
+        "candles": float(sym_params.get("oe_w_c_post", 0.50)),
+        "distance": float(sym_params.get("oe_w_d_post", 0.30)),
+        "decel": float(sym_params.get("oe_w_dec_post", 0.20)),
+    }
+
+
+def _oe_count_neg_candles(candles: list[dict], limit: int = 40) -> int:
+    """Compte les bougies consécutives négatives (close < open) depuis la plus récente complétée."""
+    completed = candles[:-1] if len(candles) > 1 else candles
+    count = 0
+    for c in reversed(completed[-limit:]):
+        if float(c.get("close", 0)) < float(c.get("open", 0)):
+            count += 1
+        else:
+            break
+    return count
+
+
+def _oe_detect_spike(candles: list[dict], sym_params: dict) -> dict:
+    """Détecte si la dernière bougie complétée est un spike haussier (corps > ratio × range précédent)."""
+    if not candles or not bool(sym_params.get("spike_detector_enabled", False)):
+        return {"is_spike": False, "amplitude_pts": 0.0}
+    if len(candles) < 3:
+        return {"is_spike": False, "amplitude_pts": 0.0}
+    recent = candles[-2]
+    prev = candles[-3]
+    body = float(recent.get("close", 0)) - float(recent.get("open", 0))
+    if body <= 0:
+        return {"is_spike": False, "amplitude_pts": 0.0}
+    prev_range = max(1e-9, float(prev.get("high", 0)) - float(prev.get("low", 0)))
+    ratio = body / prev_range
+    is_spike = ratio >= float(sym_params.get("spike_candle_ratio", 2.5))
+    return {"is_spike": is_spike, "amplitude_pts": round(body, 4), "ratio": round(ratio, 2)}
+
+
+def _oe_extension_index(
+    neg_candles: int,
+    distance_pts: float,
+    decel_score: float,
+    weights: dict,
+    sym_params: dict,
+) -> float:
+    """Extension Index composite 0→100."""
+    ref = max(1, int(sym_params.get("oe_candles_ref", 40)))
+    spike_amp = max(1e-9, float(sym_params.get("oe_spike_amplitude_pts", 150.0)))
+    candles_score = min(1.0, neg_candles / ref)
+    distance_score = min(1.0, distance_pts / spike_amp)
+    ei = (
+        candles_score * weights.get("candles", 0.35)
+        + distance_score * weights.get("distance", 0.40)
+        + decel_score * weights.get("decel", 0.25)
+    ) * 100.0
+    return round(min(100.0, max(0.0, ei)), 1)
+
+
+def _oe_market_state(
+    ei: float,
+    decel_score: float,
+    sym_params: dict,
+    spike_detected: bool,
+    post_spike_until: float,
+) -> str:
+    """Machine à états : TRENDING_DOWN | ACCUMULATION | EXHAUSTION | PRE_SPIKE | POST_SPIKE."""
+    if post_spike_until > time.time() or spike_detected:
+        return "POST_SPIKE"
+    lvl_accum = float(sym_params.get("oe_level_accum", 35))
+    lvl_exhaust = float(sym_params.get("oe_level_exhaust", 55))
+    lvl_prespike = float(sym_params.get("oe_level_prespike", 75))
+    dec_exhaust = float(sym_params.get("oe_decel_exhaust_min", 0.35))
+    dec_prespike = float(sym_params.get("oe_decel_prespike_min", 0.55))
+    if ei >= lvl_prespike and decel_score >= dec_prespike:
+        return "PRE_SPIKE"
+    if ei >= lvl_exhaust and decel_score >= dec_exhaust:
+        return "EXHAUSTION"
+    if ei >= lvl_accum:
+        return "ACCUMULATION"
+    return "TRENDING_DOWN"
+
+
+def _oe_impulse_check(candles: list[dict], sym_params: dict) -> bool:
+    """Vrai si une impulsion haussière est en cours (corps positif > ratio × range précédent)."""
+    if len(candles) < 3:
+        return False
+    recent = candles[-2]
+    prev = candles[-3]
+    body = float(recent.get("close", 0)) - float(recent.get("open", 0))
+    if body <= 0:
+        return False
+    prev_range = max(1e-9, float(prev.get("high", 0)) - float(prev.get("low", 0)))
+    return (body / prev_range) >= float(sym_params.get("oe_impulse_ratio", 1.5))
+
+
+def _oe_buy_lot_ratio(market_state: str, ei: float, sym_params: dict) -> float:
+    """Lot ratio progressif BUY (fraction de lot_max) selon l'état de marché."""
+    if market_state == "POST_SPIKE":
+        return 0.0
+    min_r = float(sym_params.get("oe_lot_ratio_min", 0.10))
+    if market_state == "TRENDING_DOWN":
+        return min_r
+    cap_accum = float(sym_params.get("oe_lot_cap_accumulation", 0.50))
+    cap_exhaust = float(sym_params.get("oe_lot_cap_exhaustion", 0.80))
+    cap_prespike = float(sym_params.get("oe_lot_cap_prespike", 1.00))
+    lvl_accum = float(sym_params.get("oe_level_accum", 35))
+    lvl_exhaust = float(sym_params.get("oe_level_exhaust", 55))
+    lvl_prespike = float(sym_params.get("oe_level_prespike", 75))
+    if market_state == "PRE_SPIKE":
+        return cap_prespike
+    if market_state == "EXHAUSTION":
+        t = min(1.0, max(0.0, (ei - lvl_exhaust) / max(1.0, lvl_prespike - lvl_exhaust)))
+        return round(cap_exhaust + t * (cap_prespike - cap_exhaust), 2)
+    # ACCUMULATION
+    t = min(1.0, max(0.0, (ei - lvl_accum) / max(1.0, lvl_exhaust - lvl_accum)))
+    return round(min_r + t * (cap_accum - min_r), 2)
+
+
+def _oe_buy_ev(market_state: str, lot_ratio: float, memory: dict, sym_params: dict) -> float:
+    """EV BUY en $ espérés = lot_ratio × lot_max × amplitude_spike × pip_value × spike_prob."""
+    if market_state == "POST_SPIKE":
+        return 0.0
+    use_obs = bool(sym_params.get("oe_use_observed_stats", False))
+    min_obs = int(sym_params.get("oe_min_obs_for_stats", 30))
+    n_obs = int(memory.get("n_obs", 0))
+    if use_obs and n_obs >= min_obs:
+        spike_amp = float(memory.get("avg_amplitude", sym_params.get("oe_spike_amplitude_pts", 150.0)))
+    else:
+        spike_amp = float(sym_params.get("oe_spike_amplitude_pts", 150.0))
+    lot_max = float(sym_params.get("lot_max", 0.50))
+    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
+    spike_prob = {
+        "TRENDING_DOWN": 0.05, "ACCUMULATION": 0.20,
+        "EXHAUSTION": 0.50, "PRE_SPIKE": 0.80,
+    }.get(market_state, 0.0)
+    return round(lot_ratio * lot_max * spike_amp * pip_value * spike_prob, 4)
+
+
+def _oe_sell_ev(n_sell_open: int, max_sell_count: int, sym_params: dict) -> float:
+    """EV SELL en $ espérés. Négatif si déjà au-delà du max autorisé."""
+    if n_sell_open >= max_sell_count:
+        return -1.0
+    sell_amp = float(sym_params.get("oe_sell_amplitude_pts", 50.0))
+    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
+    lot_max = float(sym_params.get("lot_max", 0.50))
+    return round(lot_max * sell_amp * pip_value * 0.60, 4)
+
+
+def _oe_log(symbol_key: str, result: dict) -> None:
+    """Journalise l'état OE dans data/oe_log.jsonl pour observation et calibration."""
+    append_jsonl("data/oe_log.jsonl", {"ts": time.time(), "symbol": symbol_key, **result})
+
+
+def _spike_sell_guard_step(
+    symbol_key: str,
+    boom_positions: list[dict],
+    spike_stats: dict,
+    sym_params: dict,
+) -> dict:
+    """Spike SELL Guard — ferme les SELLs déficitaires pendant un spike haussier."""
+    if not bool(sym_params.get("spike_sell_guard_enabled", False)):
+        return {"active": False}
+    if not spike_stats.get("is_spike"):
+        return {"active": False, "reason": "Aucun spike détecté."}
+    sell_positions = [p for p in boom_positions if p.get("direction") == "SELL"]
+    if not sell_positions:
+        return {"active": True, "spike": True, "sells": 0, "action": "none"}
+    loss_thr_per_lot = float(sym_params.get("spike_sell_max_loss_pips_per_lot", 15.0))
+    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
+    timeout_sec = float(sym_params.get("spike_sell_timeout_sec", 30))
+    max_count = int(sym_params.get("spike_sell_max_count", 2))
+    sell_positions.sort(key=lambda p: float(p.get("profit", 0)))
+    for pos in sell_positions[:max_count]:
+        profit = float(pos.get("profit", 0))
+        lot = max(1e-9, float(pos.get("lot", 0.01)))
+        age = max(0.0, time.time() - float(pos.get("open_timestamp") or time.time()))
+        loss_thr = -abs(loss_thr_per_lot * lot / pip_value)
+        if profit <= loss_thr or age > timeout_sec:
+            ok, _msg = close_bot_position(pos, "SPIKE_SELL_GUARD")
+            if ok:
+                log_trade_exit(
+                    ticket=int(pos.get("ticket", 0)),
+                    symbol_key=symbol_key,
+                    direction="SELL",
+                    open_timestamp=float(pos.get("open_timestamp") or 0),
+                    reason="SPIKE_SELL_GUARD",
+                    profit=profit,
+                    peak_profit=profit,
+                    age=age,
+                )
+                log(f"[SpikeGuard] SELL #{pos.get('ticket')} fermé {profit:.2f}$ (spike)", "INFO")
+                return {
+                    "active": True, "spike": True, "action": "spike_guard_close",
+                    "ticket": int(pos.get("ticket", 0)), "profit": profit,
+                }
+    return {"active": True, "spike": True, "action": "none", "sells": len(sell_positions)}
+
+
+def _oe_step(
+    symbol_key: str,
+    symbol: str,
+    positions: list[dict],
+    sym_params: dict,
+    state_cm: dict,
+    candles: list[dict],
+    spike_stats: dict,
+) -> dict:
+    """Opportunity Engine v5 — orchestrateur. Retourne le dict de décision OE."""
+    global CYCLE_MANAGER_STATE
+    memory = state_cm.get("oe_memory", {})
+    post_spike_until = float(state_cm.get("oe_post_spike_until", 0.0))
+
+    # Fenêtre POST_SPIKE lors d'un spike détecté
+    if spike_stats.get("is_spike"):
+        guard_timeout = float(sym_params.get("spike_sell_timeout_sec", 30)) * 2
+        CYCLE_MANAGER_STATE[symbol_key]["oe_post_spike_until"] = time.time() + guard_timeout
+        post_spike_until = CYCLE_MANAGER_STATE[symbol_key]["oe_post_spike_until"]
+
+    # Market Memory
+    memory = _oe_memory_update(symbol_key, memory, spike_stats)
+    CYCLE_MANAGER_STATE[symbol_key]["oe_memory"] = memory
+
+    # Métriques brutes
+    neg_candles = _oe_count_neg_candles(candles, limit=int(sym_params.get("oe_candles_ref", 40)))
+    impulse = _oe_impulse_check(candles, sym_params)
+
+    # Distance prix actuel vs plus haut des 20 dernières bougies
+    completed = candles[:-1] if len(candles) > 1 else candles
+    price_now = float(completed[-1].get("close", 0)) if completed else 0.0
+    price_high = max((float(c.get("high", 0)) for c in completed[-20:]), default=price_now)
+    distance_pts = max(0.0, price_high - price_now)
+
+    # Deceleration score : amplitude moyenne des 3 dernières bougies vs 3 précédentes
+    if len(completed) >= 6:
+        recent_avg = sum(
+            abs(float(c.get("close", 0)) - float(c.get("open", 0)))
+            for c in completed[-3:]
+        ) / 3
+        early_avg = sum(
+            abs(float(c.get("close", 0)) - float(c.get("open", 0)))
+            for c in completed[-6:-3]
+        ) / 3
+        decel_score = min(1.0, max(0.0, 1.0 - (recent_avg / max(1e-9, early_avg))))
+    else:
+        decel_score = 0.0
+
+    # Extension Index passe 1 (poids neutres) → état provisoire
+    w_neutral = {"candles": 0.33, "distance": 0.33, "decel": 0.34}
+    ei_temp = _oe_extension_index(neg_candles, distance_pts, decel_score, w_neutral, sym_params)
+    market_state_tmp = _oe_market_state(
+        ei_temp, decel_score, sym_params, spike_stats.get("is_spike", False), post_spike_until
+    )
+
+    # Extension Index passe 2 (poids dynamiques selon état)
+    weights = _oe_dynamic_weights(market_state_tmp, sym_params)
+    ei = _oe_extension_index(neg_candles, distance_pts, decel_score, weights, sym_params)
+    market_state = _oe_market_state(
+        ei, decel_score, sym_params, spike_stats.get("is_spike", False), post_spike_until
+    )
+    CYCLE_MANAGER_STATE[symbol_key]["oe_market_state"] = market_state
+
+    # Lot ratio BUY
+    lot_ratio = _oe_buy_lot_ratio(market_state, ei, sym_params)
+
+    # Sell count actuel
+    bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
+    n_sell = sum(
+        1 for p in positions
+        if p.get("symbol_key") == symbol_key
+        and p.get("direction") == "SELL"
+        and p.get("origin", "").upper() in bot_flag
+    )
+    max_sell_count = {
+        "TRENDING_DOWN": 99,
+        "ACCUMULATION": int(sym_params.get("oe_max_sell_count_accum", 3)),
+        "EXHAUSTION": int(sym_params.get("oe_max_sell_count_exhaust", 2)),
+        "PRE_SPIKE": int(sym_params.get("oe_max_sell_count_prespike", 0)),
+        "POST_SPIKE": 0,
+    }.get(market_state, 99)
+
+    # EV BUY vs EV SELL
+    ev_buy = _oe_buy_ev(market_state, lot_ratio, memory, sym_params)
+    ev_sell = _oe_sell_ev(n_sell, max_sell_count, sym_params)
+
+    # ROM validé : BUY autorisé si EV BUY × marge >= EV SELL, état favorable, pas d'impulsion
+    priority_margin = float(sym_params.get("oe_priority_margin", 1.20))
+    rom_validated = (
+        market_state in ("ACCUMULATION", "EXHAUSTION", "PRE_SPIKE")
+        and not impulse
+        and ev_buy * priority_margin >= ev_sell
+    )
+    if market_state in ("TRENDING_DOWN", "POST_SPIKE"):
+        market_priority = "SELL" if market_state == "TRENDING_DOWN" else "NEUTRAL"
+    elif ev_buy * priority_margin >= ev_sell:
+        market_priority = "BUY"
+    else:
+        market_priority = "SELL" if ev_sell > 0 else "NEUTRAL"
+
+    spike_prob_map = {
+        "TRENDING_DOWN": 0.05, "ACCUMULATION": 0.20,
+        "EXHAUSTION": 0.50, "PRE_SPIKE": 0.80, "POST_SPIKE": 0.0,
+    }
+    result = {
+        "extension_index": ei,
+        "spike_probability": spike_prob_map.get(market_state, 0.0),
+        "opportunity_buy": ev_buy,
+        "opportunity_sell": ev_sell,
+        "market_state": market_state,
+        "weights_used": weights,
+        "market_priority": market_priority,
+        "lot_ratio": lot_ratio,
+        "rom_validated": rom_validated,
+        "impulse_active": impulse,
+        "max_sell_count": max_sell_count,
+        "neg_candles": neg_candles,
+        "distance_pts": round(distance_pts, 4),
+        "decel_score": round(decel_score, 3),
+        "memory_n_obs": int(memory.get("n_obs", 0)),
+        "spike_detected": spike_stats.get("is_spike", False),
+    }
+    _oe_log(symbol_key, result)
+    return result
+
+
 def cycle_manager_boom1000_step(
     symbol_key: str,
     symbol: str,
@@ -3017,9 +3428,10 @@ def cycle_manager_boom1000_step(
     params: dict,
     allow_real: bool,
     is_demo: bool,
+    ia_confidence: float = 0.0,
 ) -> dict:
     """Cycle Manager BOOM1000 — Phase 2.3.
-    Étape 3 : BPPL + QPC actifs. Étapes suivantes : ROM → Spike Hedge → SELL→ROM."""
+    Étape 3 : BPPL + QPC + OE v5 actifs."""
     global CYCLE_MANAGER_STATE
     sym_params = params.get("symbols", {}).get(symbol_key, {})
     if not sym_params.get("cycle_manager_enabled", False):
@@ -3033,6 +3445,9 @@ def cycle_manager_boom1000_step(
         "bppl_positions_closed": [],
         "bppl_profit_secured": 0.0,
         "last_bppl_at": 0.0,
+        "oe_market_state": "TRENDING_DOWN",
+        "oe_memory": {},
+        "oe_post_spike_until": 0.0,
     })
 
     # Positions principales BOOM1000 uniquement (exclure rebonds et drift)
@@ -3082,6 +3497,26 @@ def cycle_manager_boom1000_step(
         result["qpc"] = _qpc_step(
             symbol_key, boom_positions, basket_profit, peak_profit, sym_params,
         )
+
+    # ── Opportunity Engine + Spike SELL Guard ─────────────────────────────────
+    oe_enabled = bool(sym_params.get("oe_enabled", False))
+    sg_enabled = bool(sym_params.get("spike_sell_guard_enabled", False))
+    if oe_enabled or sg_enabled:
+        candles = symbol_candles(symbol, params, limit=50)
+        if not isinstance(candles, list):
+            candles = []
+        spike_stats = _oe_detect_spike(candles, sym_params)
+        if sg_enabled:
+            result["spike_guard"] = _spike_sell_guard_step(
+                symbol_key, boom_positions, spike_stats, sym_params,
+            )
+            if result["spike_guard"].get("action") == "spike_guard_close":
+                return result
+        if oe_enabled:
+            result["oe"] = _oe_step(
+                symbol_key, symbol, positions, sym_params,
+                CYCLE_MANAGER_STATE[symbol_key], candles, spike_stats,
+            )
 
     return result
 
@@ -3183,6 +3618,9 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         )
         state["drift_follower"] = drift_result
         # ── Module Cycle Manager BOOM1000 (Phase 2.3) ────────────────────────
+        _ia_conf_cm = float(
+            (payload.get("analysis") or {}).get(active or "", {}).get("confidence") or 0
+        )
         cm_result = cycle_manager_boom1000_step(
             active,
             symbol,
@@ -3190,6 +3628,7 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             params,
             bool(demo or state.get("real_confirmed")),
             demo,
+            ia_confidence=_ia_conf_cm,
         )
         state["cycle_manager"] = cm_result
         # 1 action par tick — retour immédiat si BPPL a fermé une position
@@ -3203,6 +3642,15 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             return state
         # QPC close → retour immédiat (1 action par tick)
         if cm_result.get("qpc", {}).get("action") == "qpc_close":
+            save_trading_state(state)
+            return state
+        # Spike Guard close → retour immédiat
+        if cm_result.get("spike_guard", {}).get("action") == "spike_guard_close":
+            save_trading_state(state)
+            return state
+        # OE POST_SPIKE → observation uniquement, aucune nouvelle entrée
+        if cm_result.get("oe", {}).get("market_state") == "POST_SPIKE":
+            state["reason"] = "OE POST_SPIKE — observation uniquement."
             save_trading_state(state)
             return state
         save_trading_state(state)
@@ -3238,6 +3686,27 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         return state
 
     decision = payload.get("simulated_decision", {})
+    # OE SELL limit — BOOM1000 uniquement (SELLs stratégiques, hors Drift + Rebond)
+    if active == "BOOM1000" and str(decision.get("signal")) == "SELL":
+        _oe_sl = state.get("cycle_manager", {}).get("oe", {})
+        if _oe_sl:
+            _max_sl = int(_oe_sl.get("max_sell_count", 99))
+            _bot_flag_sl = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
+            _n_sl = sum(
+                1 for p in positions
+                if p.get("symbol_key") == active
+                and p.get("direction") == "SELL"
+                and p.get("origin", "").upper() in _bot_flag_sl
+                and int(p.get("ticket", 0)) != drift_ticket   # DRIFT_SELL exclu
+                and int(p.get("ticket", 0)) not in rebond_tickets  # REBOND exclu
+            )
+            if _n_sl >= _max_sl:
+                state["reason"] = (
+                    f"OE {_oe_sl.get('market_state', '?')} — "
+                    f"SELL stratégique bloqué ({_n_sl}/{_max_sl}, hors drift/rebond)."
+                )
+                save_trading_state(state)
+                return state
     if not symbol or not decision.get("eligible"):
         reason = str(decision.get("reason") or "Aucun signal eligible.")
         if state.get("reason") != reason:
@@ -3334,6 +3803,65 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 broker_min = float(lot_info.get("broker_min", 0))
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
+    # ── OE Gate BUY + lot progressif BOOM1000 ────────────────────────────────
+    if active == "BOOM1000" and str(decision.get("signal")) == "BUY":
+        _oe_bv = state.get("cycle_manager", {}).get("oe", {})
+        if _oe_bv:
+            # Règle absolue 1 : impulsion haussière → interdit (achat au sommet)
+            # Règle absolue 2 : spike venant d'être détecté → interdit
+            _impulse = _oe_bv.get("impulse_active", False)
+            _spike_on = _oe_bv.get("spike_detected", False)
+            if _impulse or _spike_on:
+                _reject_reason = "impulse_active" if _impulse else "spike_detected"
+                append_jsonl("data/oe_log.jsonl", {
+                    "event": "BUY_REJECTED_TOP",
+                    "reason": _reject_reason,
+                    "ts": time.time(),
+                    "extension_index": _oe_bv.get("extension_index", 0),
+                    "market_state": _oe_bv.get("market_state", "?"),
+                    "decel_score": _oe_bv.get("decel_score", 0),
+                    "neg_candles": _oe_bv.get("neg_candles", 0),
+                    "distance_pts": _oe_bv.get("distance_pts", 0),
+                })
+                state["reason"] = f"OE — BUY refusé : {_reject_reason}."
+                save_trading_state(state)
+                return state
+            # Règle 3 : ROM non validé (état de marché défavorable ou EV insuffisant)
+            if not _oe_bv.get("rom_validated", True):
+                _ms = _oe_bv.get("market_state", "?")
+                _ei = _oe_bv.get("extension_index", 0)
+                append_jsonl("data/oe_log.jsonl", {
+                    "event": "BUY_REJECTED_TOP",
+                    "reason": f"rom_not_validated_{_ms}",
+                    "ts": time.time(),
+                    "extension_index": _ei,
+                    "market_state": _ms,
+                    "opportunity_buy": _oe_bv.get("opportunity_buy", 0),
+                    "opportunity_sell": _oe_bv.get("opportunity_sell", 0),
+                    "decel_score": _oe_bv.get("decel_score", 0),
+                    "neg_candles": _oe_bv.get("neg_candles", 0),
+                })
+                state["reason"] = (
+                    f"OE {_ms} — BUY refusé "
+                    f"(EI={_ei:.0f}, "
+                    f"OppBUY={_oe_bv.get('opportunity_buy', 0):.2f}$ "
+                    f"vs OppSELL={_oe_bv.get('opportunity_sell', 0):.2f}$)"
+                )
+                save_trading_state(state)
+                return state
+            _oe_ratio = float(_oe_bv.get("lot_ratio", 0))
+            if _oe_ratio > 0:
+                _lot_max_v = float(symbol_params.get("lot_max", 0.50))
+                _broker_min_v = float(lot_info.get("broker_min", 0.01))
+                _oe_lot = round(max(_broker_min_v, _lot_max_v * _oe_ratio), 2)
+                lot_info = {
+                    **lot_info,
+                    "effective_lot": _oe_lot,
+                    "reason": (
+                        f"OE {_oe_bv.get('market_state', '?')} BUY "
+                        f"(EI={_oe_bv.get('extension_index', 0):.0f}, ratio={_oe_ratio:.2f})"
+                    ),
+                }
     approved_by_server, server_reply = server_trade_confirmation(
         params,
         active,
