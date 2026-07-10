@@ -650,6 +650,23 @@
           <label>Cooldown rebond (s)<input data-sym="BOOM1000" name="rebond_cooldown" type="number" min="60" max="3600"></label>
           <label>Tentatives rebond max<input data-sym="BOOM1000" name="max_rebound_attempts" type="number" min="1" max="10"></label>
           <label>Perte journalière max $<input data-sym="BOOM1000" name="daily_max_loss" type="number" min="50" step="50"></label>
+          <!-- ── Cycle Manager Phase 2.3 ──────────────────────────────────────── -->
+          <!-- Valeurs provisoires observation — calibration après collecte données -->
+          <label class="check"><input data-sym="BOOM1000" name="cycle_manager_enabled" type="checkbox"> Cycle Manager Phase 2.3 (BOOM1000)</label>
+          <!-- BPPL — Basket Profit Priority Layer -->
+          <label class="check"><input data-sym="BOOM1000" name="bppl_enabled" type="checkbox"> BPPL — protection profit panier</label>
+          <label>BPPL seuil profit $ (absolu)<input data-sym="BOOM1000" name="bppl_trigger_profit" type="number" step="0.5" min="0.5" title="Déclenche si profit panier ≥ ce montant en $"></label>
+          <label>BPPL seuil profit % exposition<input data-sym="BOOM1000" name="bppl_trigger_profit_pct" type="number" step="0.5" min="0.5" max="20" title="Déclenche si profit ≥ X% de l'exposition totale — OU logique avec seuil $"></label>
+          <label>BPPL positions à fermer<input data-sym="BOOM1000" name="bppl_close_n_first" type="number" min="1" max="5" title="Nb de positions fermées en priorité (tri : profit > âge > risque retournement)"></label>
+          <label>BPPL QPC override (pips)<input data-sym="BOOM1000" name="bppl_qpc_override_pips" type="number" min="1" max="30" title="TP réduit appliqué aux positions restantes pendant la protection"></label>
+          <label>BPPL PEG override (fraction)<input data-sym="BOOM1000" name="bppl_peg_override_pct" type="number" step="0.05" min="0.05" max="0.50" title="Recul max depuis le pic avant fermeture totale (ex : 0.20 = 20%)"></label>
+          <label>BPPL durée max protection (s)<input data-sym="BOOM1000" name="bppl_max_hold_sec" type="number" min="30" max="600"></label>
+          <!-- QPC — Quick Profit Capture -->
+          <label class="check"><input data-sym="BOOM1000" name="qpc_enabled" type="checkbox"> QPC — capture rapide des gains</label>
+          <label>QPC palier 1 — âge max (s)<input data-sym="BOOM1000" name="qpc_tier1_age_sec" type="number" min="5" max="120"></label>
+          <label>QPC palier 1 — TP (pips)<input data-sym="BOOM1000" name="qpc_tier1_pips" type="number" min="1" max="20"></label>
+          <label>QPC palier 2 — âge max (s)<input data-sym="BOOM1000" name="qpc_tier2_age_sec" type="number" min="20" max="300"></label>
+          <label>QPC palier 2 — TP (pips)<input data-sym="BOOM1000" name="qpc_tier2_pips" type="number" min="1" max="15"></label>
         </article>
 
         <article class="panel settings-full-width">

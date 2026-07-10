@@ -164,6 +164,31 @@ DEFAULT_PARAMS = {
             "partial_tp_count": 3,
             "partial_tp_close_pct": 25,
             "partial_tp_move_be": True,
+            # ── Cycle Manager Phase 2.3 — valeurs provisoires observation ──────
+            # Calibration après collecte données. Tous modules désactivés.
+            "cycle_manager_enabled": False,
+            # BPPL — Basket Profit Priority Layer
+            "bppl_enabled": False,
+            "bppl_trigger_profit": 5.0,        # seuil absolu $ (OU logique)
+            "bppl_trigger_profit_pct": 3.0,    # seuil relatif % exposition (OU logique)
+            "bppl_profit_reference_mode": "fixed",  # "fixed" | "exposure" | "risk"
+            "bppl_close_n_first": 2,
+            "bppl_tie_threshold_pct": 10.0,
+            "bppl_use_reversal_risk": True,
+            "bppl_risk_weight_extension": 50,
+            "bppl_risk_weight_distance": 30,
+            "bppl_risk_weight_spike_timing": 20,
+            "bppl_qpc_override_pips": 5,       # provisoire observation
+            "bppl_peg_override_pct": 0.20,
+            "bppl_max_hold_sec": 180,
+            "bppl_resume_min_profit": 0.50,
+            # QPC — Quick Profit Capture
+            "qpc_enabled": False,
+            "qpc_tier1_age_sec": 20,
+            "qpc_tier1_pips": 8,               # provisoire observation
+            "qpc_tier2_age_sec": 45,
+            "qpc_tier2_pips": 5,               # provisoire observation
+            "qpc_extended_reduction_pct": 30,
         },
         "CRASH1000": {
             "enabled": False,
@@ -277,6 +302,21 @@ DRIFT_FOLLOWER_STATE: dict = {
     "ticket": None,        # Ticket MT5 de la position drift
     "opened_at": 0.0,
     "last_drift_at": 0.0,  # Cooldown entre deux ouvertures
+}
+
+# ── Module Cycle Manager BOOM1000 Phase 2.3 ────────────────────────────────────
+# Structure par symbole pour éviter les états persistants incorrects et préparer
+# les futurs symboles. Étape 1 : structure uniquement, aucun module actif.
+CYCLE_MANAGER_STATE: dict = {
+    "BOOM1000": {
+        "overlay": None,              # None | "PROFIT_PROTECTION"
+        "bppl_triggered_at": 0.0,
+        "bppl_trigger_source": None,  # "absolute" | "relative" | "both"
+        "bppl_profit_at_trigger": 0.0,
+        "bppl_positions_closed": [],  # [{"ticket": int, "profit": float}]
+        "bppl_profit_secured": 0.0,
+        "last_bppl_at": 0.0,
+    },
 }
 
 try:
@@ -2656,6 +2696,399 @@ def auto_drift_follower_step(
 # ── Fin module Drift Follower ──────────────────────────────────────────────────
 
 
+# ── Module Cycle Manager BOOM1000 Phase 2.3 ────────────────────────────────────
+
+
+def _log_cycle_manager(symbol_key: str, event: str, **kwargs) -> None:
+    """Appende un événement dans cycle_manager_log.jsonl."""
+    cm = CYCLE_MANAGER_STATE.get(symbol_key, {})
+    payload = {
+        "timestamp": utc_now(),
+        "symbol": symbol_key,
+        "overlay": cm.get("overlay"),
+        "open_positions": kwargs.pop("open_positions", 0),
+        "basket_profit": kwargs.pop("basket_profit", 0.0),
+        "peak_profit": kwargs.pop("peak_profit", 0.0),
+        "event": event,
+    }
+    payload.update(kwargs)
+    append_jsonl("cycle_manager_log.jsonl", payload)
+
+
+def _bppl_exposure(positions: list[dict], sym_params: dict) -> float:
+    """Calcule l'exposition totale du panier (amplitude M1 comme proxy).
+    Valeurs bppl_amplitude_m1 / bppl_pip_value à calibrer après observation."""
+    amplitude_m1 = float(sym_params.get("bppl_amplitude_m1", 50.0))
+    pip_value = float(sym_params.get("bppl_pip_value", 0.01))
+    return sum(
+        float(p.get("lot") or sym_params.get("lot", 0.01)) * amplitude_m1 * pip_value
+        for p in positions
+    )
+
+
+def _bppl_sort_positions(positions: list[dict], sym_params: dict) -> list[dict]:
+    """Tri 3 critères : profit DESC → âge ASC (si profit ≃) → reversal_risk DESC."""
+    tie_pct = float(sym_params.get("bppl_tie_threshold_pct", 10.0)) / 100.0
+    use_risk = bool(sym_params.get("bppl_use_reversal_risk", True))
+    now = time.time()
+    max_profit = max((float(p.get("profit", 0)) for p in positions), default=1.0)
+
+    def sort_key(p):
+        profit = float(p.get("profit", 0))
+        age = now - float(p.get("open_timestamp") or now)
+        # Critère 3 : proxy risque retournement (âge normalisé + distance profit)
+        # Calibration réelle après collecte données — valeurs provisoires observation.
+        risk = min(100, int(age / 60.0 * 30.0 + profit * 2.0)) if use_risk else 0
+        # Regrouper profits similaires pour permettre au critère 2 (âge) de s'appliquer
+        bucket = round(profit / max(max_profit * tie_pct, 0.01)) if tie_pct > 0 else profit
+        return (-bucket, age, -risk)
+
+    return sorted(positions, key=sort_key)
+
+
+def _bppl_close_one(
+    symbol_key: str,
+    pos: dict,
+    reason: str,
+    basket_profit: float,
+    peak_profit: float,
+    all_positions: list[dict],
+) -> bool:
+    """Ferme une position et log l'événement dans cycle_manager_log.jsonl."""
+    global CYCLE_MANAGER_STATE
+    cm = CYCLE_MANAGER_STATE[symbol_key]
+    now = time.time()
+    ticket = int(pos.get("ticket", 0))
+    profit = float(pos.get("profit", 0))
+    ok, msg = close_bot_position(pos, reason)
+    if ok:
+        cm.setdefault("bppl_positions_closed", []).append({"ticket": ticket, "profit": profit})
+        cm["bppl_profit_secured"] = float(cm.get("bppl_profit_secured", 0.0)) + profit
+        log(
+            f"[BPPL] #{ticket} fermée ({reason}) — profit sécurisé: {profit:.2f}$ "
+            f"| total: {cm['bppl_profit_secured']:.2f}$",
+            "SUCCESS",
+        )
+        _log_cycle_manager(
+            symbol_key, "BPPL_POSITION_CLOSED",
+            open_positions=len(all_positions),
+            basket_profit=basket_profit,
+            peak_profit=peak_profit,
+            ticket=ticket,
+            close_reason=reason,
+            profit_closed=profit,
+            total_secured=cm["bppl_profit_secured"],
+        )
+        log_trade_exit(
+            ticket=ticket,
+            symbol_key=symbol_key,
+            direction=str(pos.get("direction", "")),
+            open_timestamp=float(pos.get("open_timestamp") or 0),
+            reason=reason,
+            profit=profit,
+            peak_profit=max(profit, peak_profit),
+            age=max(0.0, now - float(pos.get("open_timestamp") or now)),
+        )
+    else:
+        log(f"[BPPL] Échec fermeture #{ticket}: {msg}", "WARNING")
+    return ok
+
+
+def _bppl_exit(
+    symbol_key: str,
+    reason: str,
+    basket_profit: float,
+    peak_profit: float,
+    n_positions: int,
+) -> None:
+    """Désactive PROFIT_PROTECTION et log la sortie."""
+    cm = CYCLE_MANAGER_STATE.get(symbol_key, {})
+    secured = float(cm.get("bppl_profit_secured", 0.0))
+    cm["overlay"] = None
+    log(
+        f"[BPPL] PROFIT_PROTECTION désactivé ({reason}) — {symbol_key} "
+        f"| profit sécurisé: {secured:.2f}$ | positions restantes: {n_positions}",
+        "INFO",
+    )
+    _log_cycle_manager(
+        symbol_key, "BPPL_EXIT",
+        open_positions=n_positions,
+        basket_profit=basket_profit,
+        peak_profit=peak_profit,
+        exit_reason=reason,
+        total_secured=secured,
+    )
+
+
+def _bppl_step(
+    symbol_key: str,
+    positions: list[dict],
+    basket_profit: float,
+    peak_profit: float,
+    sym_params: dict,
+    allow_real: bool,
+    is_demo: bool,
+) -> dict:
+    """BPPL — Basket Profit Priority Layer. 1 action max par tick moteur."""
+    global CYCLE_MANAGER_STATE
+    cm = CYCLE_MANAGER_STATE[symbol_key]
+    now = time.time()
+
+    # ── Trigger hybride (OU logique) ─────────────────────────────────────────
+    trigger_abs = float(sym_params.get("bppl_trigger_profit", 5.0))
+    trigger_pct = float(sym_params.get("bppl_trigger_profit_pct", 3.0))
+    ref_mode = str(sym_params.get("bppl_profit_reference_mode", "fixed"))
+
+    total_exposure = _bppl_exposure(positions, sym_params) if ref_mode != "fixed" else 0.0
+    hit_abs = basket_profit >= trigger_abs
+    hit_rel = (
+        ref_mode != "fixed"
+        and total_exposure > 0
+        and basket_profit >= total_exposure * trigger_pct / 100.0
+    )
+    trigger_source = (
+        "both" if (hit_abs and hit_rel) else
+        "absolute" if hit_abs else
+        "relative" if hit_rel else
+        None
+    )
+
+    currently_active = cm.get("overlay") == "PROFIT_PROTECTION"
+
+    # ── Activation ───────────────────────────────────────────────────────────
+    if trigger_source and basket_profit > 0 and not currently_active:
+        cm.update({
+            "overlay": "PROFIT_PROTECTION",
+            "bppl_triggered_at": now,
+            "bppl_trigger_source": trigger_source,
+            "bppl_profit_at_trigger": basket_profit,
+            "bppl_positions_closed": [],
+            "bppl_profit_secured": 0.0,
+            "last_bppl_at": now,
+        })
+        log(
+            f"[BPPL] PROFIT_PROTECTION activé — {symbol_key} | "
+            f"profit panier: {basket_profit:.2f}$ | trigger: {trigger_source} | "
+            f"positions: {len(positions)}",
+            "INFO",
+        )
+        _log_cycle_manager(
+            symbol_key, "BPPL_TRIGGERED",
+            open_positions=len(positions),
+            basket_profit=basket_profit,
+            peak_profit=peak_profit,
+            trigger_source=trigger_source,
+            trigger_abs=trigger_abs,
+            trigger_pct=trigger_pct,
+        )
+        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "activated", "blocks_new_entries": True}
+
+    if not currently_active:
+        return {"active": False, "blocks_new_entries": False}
+
+    # ── PROFIT_PROTECTION actif ───────────────────────────────────────────────
+    elapsed = now - float(cm.get("bppl_triggered_at", now))
+    max_hold = int(sym_params.get("bppl_max_hold_sec", 180))
+    peg_pct = float(sym_params.get("bppl_peg_override_pct", 0.20))
+    n_first = int(sym_params.get("bppl_close_n_first", 2))
+    resume_min = float(sym_params.get("bppl_resume_min_profit", 0.50))
+
+    closed_tickets = {int(c["ticket"]) for c in cm.get("bppl_positions_closed", [])}
+    profitable = [
+        p for p in positions
+        if float(p.get("profit", 0)) > 0
+        and int(p.get("ticket", 0)) not in closed_tickets
+    ]
+
+    # PEG renforcé — priorité sur toute autre action
+    if peak_profit > 0 and basket_profit < peak_profit * (1.0 - peg_pct) and profitable:
+        pos = _bppl_sort_positions(profitable, sym_params)[0]
+        _bppl_close_one(symbol_key, pos, "BPPL_PEG", basket_profit, peak_profit, positions)
+        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "peg_close", "blocks_new_entries": True}
+
+    # Timeout — forcer la fermeture d'une position restante en profit
+    if elapsed >= max_hold and profitable:
+        pos = _bppl_sort_positions(profitable, sym_params)[0]
+        _bppl_close_one(symbol_key, pos, "BPPL_TIMEOUT", basket_profit, peak_profit, positions)
+        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "timeout_close", "blocks_new_entries": True}
+
+    # Fermeture prioritaire — 1 position par tick jusqu'à n_first fermées
+    already_closed_n = len(cm.get("bppl_positions_closed", []))
+    if already_closed_n < n_first and profitable:
+        pos = _bppl_sort_positions(profitable, sym_params)[0]
+        _bppl_close_one(symbol_key, pos, "BPPL_PROTECTION", basket_profit, peak_profit, positions)
+        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "priority_close", "blocks_new_entries": True}
+
+    # Sortie de la protection — aucune position rentable restante ou profit résiduel suffisant
+    if not profitable or basket_profit < resume_min:
+        _bppl_exit(symbol_key, "secured", basket_profit, peak_profit, len(positions))
+        return {"active": False, "blocks_new_entries": False, "action": "exited"}
+    if elapsed >= max_hold:
+        _bppl_exit(symbol_key, "timeout", basket_profit, peak_profit, len(positions))
+        return {"active": False, "blocks_new_entries": False, "action": "timeout_exit"}
+
+    # Surveillance continue — PROFIT_PROTECTION maintenu, QPC override passif
+    return {
+        "active": True,
+        "overlay": "PROFIT_PROTECTION",
+        "action": "monitoring",
+        "elapsed_sec": int(elapsed),
+        "max_hold_sec": max_hold,
+        "profit_secured": float(cm.get("bppl_profit_secured", 0.0)),
+        "blocks_new_entries": True,
+    }
+
+
+def _qpc_step(
+    symbol_key: str,
+    positions: list[dict],
+    basket_profit: float,
+    peak_profit: float,
+    sym_params: dict,
+) -> dict:
+    """QPC — Quick Profit Capture. Ferme 1 position par tick selon ancienneté + seuil.
+    Valeurs tier1/tier2 provisoires — calibration après collecte données."""
+    now = time.time()
+    tier1_age  = int(sym_params.get("qpc_tier1_age_sec", 20))
+    tier1_pips = float(sym_params.get("qpc_tier1_pips", 8.0))
+    tier2_age  = int(sym_params.get("qpc_tier2_age_sec", 45))
+    tier2_pips = float(sym_params.get("qpc_tier2_pips", 5.0))
+
+    tier1, tier2 = [], []
+    for pos in positions:
+        profit = float(pos.get("profit", 0))
+        if profit <= 0:
+            continue
+        age = now - float(pos.get("open_timestamp") or now)
+        if age <= tier1_age and profit >= tier1_pips:
+            tier1.append((profit, age, pos))
+        elif tier1_age < age <= tier2_age and profit >= tier2_pips:
+            tier2.append((profit, age, pos))
+
+    # Tier 1 prioritaire — sinon tier 2 ; dans chaque tier : profit DESC
+    pool = sorted(tier1, key=lambda x: -x[0]) or sorted(tier2, key=lambda x: -x[0])
+    if not pool:
+        return {"active": False}
+
+    tier_name = "tier1" if tier1 else "tier2"
+    profit, age, pos = pool[0]
+    ticket = int(pos.get("ticket", 0))
+    reason = f"QPC_{tier_name.upper()}"
+
+    ok, msg = close_bot_position(pos, reason)
+    if ok:
+        log(
+            f"[QPC] #{ticket} fermée {tier_name} | age: {age:.0f}s | profit: {profit:.2f}$",
+            "SUCCESS",
+        )
+        _log_cycle_manager(
+            symbol_key, "QPC_CLOSE",
+            open_positions=len(positions),
+            basket_profit=basket_profit,
+            peak_profit=peak_profit,
+            ticket=ticket,
+            tier=tier_name,
+            age_sec=round(age, 1),
+            profit_closed=profit,
+        )
+        log_trade_exit(
+            ticket=ticket,
+            symbol_key=symbol_key,
+            direction=str(pos.get("direction", "")),
+            open_timestamp=float(pos.get("open_timestamp") or 0),
+            reason=reason,
+            profit=profit,
+            peak_profit=max(profit, peak_profit),
+            age=max(0.0, age),
+        )
+        return {
+            "active": True, "action": "qpc_close", "tier": tier_name,
+            "ticket": ticket, "profit": profit,
+        }
+    else:
+        log(f"[QPC] Échec fermeture #{ticket}: {msg}", "WARNING")
+        return {"active": False, "action": "error"}
+
+
+def cycle_manager_boom1000_step(
+    symbol_key: str,
+    symbol: str,
+    positions: list[dict],
+    params: dict,
+    allow_real: bool,
+    is_demo: bool,
+) -> dict:
+    """Cycle Manager BOOM1000 — Phase 2.3.
+    Étape 3 : BPPL + QPC actifs. Étapes suivantes : ROM → Spike Hedge → SELL→ROM."""
+    global CYCLE_MANAGER_STATE
+    sym_params = params.get("symbols", {}).get(symbol_key, {})
+    if not sym_params.get("cycle_manager_enabled", False):
+        return {"cycle_manager_active": False, "reason": "Cycle Manager désactivé."}
+
+    CYCLE_MANAGER_STATE.setdefault(symbol_key, {
+        "overlay": None,
+        "bppl_triggered_at": 0.0,
+        "bppl_trigger_source": None,
+        "bppl_profit_at_trigger": 0.0,
+        "bppl_positions_closed": [],
+        "bppl_profit_secured": 0.0,
+        "last_bppl_at": 0.0,
+    })
+
+    # Positions principales BOOM1000 uniquement (exclure rebonds et drift)
+    bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
+    rebond_tickets = {int(s.get("ticket") or 0) for s in REBOND_STATES}
+    drift_ticket = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
+    boom_positions = [
+        p for p in positions
+        if p.get("symbol_key") == symbol_key
+        and p.get("origin", "").upper() in bot_flag
+        and int(p.get("ticket", 0)) not in rebond_tickets
+        and int(p.get("ticket", 0)) != drift_ticket
+    ]
+
+    basket_profit = sum(float(p.get("profit", 0)) for p in boom_positions)
+    contexts = position_contexts()
+    peak_profit = max(
+        (
+            float(contexts.get(str(p.get("ticket")), {}).get("max_profit") or float(p.get("profit", 0)))
+            for p in boom_positions
+        ),
+        default=0.0,
+    )
+
+    result: dict = {
+        "cycle_manager_active": True,
+        "overlay": CYCLE_MANAGER_STATE[symbol_key].get("overlay"),
+        "basket_profit": round(basket_profit, 2),
+        "open_positions": len(boom_positions),
+        "peak_profit": round(peak_profit, 2),
+    }
+
+    # ── BPPL ─────────────────────────────────────────────────────────────────
+    if sym_params.get("bppl_enabled", False):
+        result["bppl"] = _bppl_step(
+            symbol_key, boom_positions, basket_profit, peak_profit,
+            sym_params, allow_real, is_demo,
+        )
+        result["overlay"] = CYCLE_MANAGER_STATE[symbol_key].get("overlay")
+
+    # ── QPC ──────────────────────────────────────────────────────────────────
+    # QPC ne tourne que si BPPL n'a pas déjà fermé une position ce tick
+    bppl_closing = result.get("bppl", {}).get("action") in (
+        "priority_close", "peg_close", "timeout_close"
+    )
+    if sym_params.get("qpc_enabled", False) and not bppl_closing:
+        result["qpc"] = _qpc_step(
+            symbol_key, boom_positions, basket_profit, peak_profit, sym_params,
+        )
+
+    return result
+
+
+# ── Fin module Cycle Manager ───────────────────────────────────────────────────
+
+
 def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, positions: list[dict]) -> dict:
     state = load_trading_state()
     account = mt5.account_info()
@@ -2749,8 +3182,31 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             demo,
         )
         state["drift_follower"] = drift_result
+        # ── Module Cycle Manager BOOM1000 (Phase 2.3) ────────────────────────
+        cm_result = cycle_manager_boom1000_step(
+            active,
+            symbol,
+            positions,
+            params,
+            bool(demo or state.get("real_confirmed")),
+            demo,
+        )
+        state["cycle_manager"] = cm_result
+        # 1 action par tick — retour immédiat si BPPL a fermé une position
+        if cm_result.get("bppl", {}).get("action") in ("priority_close", "peg_close", "timeout_close"):
+            save_trading_state(state)
+            return state
+        # PROFIT_PROTECTION actif — bloquer nouvelles entrées SELL
+        if cm_result.get("bppl", {}).get("blocks_new_entries"):
+            state["reason"] = "BPPL PROFIT_PROTECTION actif — nouvelles entrées bloquées."
+            save_trading_state(state)
+            return state
+        # QPC close → retour immédiat (1 action par tick)
+        if cm_result.get("qpc", {}).get("action") == "qpc_close":
+            save_trading_state(state)
+            return state
         save_trading_state(state)
-    # ── Fin module Drift Follower ───────────────────────────────────────────────
+    # ── Fin module Drift Follower + Cycle Manager ────────────────────────────
 
     now = time.time()
     # Exclure les positions secondaires (rebonds + drift) du comptage

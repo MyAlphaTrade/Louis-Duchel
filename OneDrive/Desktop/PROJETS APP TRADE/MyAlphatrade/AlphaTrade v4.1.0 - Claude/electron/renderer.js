@@ -116,7 +116,32 @@ const defaults = {
       // Machine à états Claude v4
       seuil_perte_alerte: -150, lot_multiplicateur_rebond: 1.0,
       max_renforts_per_basket: 2, renfort_min_interval: 300,
-      rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500
+      rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500,
+      // Cycle Manager Phase 2.3 — valeurs provisoires observation
+      // Calibration après collecte données. Tous modules désactivés.
+      cycle_manager_enabled: false,
+      // BPPL — Basket Profit Priority Layer
+      bppl_enabled: false,
+      bppl_trigger_profit: 5.0,
+      bppl_trigger_profit_pct: 3.0,
+      bppl_profit_reference_mode: 'fixed',
+      bppl_close_n_first: 2,
+      bppl_tie_threshold_pct: 10,
+      bppl_use_reversal_risk: true,
+      bppl_risk_weight_extension: 50,
+      bppl_risk_weight_distance: 30,
+      bppl_risk_weight_spike_timing: 20,
+      bppl_qpc_override_pips: 5,
+      bppl_peg_override_pct: 0.20,
+      bppl_max_hold_sec: 180,
+      bppl_resume_min_profit: 0.50,
+      // QPC — Quick Profit Capture
+      qpc_enabled: false,
+      qpc_tier1_age_sec: 20,
+      qpc_tier1_pips: 8,
+      qpc_tier2_age_sec: 45,
+      qpc_tier2_pips: 5,
+      qpc_extended_reduction_pct: 30,
     },
     CRASH1000: {
       lot: .20, lot_min: .01, lot_max: .20, tp_pips: 15, max_positions: 3,
