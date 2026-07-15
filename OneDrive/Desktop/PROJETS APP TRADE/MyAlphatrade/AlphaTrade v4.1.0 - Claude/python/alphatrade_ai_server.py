@@ -537,14 +537,22 @@ def dual_trade_decision(payload: dict) -> dict:
 
 
 def best_chat(payload: dict) -> dict:
+    errors: list[str] = []
     if ANTHROPIC_API_KEY:
         result = anthropic_chat(payload)
         if result.get("ok"):
             return result
+        errors.append(f"Anthropic: {result.get('error')}")
     if OPENAI_API_KEY:
         result = openai_chat(payload)
         if result.get("ok"):
             return result
+        errors.append(f"OpenAI: {result.get('error')}")
+    if errors:
+        # Les deux fournisseurs configures ont echoue : remonter la vraie raison
+        # (ex: credits epuises, cle invalide) au lieu de laisser croire qu'aucune
+        # cle n'est configuree alors qu'elles le sont bel et bien.
+        return {"ok": False, "error": " | ".join(errors), "fallback": True}
     return {"ok": False, "error": "Aucune cle API configuree (OPENAI_API_KEY ou ANTHROPIC_API_KEY).",
             "fallback": True}
 

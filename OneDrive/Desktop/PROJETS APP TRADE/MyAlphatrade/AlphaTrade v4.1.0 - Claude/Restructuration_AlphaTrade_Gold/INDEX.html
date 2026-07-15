@@ -154,7 +154,14 @@
       <p class="desc"><code>python/multi_timeframe_cascade.py</code> (module pur, testable sans MT5) + <code>kb1_multi_timeframe_cascade()</code> dans <code>alphatrade_engine.py</code> (fetch MT5 réel via <code>timeframe_trend_context()</code> déjà existant). Cascade hiérarchique D1→H4→H1→M30→M15→M5→M1, distincte de l'agrégation à plat déjà utilisée par AlphaTrade AI. 5 scénarios testés (dont l'exemple exact de la maquette — cassure à M30, cohérence 42.9%), un bug trouvé et corrigé pendant les tests (D1 en collecte comptait à tort comme "aligné"). Pas encore branchée sur un moteur actif — fonction isolée, zéro régression sur les 13 tests Phase 1 existants.</p>
     </div>
   </div>
-  <div class="phase pending"><div class="num">5</div><div class="content"><span class="status pending">À venir</span><h3>Phase 5 — AI Brain : orchestrateur au-dessus des moteurs</h3></div></div>
+  <div class="phase">
+    <div class="num">5</div>
+    <div class="content">
+      <span class="status done">Périmètre validé par Louis — 16/07/2026</span>
+      <h3>Phase 5 — AI Brain : orchestrateur au-dessus des moteurs</h3>
+      <p class="desc">Décision de Louis le 16/07/2026 : le registre <code>ENGINE_REGISTRY</code> (sélection du moteur actif) + le gestionnaire de compte partagé (jamais dupliqué entre moteurs, protections appliquées uniformément) — déjà codés et testés en Phase 3bis — constituent la version v5.0.0 de cette phase, conformément à ce qui avait été validé le 15/07 ("un seul moteur actif à la fois dans les premières versions"). L'orchestrateur pleinement autonome envisagé à l'origine (IA locale qui bascule seule entre moteurs, décisions centralisées BUY/SELL/WAIT/NO TRADE/EXIT/REDUCE/PROTECT) est explicitement repoussé à une phase future dédiée — ce chantier toucherait la logique de protection déjà en place et nécessite son propre cycle audit→proposition→maquette→validation avant tout code, pas quelque chose à faire dans l'urgence avant une compilation.</p>
+    </div>
+  </div>
   <div class="phase">
     <div class="num">6</div>
     <div class="content">
@@ -165,7 +172,18 @@
       <div class="docs"><a class="doc" href="Audit_Phase6_Microstructure_v5.0.0.html">Audit_Phase6_Microstructure_v5.0.0.html</a></div>
     </div>
   </div>
-  <div class="phase pending"><div class="num">7</div><div class="content"><span class="status pending">À venir</span><h3>Phase 7 — Assistant IA : fluidité + reconnaissance vocale</h3></div></div>
+  <div class="phase">
+    <div class="num">7</div>
+    <div class="content">
+      <span class="status done">Audité et corrigé — 16/07/2026</span>
+      <h3>Phase 7 — Assistant IA : fluidité + reconnaissance vocale</h3>
+      <p class="desc">Reconnaissance vocale déjà câblée depuis Code G (Web Speech API) — non testable avec un vrai micro dans cet environnement distant, à tester par Louis lui-même. Audit réel du code du chat (pas de suppositions) a trouvé et corrigé :</p>
+      <p class="desc"><b>Résidus EUR/USD</b> dans 4 endroits de <code>renderer.js</code>, restés depuis avant le pivot XAUUSD-only : la base de connaissance de l'assistant affirmait encore trader XAU/USD ET EUR/USD (aurait donné une info fausse si interrogé sur les marchés), le dialogue de reset mémoire IA mentionnait encore EURUSD, une entrée de traduction morte. Tout corrigé. La fiche "prochaines améliorations" de l'assistant listait aussi la reconnaissance vocale comme future alors qu'elle est déjà intégrée — corrigée.</p>
+      <p class="desc"><b>Bug réel de robustesse</b> dans <code>alphatrade_ai_server.py</code> (<code>best_chat()</code>) : quand Anthropic ET OpenAI sont configurés mais échouent tous les deux, le message affiché était toujours "Aucune clé API configurée" — même quand des clés SONT configurées mais échouent pour une autre raison. Corrigé pour remonter la vraie cause.</p>
+      <p class="desc"><b>Cause concrète trouvée en conditions réelles</b> (log de l'app) : la clé Anthropic de Louis échoue avec "credit balance too low" — confirmé que c'est un problème de crédits sur son compte Anthropic, pas un bug de code. Le serveur retombe sur OpenAI si sa clé fonctionne, mais chaque question paie le coût d'un appel Anthropic qui échoue d'abord, ajoutant de la latence réelle. <b>Non corrigeable en code : Louis doit recharger ses crédits Anthropic</b> pour retrouver la réactivité normale.</p>
+      <p class="desc">4 scénarios testés (aucun appel réseau réel), zéro régression sur l'ensemble. Vérifié en conditions réelles : app relancée avec MT5 connecté en direct (Deriv-Demo #201660817), zéro crash, zéro traceback.</p>
+    </div>
+  </div>
   <div class="phase">
     <div class="num">8</div>
     <div class="content">

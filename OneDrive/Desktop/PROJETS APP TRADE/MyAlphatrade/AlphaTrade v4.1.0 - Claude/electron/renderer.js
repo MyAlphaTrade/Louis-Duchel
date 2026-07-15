@@ -257,7 +257,6 @@ const frToEn = {
   'Adresse': 'Address',
   'Dernière synchronisation': 'Last synchronization',
   'Modèle XAU/USD': 'XAU/USD model',
-  'Modèle EUR/USD': 'EUR/USD model',
   'Serveur': 'Server',
   'Version active': 'Active version',
   'Échantillon': 'Sample',
@@ -410,8 +409,8 @@ $('newSessionBtn').addEventListener('click', () => {
 });
 $('resetLearningBtn')?.addEventListener('click', () => {
   const message = currentLanguage === 'en'
-    ? 'Reset the learned XAUUSD and EURUSD memories? Trading history will remain available.'
-    : 'Réinitialiser les mémoires apprises XAUUSD et EURUSD ? L’historique des trades sera conservé.';
+    ? 'Reset the learned XAUUSD memory? Trading history will remain available.'
+    : 'Réinitialiser la mémoire apprise XAUUSD ? L’historique des trades sera conservé.';
   if (!window.confirm(message)) return;
   alpha.command('RESET_LEARNING');
   addLogs([currentLanguage === 'en' ? '[INFO] AI memory reset requested.' : '[INFO] Réinitialisation de la mémoire IA demandée.']);
@@ -433,9 +432,9 @@ const alphaTradeKnowledge = {
   identity:
     "Je suis AlphaTradeIA, l'assistant intégré au projet AlphaTrade. Mon rôle est d'expliquer l'application, les signaux, les paramètres, les protections, l'historique, la logique BUY/SELL, le site web et les prochaines améliorations.",
   project:
-    "AlphaTrade est une application de trading assisté par IA connectée à MetaTrader 5. Elle vise à aider l'utilisateur à analyser XAU/USD et EUR/USD, suivre les positions, protéger les sessions et apprendre progressivement des décisions prises.",
+    "AlphaTrade Gold est une application de trading assisté par IA connectée à MetaTrader 5, dédiée exclusivement à l'or (XAU/USD). Elle vise à analyser XAU/USD, suivre les positions, protéger les sessions et apprendre progressivement des décisions prises.",
   markets:
-    "Les deux marchés prioritaires sont XAU/USD et EUR/USD. Chaque actif garde ses propres paramètres, horaires, limites et mémoire d'apprentissage.",
+    "Le marché tradé est exclusivement XAU/USD (or). L'actif garde ses propres paramètres, horaires, limites et mémoire d'apprentissage.",
   strategy:
     "La logique recherchée n'est pas d'acheter seulement. AlphaTrade doit savoir acheter au creux, vendre au sommet, lire le momentum, les bougies, les zones hautes et basses, puis décider BUY, SELL ou WAIT selon le contexte.",
   candles:
@@ -447,7 +446,7 @@ const alphaTradeKnowledge = {
   pricing:
     "Les offres prévues sont Découverte 1 jour, Débutant 49,99 $, Pro 99,99 $, Custom 499,99 $, puis Élite 999,99 $ à venir pour les services avancés et serveur IA.",
   roadmap:
-    "Les prochaines étapes prévues incluent un assistant vocal complet, un serveur IA en ligne, une meilleure lecture des bougies, l'amélioration du BUY/SELL, le site commercial, puis plus tard la licence, le paiement, le support et éventuellement une application mobile.",
+    "La reconnaissance vocale est déjà intégrée (bouton micro pour poser une question à l'oral). Les prochaines étapes prévues incluent un serveur IA en ligne plus complet, une meilleure lecture des bougies, l'amélioration du BUY/SELL, le site commercial, puis plus tard la licence, le paiement, le support et éventuellement une application mobile.",
   premium:
     "La version premium serveur pourra être réservée aux forfaits élevés, par exemple Custom ou Élite. Elle pourra utiliser une IA plus puissante pour diagnostiquer les refus, expliquer les erreurs, proposer des réglages et assister les correctifs, sous contrôle de l'utilisateur.",
   access:
