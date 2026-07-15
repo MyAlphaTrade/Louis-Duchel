@@ -828,25 +828,32 @@ function renderMicrostructurePage() {
   const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
   const obi = Number(snapshot.obi);
   const ofi = Number(snapshot.ofi);
+  const domActive = (micro.dom_status || {})[activeSymbol];
+  // OBI/Kyle λ/POC exigent un vrai carnet d'ordres multi-niveaux (Depth of
+  // Market). Sans DOM (dépend du broker/compte), ils sont mathématiquement
+  // à 0 en permanence — afficher "N/D" plutôt qu'un 0.000 qui ressemblerait
+  // à une vraie lecture de marché équilibré. OFI reste valide sans DOM (basé
+  // sur le mouvement de prix bid/ask, pas sur la profondeur).
+  const domDataOk = Boolean(snapshot.source) && Boolean(domActive);
   set('microPageMode', micro.mode === 'OBSERVATION_ONLY' ? 'OBSERVATION UNIQUEMENT' : 'INACTIF');
   set('microPageSource', snapshot.source ? `${snapshot.source} · ${snapshot.symbol} · ${snapshot.venue}` : 'En attente du flux MT5');
   set('microPageFreshness', snapshot.timestamp
     ? `Dernière mise à jour : ${new Date(Number(snapshot.timestamp) * 1000).toLocaleTimeString()}`
     : 'Dernière mise à jour : -');
-  set('microPageObi', Number.isFinite(obi) ? obi.toFixed(3) : '-');
+  set('microPageObi', domDataOk && Number.isFinite(obi) ? obi.toFixed(3) : 'N/D');
   set('microPageOfi', Number.isFinite(ofi) ? ofi.toFixed(3) : '-');
-  set('microPageKyle', snapshot.kyle_lambda != null ? Number(snapshot.kyle_lambda).toExponential(2) : '-');
-  set('microPagePoc', snapshot.poc ? Number(snapshot.poc).toFixed(2) : '-');
-  set('microObiMeaning', !Number.isFinite(obi) ? 'Équilibre indéterminé' : obi > .15 ? 'Pression acheteuse observée' : obi < -.15 ? 'Pression vendeuse observée' : 'Carnet local équilibré');
+  set('microPageKyle', domDataOk && snapshot.kyle_lambda != null ? Number(snapshot.kyle_lambda).toExponential(2) : 'N/D');
+  set('microPagePoc', domDataOk && snapshot.poc ? Number(snapshot.poc).toFixed(2) : 'N/D');
+  set('microObiMeaning', !domDataOk ? 'Carnet d\'ordres réel indisponible pour ce broker/compte' : obi > .15 ? 'Pression acheteuse observée' : obi < -.15 ? 'Pression vendeuse observée' : 'Carnet local équilibré');
   set('microOfiMeaning', !Number.isFinite(ofi) ? 'Variation indéterminée' : ofi > .15 ? 'Flux récent favorable aux acheteurs' : ofi < -.15 ? 'Flux récent favorable aux vendeurs' : 'Flux récent neutre');
-  if ($('microObiMeter')) $('microObiMeter').style.width = `${Number.isFinite(obi) ? Math.max(0, Math.min(100, (obi + 1) * 50)) : 50}%`;
+  if ($('microObiMeter')) $('microObiMeter').style.width = `${domDataOk && Number.isFinite(obi) ? Math.max(0, Math.min(100, (obi + 1) * 50)) : 50}%`;
   if ($('microOfiMeter')) $('microOfiMeter').style.width = `${Number.isFinite(ofi) ? Math.max(0, Math.min(100, (ofi + 1) * 50)) : 50}%`;
   set('microDecisionSignal', `${decision.signal || 'WAIT'} ${decision.confidence != null ? `${Number(decision.confidence).toFixed(1)}%` : ''}`);
   set('microDecisionState', decision.eligible ? 'Entrée autorisée' : 'Entrée bloquée');
   set('microBlockedCount', blockedDecisionCount);
   set('microBlockedDuration', blockedDecisionSince ? formatDuration(Math.floor((now - blockedDecisionSince) / 1000)) : '-');
   set('microDecisionReason', reason || 'Aucune décision disponible.');
-  set('microMt5State', snapshot.source ? 'Actif' : 'En attente');
+  set('microMt5State', !snapshot.source ? 'En attente' : domActive ? 'Actif (carnet réel)' : 'Actif (approximation, DOM indisponible)');
   set('microHyperState', hyperOnline ? 'Actif' : params?.hyperliquid_observer_enabled ? 'Connexion en attente' : 'Désactivé');
   set('microError', micro.last_error ? `Erreur de collecte : ${micro.last_error}` : 'Aucune erreur de collecte.');
 }

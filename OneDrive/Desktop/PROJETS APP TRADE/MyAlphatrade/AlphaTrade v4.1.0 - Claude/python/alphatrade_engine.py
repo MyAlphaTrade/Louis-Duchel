@@ -207,6 +207,17 @@ PARTIAL_TP_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applie
 # le mécanisme équivalent d'AlphaTrade AI).
 KB1000_POSITION_STATE: dict[int, dict] = {}
 
+# Symboles déjà abonnés au vrai carnet d'ordres MT5 (Depth of Market) — évite de
+# rappeler market_book_add() à chaque tick, l'abonnement reste actif tant que
+# l'engine tourne. Alimente microstructure_book_levels() ci-dessous.
+MARKET_BOOK_SUBSCRIBED: set[str] = set()
+# Dernier statut connu (par symbol_key) : True si le broker fournit un vrai
+# carnet multi-niveaux pour ce symbole, False sinon (repli sur l'approximation
+# par tick unique — OBI/Kyle λ restent alors mathématiquement à 0, limite réelle
+# de données que ce booléen permet d'exposer honnêtement plutôt que de la
+# cacher derrière une valeur qui ressemble à une vraie lecture).
+MICROSTRUCTURE_DOM_STATUS: dict[str, bool] = {}
+
 # ── Module Capture Rebond ──────────────────────────────────────────────────────
 # Gère les positions contra-tendance sur rebonds identifiés via zones S&D
 # multi-timeframe. La position principale reste ouverte; seul le rebond est
@@ -3535,6 +3546,46 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
     }
 
 
+def microstructure_book_levels(symbol_key: str, mt5_symbol: str) -> tuple[list, list] | None:
+    """Tente de récupérer un vrai carnet d'ordres multi-niveaux (Depth of
+    Market) via MT5 pour ce symbole. C'est le vrai correctif de la limite
+    trouvée en Phase 6 : observe_mt5_tick() ne fournissait qu'une seule
+    cotation bid/ask avec le même volume des deux côtés, ce qui rendait OBI et
+    Kyle λ mathématiquement garantis à 0,0 quel que soit le marché. Les
+    formules elles-mêmes (order_book_imbalance/rolling_kyle_lambda dans
+    market_microstructure.py) sont correctes — il leur manquait juste de
+    vraies données. Si le broker/compte ne fournit pas de DOM pour ce symbole
+    (fréquent en CFD retail), retourne None : on ne doit jamais inventer une
+    valeur de volume qui ressemblerait à une vraie lecture."""
+    global MARKET_BOOK_SUBSCRIBED, MICROSTRUCTURE_DOM_STATUS
+    if mt5 is None:
+        return None
+    if mt5_symbol not in MARKET_BOOK_SUBSCRIBED:
+        if not mt5.market_book_add(mt5_symbol):
+            MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
+            return None
+        MARKET_BOOK_SUBSCRIBED.add(mt5_symbol)
+    book = mt5.market_book_get(mt5_symbol)
+    if not book:
+        MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
+        return None
+    buy_types = {mt5.BOOK_TYPE_BUY, mt5.BOOK_TYPE_BUY_MARKET}
+    sell_types = {mt5.BOOK_TYPE_SELL, mt5.BOOK_TYPE_SELL_MARKET}
+    bids = sorted(
+        ((float(row.price), float(row.volume_real or row.volume)) for row in book if int(row.type) in buy_types),
+        key=lambda level: -level[0],
+    )
+    asks = sorted(
+        ((float(row.price), float(row.volume_real or row.volume)) for row in book if int(row.type) in sell_types),
+        key=lambda level: level[0],
+    )
+    if not bids or not asks:
+        MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
+        return None
+    MICROSTRUCTURE_DOM_STATUS[symbol_key] = True
+    return bids, asks
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AlphaTrade MT5 monitoring engine")
     parser.add_argument(
@@ -3716,9 +3767,14 @@ def main() -> int:
             micro_interval = max(1, int(params.get("microstructure_interval_sec", 2)))
             if time.time() - last_microstructure >= micro_interval:
                 for key, name in symbol_names.items():
-                    tick = mt5.symbol_info_tick(name)
-                    if tick:
-                        microstructure.observe_mt5_tick(key, tick)
+                    book_levels = microstructure_book_levels(key, name)
+                    if book_levels:
+                        bids, asks = book_levels
+                        microstructure.observe_book("MT5", "BROKER", "CFD_FOREX", key, bids, asks)
+                    else:
+                        tick = mt5.symbol_info_tick(name)
+                        if tick:
+                            microstructure.observe_mt5_tick(key, tick)
                 last_microstructure = time.time()
             if (
                 bool(params.get("hyperliquid_observer_enabled", False))
@@ -3751,7 +3807,7 @@ def main() -> int:
         # Conserver l'analyse du premier appel — le deuxième appel (après trades)
         # peut retourner {} vide pour les synthétiques, écrasant les vraies valeurs.
         _first_analysis = dict(payload.get("analysis") or {})
-        payload["microstructure"] = microstructure.snapshot()
+        payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}
         if args.once:
             auto_state = load_trading_state()
             auto_state["allowed"] = is_demo_account(mt5.account_info())
@@ -3762,7 +3818,7 @@ def main() -> int:
             positions = live_positions(symbol_names, params)
             kb1000_manage_positions(positions, params, symbol_names)
             payload = status_payload(params, symbol_names, trades, positions)
-            payload["microstructure"] = microstructure.snapshot()
+            payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}
             # Restaurer l'analyse du premier appel pour l'affichage temps réel.
             if _first_analysis:
                 payload["analysis"] = _first_analysis
