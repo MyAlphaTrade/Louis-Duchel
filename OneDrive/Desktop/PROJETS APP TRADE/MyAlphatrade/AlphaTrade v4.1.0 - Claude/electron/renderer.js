@@ -36,6 +36,10 @@ const defaults = {
   kb1000_coherence_min_pct: 60,
   kb1000_min_confirmations: 3,
   kb1000_entry_threshold: 70,
+  trade_origins: [
+    { name: 'AlphaTrade AI', type: 'INTERNAL_BOT', magic_numbers: [20260607], comment_keywords: ['alphatrade', 'alphakaris'], enabled: true },
+    { name: 'AVA Assistant', type: 'EXTERNAL_AI', magic_numbers: [7525001], comment_keywords: ['ava', 'bridge'], enabled: true }
+  ],
   mode: 'monitor',
   trading_enabled: false,
   demo_only: false,
@@ -954,15 +958,18 @@ function renderPositions(positions) {
   $('positionCards').innerHTML = positions.map(p => `
     <div class="position ${p.direction.toLowerCase()}">
       <strong>${p.direction} ${p.symbol_key}</strong>
-      <div class="row"><span>${originLabel(p.origin)} · lot ${Number(p.lot).toFixed(2)}</span><b class="${p.profit >= 0 ? 'positive' : 'negative'}">${money(p.profit)}</b></div>
+      <div class="row"><span>${originLabel(p)} · lot ${Number(p.lot).toFixed(2)}</span><b class="${p.profit >= 0 ? 'positive' : 'negative'}">${money(p.profit)}</b></div>
       <div class="row"><span>${Number(p.open_price).toFixed(2)}</span><span>${Number(p.current_price).toFixed(2)}</span></div>
     </div>`).join('');
 }
 
-function originLabel(origin) {
-  const key = String(origin || 'MANUAL').toUpperCase();
+function originLabel(row) {
+  // Le backend calcule desormais le vrai nom via le registre "trade_origins"
+  // (Phase 8) -- on ne devine plus jamais "AVA" pour une origine inconnue.
+  if (row && typeof row === 'object' && row.origin_name) return row.origin_name;
+  const key = String((row && row.origin) || row || 'MANUAL').toUpperCase();
   if (key === 'BOT') return 'ALPHATRADE';
-  if (key === 'EXTERNAL_AI') return currentLanguage === 'en' ? 'AVA / EXTERNAL AI' : 'AVA / IA EXTERNE';
+  if (key === 'EXTERNAL_AI') return currentLanguage === 'en' ? 'External EA' : 'EA externe';
   return currentLanguage === 'en' ? 'MANUAL' : 'MANUEL';
 }
 
@@ -1485,7 +1492,7 @@ function tradeRow(t, withTime = false, idx = null) {
   return `<tr${idxAttr}>
     ${withTime ? `<td>${time || '-'}</td>` : ''}
     <td><span class="pill ${String(t.direction).toLowerCase()}">${t.direction}</span></td>
-    <td>${originLabel(t.origin)}</td>
+    <td>${originLabel(t)}</td>
     <td>${Number(t.lot || 0).toFixed(2)}</td>
     <td>${Number(t.open_price || 0).toFixed(2)}</td>
     <td>${Number(t.close_price || 0).toFixed(2)}</td>
@@ -1706,7 +1713,88 @@ function fillSettings(values) {
   updateStrategyAppliedState(params.strategy_mode || 'scalping_safe');
   updateAssetCards();
   selectEngine(params.active_engine || 'alphatrade_ai');
+  renderOriginsTable();
 }
+
+const ORIGIN_TYPE_LABELS = {
+  INTERNAL_BOT: 'BOT INTERNE', EXTERNAL_AI: 'IA EXTERNE', EXTERNAL_EA: 'EA EXTERNE', MANUAL: 'MANUEL'
+};
+
+function renderOriginsTable() {
+  const body = $('tradeOriginsBody');
+  if (!body || !params) return;
+  const origins = params.trade_origins || [];
+  body.innerHTML = origins.length ? origins.map((o, i) => `
+    <tr>
+      <td><span class="origin-name-cell">${o.name}</span></td>
+      <td><span class="origin-type-badge ${o.type}">${ORIGIN_TYPE_LABELS[o.type] || o.type}</span></td>
+      <td>${(o.magic_numbers || []).join(', ') || '—'}</td>
+      <td>${(o.comment_keywords || []).join(', ') || '—'}</td>
+      <td><span class="origin-switch ${o.enabled ? 'on' : ''}" data-toggle-origin="${i}"></span></td>
+      <td>
+        <span class="origin-icon-btn" data-edit-origin="${i}" title="Modifier">✏</span>
+        <span class="origin-icon-btn danger" data-delete-origin="${i}" title="Supprimer">🗑</span>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="empty">Aucune origine configurée</td></tr>';
+}
+
+let originModalEditIndex = null;
+
+function openOriginModal(index) {
+  originModalEditIndex = index;
+  const origin = index === null ? null : (params.trade_origins || [])[index];
+  $('originModalTitle').firstChild.textContent = origin ? 'Modifier une origine ' : 'Ajouter une origine ';
+  $('originModalSub').textContent = origin ? origin.name : '';
+  $('originFieldName').value = origin ? origin.name : '';
+  $('originFieldType').value = origin ? origin.type : 'EXTERNAL_AI';
+  $('originFieldMagic').value = origin ? (origin.magic_numbers || []).join(', ') : '';
+  $('originFieldKeywords').value = origin ? (origin.comment_keywords || []).join(', ') : '';
+  $('originFieldEnabled').checked = origin ? Boolean(origin.enabled) : true;
+  $('originModal').classList.add('open');
+}
+
+function closeOriginModal() {
+  $('originModal').classList.remove('open');
+  originModalEditIndex = null;
+}
+
+$('addOriginBtn')?.addEventListener('click', () => openOriginModal(null));
+$('originModalClose')?.addEventListener('click', closeOriginModal);
+$('originCancelBtn')?.addEventListener('click', closeOriginModal);
+$('originModal')?.addEventListener('click', event => { if (event.target.id === 'originModal') closeOriginModal(); });
+
+$('originSaveBtn')?.addEventListener('click', () => {
+  const name = $('originFieldName').value.trim();
+  if (!name) return;
+  const entry = {
+    name,
+    type: $('originFieldType').value,
+    magic_numbers: $('originFieldMagic').value.split(',').map(v => parseInt(v.trim(), 10)).filter(v => Number.isFinite(v)),
+    comment_keywords: $('originFieldKeywords').value.split(',').map(v => v.trim().toLowerCase()).filter(Boolean),
+    enabled: $('originFieldEnabled').checked
+  };
+  if (!params.trade_origins) params.trade_origins = [];
+  if (originModalEditIndex === null) params.trade_origins.push(entry);
+  else params.trade_origins[originModalEditIndex] = entry;
+  renderOriginsTable();
+  closeOriginModal();
+});
+
+document.getElementById('tradeOriginsBody')?.addEventListener('click', event => {
+  const editIdx = event.target.dataset.editOrigin;
+  const delIdx = event.target.dataset.deleteOrigin;
+  const toggleIdx = event.target.dataset.toggleOrigin;
+  if (editIdx !== undefined) openOriginModal(Number(editIdx));
+  else if (delIdx !== undefined) {
+    params.trade_origins.splice(Number(delIdx), 1);
+    renderOriginsTable();
+  } else if (toggleIdx !== undefined) {
+    const o = params.trade_origins[Number(toggleIdx)];
+    o.enabled = !o.enabled;
+    renderOriginsTable();
+  }
+});
 
 function selectEngine(engine) {
   if ($('activeEngineSelect')) $('activeEngineSelect').value = engine;

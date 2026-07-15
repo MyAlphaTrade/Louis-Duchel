@@ -245,7 +245,7 @@
           <div class="trade-filters origin-filters">
             <button class="active" data-origin-filter="all" type="button">Toutes origines</button>
             <button data-origin-filter="BOT" type="button">AlphaTrade</button>
-            <button data-origin-filter="EXTERNAL_AI" type="button">IA externe <span class="info-dot" data-tip="Libellé encore générique pour l'instant — le retrait du nom fixe « AVA » et l'identification du vrai robot externe sont prévus en Phase 8.">ⓘ</span></button>
+            <button data-origin-filter="EXTERNAL_AI" type="button">IA externe <span class="info-dot" data-tip="Regroupe toutes les IA/EA externes (AVA, KB1000...). Le nom réel de chaque robot est identifié via le registre configurable en Paramètres → Origine des trades.">ⓘ</span></button>
             <button data-origin-filter="MANUAL" type="button">Manuel</button>
           </div>
         </div>
@@ -327,7 +327,7 @@
             <p id="botAdvice">L’apprentissage commencera après les premiers trades automatiques.</p>
           </article>
           <article>
-            <header><strong>Observation IA externe</strong><span>Ava et autres robots MT5</span></header>
+            <header><strong>Observation IA externe</strong><span>Toute IA/EA externe identifiée via le registre Origine des trades</span></header>
             <div><label>Note indicative</label><b id="externalScore">0%</b></div>
             <div><label>Trades / Gagnés / Perdus</label><b id="externalRecord">0 / 0 / 0</b></div>
             <div><label>Profit net</label><b id="externalProfit">$0.00</b></div>
@@ -468,7 +468,7 @@
         </div>
         <div class="settings-toolbar">
           <span id="essentialsLabel">Réglages essentiels affichés</span>
-          <label class="strategy-toolbar-control">Mode stratégie
+          <label class="strategy-toolbar-control">Mode stratégie <span class="info-dot" data-tip="Profil de trading d'AlphaTrade AI : ajuste ensemble timeframe, cadence, confiance minimum et objectif de profit. Sans effet sur KB1000 Gold AI.">ⓘ</span>
             <select id="strategyModeToolbar">
               <option value="scalping_fast">Scalping rapide</option>
               <option value="scalping_safe">Scalping prudent</option>
@@ -531,6 +531,21 @@
           <p class="mini-help">L'observation Hyperliquid (BTC/ETH) est un laboratoire crypto séparé, hors périmètre Or — retirée de cette page pour l'instant.</p>
         </article>
 
+        <!-- 🟦 Origine des trades (avancé) -->
+        <article class="panel settings-full-width advanced-setting origins-panel">
+          <div class="panel-title">🟦 Origine des trades
+            <span class="info-dot" data-tip="Permet d'identifier automatiquement quel moteur ou utilisateur a créé une position MT5. Les positions inconnues ne sont jamais attribuées automatiquement à une autre IA.">ⓘ</span>
+          </div>
+          <div class="origins-table-wrap">
+            <table class="origins-table">
+              <thead><tr><th>Nom</th><th>Type</th><th>Magic number(s)</th><th>Mots-clés commentaire</th><th>Actif</th><th></th></tr></thead>
+              <tbody id="tradeOriginsBody"></tbody>
+            </table>
+          </div>
+          <button id="addOriginBtn" type="button" class="add-origin-btn">+ Ajouter une origine</button>
+          <p class="mini-help">Tout magic number non listé ci-dessus s'affiche « Autre EA (magic) » — jamais rattaché automatiquement à une origine existante.</p>
+        </article>
+
         <!-- 🟦 Risque & Session -->
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title">🟦 Risque &amp; Session</div>
@@ -538,41 +553,41 @@
           <label>Lot max compte réel <span class="info-dot" data-tip="Plafond réel et unique du lot en compte réel — aucune limite cachée.">ⓘ</span><input name="real_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
           <label>Lot max compte démo <span class="info-dot" data-tip="Plafond réel et unique du lot en compte démo.">ⓘ</span><input name="demo_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
           <label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base utilisée par défaut.">ⓘ</span><input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
-          <label>Lot minimum<input data-sym="XAUUSD" name="lot_min" type="number" step="0.001"></label>
-          <label>Lot maximum<input data-sym="XAUUSD" name="lot_max" type="number" step="0.001"></label>
+          <label>Lot minimum <span class="info-dot" data-tip="Volume plancher — la taille de lot ne descend jamais sous cette valeur, quel que soit le calcul de risque.">ⓘ</span><input data-sym="XAUUSD" name="lot_min" type="number" step="0.001"></label>
+          <label>Lot maximum <span class="info-dot" data-tip="Volume plafond pour cet actif — indépendant des plafonds globaux de compte (lot max réel/démo).">ⓘ</span><input data-sym="XAUUSD" name="lot_max" type="number" step="0.001"></label>
           <label>Positions auto max <span class="info-dot" data-tip="Plafonné en dur à 8 quoi qu'il arrive (garde-fou).">ⓘ</span><input name="auto_max_positions" type="number" min="1" max="8" step="1"></label>
-          <label>Positions max (symbole)<input data-sym="XAUUSD" name="max_positions" type="number" min="1" max="8"></label>
-          <label>Perte max session $<input name="session_max_loss" type="number" max="-1" step="1"></label>
-          <label>Objectif session $<input name="session_target" type="number" min="1" step="1"></label>
+          <label>Positions max (symbole) <span class="info-dot" data-tip="Nombre maximum de positions ouvertes simultanément sur cet actif, en plus du plafond global Positions auto max.">ⓘ</span><input data-sym="XAUUSD" name="max_positions" type="number" min="1" max="8"></label>
+          <label>Perte max session $ <span class="info-dot" data-tip="Perte cumulée sur la session au-delà de laquelle la protection bloque toute nouvelle entrée.">ⓘ</span><input name="session_max_loss" type="number" max="-1" step="1"></label>
+          <label>Objectif session $ <span class="info-dot" data-tip="Gain visé pour la session en cours — affiché dans le tableau de bord, purement informatif.">ⓘ</span><input name="session_target" type="number" min="1" step="1"></label>
           <label>Objectif journalier $ <span class="info-dot" data-tip="Déclenche seul l'activation de la protection de bénéfice.">ⓘ</span><input name="daily_target" type="number" min="1" step="1"></label>
-          <label>Giveback $<input name="giveback" type="number" min="1" step="1"></label>
-          <label class="check"><input data-sym="XAUUSD" name="session_filter_enabled" type="checkbox"> Trader uniquement pendant une plage horaire</label>
-          <label>Ouverture UTC<input data-sym="XAUUSD" name="session_start_utc" type="number" min="0" max="23"></label>
-          <label>Fermeture UTC<input data-sym="XAUUSD" name="session_end_utc" type="number" min="1" max="24"></label>
-          <label>Stop avant fin (min)<input data-sym="XAUUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
-          <label class="check"><input name="reinforcement_enabled" type="checkbox"> Apprentissage adaptatif actif</label>
-          <label>Écart confiance renfort %<input name="reinforcement_min_confidence_margin" type="number" min="4" max="30" step="1"></label>
-          <label>Écart score renfort<input name="reinforcement_min_score_gap" type="number" min="12" max="50" step="1"></label>
+          <label>Giveback $ <span class="info-dot" data-tip="Part du gain de session qu'on accepte de rendre avant clôture forcée de protection.">ⓘ</span><input name="giveback" type="number" min="1" step="1"></label>
+          <label class="check"><input data-sym="XAUUSD" name="session_filter_enabled" type="checkbox"> Trader uniquement pendant une plage horaire <span class="info-dot" data-tip="N'autorise les entrées que dans la fenêtre Ouverture UTC → Fermeture UTC définie ci-dessous.">ⓘ</span></label>
+          <label>Ouverture UTC <span class="info-dot" data-tip="Heure UTC de début de la plage de trading autorisée (si le filtre horaire est activé).">ⓘ</span><input data-sym="XAUUSD" name="session_start_utc" type="number" min="0" max="23"></label>
+          <label>Fermeture UTC <span class="info-dot" data-tip="Heure UTC de fin de la plage de trading autorisée.">ⓘ</span><input data-sym="XAUUSD" name="session_end_utc" type="number" min="1" max="24"></label>
+          <label>Stop avant fin (min) <span class="info-dot" data-tip="Arrête les nouvelles entrées ce nombre de minutes avant la fermeture de la plage horaire.">ⓘ</span><input data-sym="XAUUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
+          <label class="check"><input name="reinforcement_enabled" type="checkbox"> Apprentissage adaptatif actif <span class="info-dot" data-tip="Ajuste automatiquement le seuil de confiance selon les résultats passés (poids appris).">ⓘ</span></label>
+          <label>Écart confiance renfort % <span class="info-dot" data-tip="Marge de confiance supplémentaire exigée par rapport au seuil normal pour autoriser un renfort de position.">ⓘ</span><input name="reinforcement_min_confidence_margin" type="number" min="4" max="30" step="1"></label>
+          <label>Écart score renfort <span class="info-dot" data-tip="Écart minimum entre le score BUY et SELL exigé pour autoriser un renfort.">ⓘ</span><input name="reinforcement_min_score_gap" type="number" min="12" max="50" step="1"></label>
           <label>Pause entre renforts (s) <span class="info-dot" data-tip="Délai minimum entre deux renforts de position.">ⓘ</span><input name="reinforcement_cooldown_sec" type="number" min="10" max="300" step="5"></label>
           <label>Multiplicateur lot renfort <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_renfort" type="number" step="0.1" min="1" max="5"></label>
           <label>Confiance min. renfort % <span class="info-dot" data-tip="Auparavant invisible — seuil de confiance minimum pour autoriser un renfort.">ⓘ</span><input data-sym="XAUUSD" name="renfort_high_confidence_min" type="number" min="50" max="100"></label>
-          <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
+          <label>Pause après perte (s) <span class="info-dot" data-tip="Délai minimum avant une nouvelle entrée après la clôture d'une position perdante.">ⓘ</span><input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
         </article>
 
         <!-- 🟦 Stratégie Or (AlphaTrade AI uniquement) -->
         <article class="panel settings-full-width risk-session-panel" id="strategieOrPanel">
           <div class="panel-title">🟦 Stratégie Or</div>
           <label>Seuil de confiance min % <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span><input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
-          <label>Timeframe d'analyse<select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
-          <label>Cadence d'analyse (s)<input data-sym="XAUUSD" name="cadence_sec" type="number" min="1" max="600"></label>
-          <label>Max trades / heure<input data-sym="XAUUSD" name="max_trades_hour" type="number" min="1" max="500"></label>
-          <label>Max hold (s)<input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
-          <label>Délai de réanalyse (s)<input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
-          <label>Cible profit $<input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
+          <label>Timeframe d'analyse <span class="info-dot" data-tip="Unité de temps des bougies utilisées pour calculer le signal (EMA/RSI/MACD).">ⓘ</span><select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
+          <label>Cadence d'analyse (s) <span class="info-dot" data-tip="Fréquence à laquelle le moteur recalcule le signal.">ⓘ</span><input data-sym="XAUUSD" name="cadence_sec" type="number" min="1" max="600"></label>
+          <label>Max trades / heure <span class="info-dot" data-tip="Plafond du nombre d'entrées autorisées sur une heure glissante.">ⓘ</span><input data-sym="XAUUSD" name="max_trades_hour" type="number" min="1" max="500"></label>
+          <label>Max hold (s) <span class="info-dot" data-tip="Durée maximale de maintien d'une position avant fermeture forcée.">ⓘ</span><input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
+          <label>Délai de réanalyse (s) <span class="info-dot" data-tip="Intervalle entre deux vérifications de sortie sur une position déjà ouverte.">ⓘ</span><input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
+          <label>Cible profit $ <span class="info-dot" data-tip="Profit visé par trade — sert de base au calcul de la distance du take-profit.">ⓘ</span><input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
           <label class="check"><input name="anti_top_bottom" type="checkbox"> Éviter achat au sommet / vente au creux <span class="info-dot" data-tip="Évite d'entrer juste après un sommet/plancher récent.">ⓘ</span></label>
-          <label>Bougies analysées<input name="lookback_candles" type="number" min="5" max="500"></label>
-          <label>Zone de bord %<input name="edge_zone_pct" type="number" min="5" max="45"></label>
-          <label>Écart BUY/SELL minimum<input name="min_score_gap" type="number" min="5" max="40"></label>
+          <label>Bougies analysées <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer la zone de range (support/résistance récents).">ⓘ</span><input name="lookback_candles" type="number" min="5" max="500"></label>
+          <label>Zone de bord % <span class="info-dot" data-tip="Définit la zone haute/basse du range récent considérée comme extrême (achat en zone haute évité).">ⓘ</span><input name="edge_zone_pct" type="number" min="5" max="45"></label>
+          <label>Écart BUY/SELL minimum <span class="info-dot" data-tip="Écart minimum entre le score BUY et SELL requis pour valider un signal (évite les signaux ambigus).">ⓘ</span><input name="min_score_gap" type="number" min="5" max="40"></label>
           <label>Marge retournement signal <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span><input data-sym="XAUUSD" name="signal_reversal_margin" type="number" min="5" max="100"></label>
         </article>
 
@@ -589,12 +604,12 @@
         <!-- 🟦 Gestion Rebond XAUUSD (avancé, isolée) -->
         <article class="panel settings-full-width advanced-setting rebond-panel">
           <div class="panel-title">🟦 Gestion Rebond XAUUSD <span class="rebond-toggle-hint">module optionnel, désactivé par défaut</span></div>
-          <label class="check"><input name="rebond_enabled" type="checkbox"> Activer la stratégie Rebond</label>
+          <label class="check"><input name="rebond_enabled" type="checkbox"> Activer la stratégie Rebond <span class="info-dot" data-tip="Interrupteur principal du module — si désactivé, le moteur ignore totalement rebond/renfort rebond/zones rebond.">ⓘ</span></label>
           <label>Seuil signal contraire min % <span class="info-dot" data-tip="Remplace l'ancienne constante fixe 55 codée en dur dans le moteur.">ⓘ</span><input name="rebond_min_signal_pct" type="number" min="50" max="95" step="1"></label>
           <label>Force min de zone <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 28).">ⓘ</span><input name="rebond_min_zone_strength" type="number" min="10" max="90" step="1"></label>
           <label>Distance stop rebond (pips) <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 2.00 pips).">ⓘ</span><input name="rebond_stop_pips" type="number" min="0.5" max="20" step="0.1"></label>
           <label>Durée max maintien (s) <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 90s).">ⓘ</span><input name="rebond_max_hold_sec" type="number" min="30" max="600" step="10"></label>
-          <label>Cooldown rebond (s)<input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
+          <label>Cooldown rebond (s) <span class="info-dot" data-tip="Délai minimum entre deux rebonds successifs.">ⓘ</span><input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
           <label>Multiplicateur lot rebond <span class="info-dot" data-tip="Remplace les paliers fixes 80/65 codés en dur dans le calcul du lot de rebond.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
           <label>Rebonds actifs max <span class="info-dot" data-tip="Fusion de l'ancien champ 'max_rebound_attempts' et du paramètre moteur 'rebond_max_active'.">ⓘ</span><input name="rebond_max_active" type="number" min="1" max="10"></label>
         </article>
@@ -602,26 +617,26 @@
         <!-- 🟦 Trailing & Protection -->
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title">🟦 Trailing &amp; Protection</div>
-          <label>Protection catastrophe $<input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
+          <label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil — dernier filet de sécurité.">ⓘ</span><input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Perte max / position $ <span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection individuelle par position.">ⓘ</span><input data-sym="XAUUSD" name="max_position_loss" type="number" step="0.1"></label>
           <label>Flottant max portefeuille $ <span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection sur la perte flottante totale.">ⓘ</span><input data-sym="XAUUSD" name="max_floating_loss" type="number" step="0.1"></label>
-          <label>Profit min. sortie $<input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
-          <label>Verrou profit dès $<input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
+          <label>Profit min. sortie $ <span class="info-dot" data-tip="Profit minimum requis pour autoriser une sortie sur signal inversé.">ⓘ</span><input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
+          <label>Verrou profit dès $ <span class="info-dot" data-tip="Active le verrouillage de profit dynamique une fois ce seuil de gain atteint.">ⓘ</span><input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
           <label>Recul max profit <span class="info-dot" data-tip="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic">ⓘ</span><input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01"></label>
           <p class="mini-help">Trail dynamique — 4 paliers (seuil en $ / recul en fraction)</p>
-          <label>Palier 1 — seuil $<input data-sym="XAUUSD" name="trail_l1_above" type="number" min="0.10" step="0.05"></label>
-          <label>Palier 1 — recul<input data-sym="XAUUSD" name="trail_l1_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
-          <label>Palier 2 — seuil $<input data-sym="XAUUSD" name="trail_l2_above" type="number" min="0.50" step="0.50"></label>
-          <label>Palier 2 — recul<input data-sym="XAUUSD" name="trail_l2_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
-          <label>Palier 3 — seuil $<input data-sym="XAUUSD" name="trail_l3_above" type="number" min="1.00" step="1.00"></label>
-          <label>Palier 3 — recul<input data-sym="XAUUSD" name="trail_l3_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
-          <label>Palier 4 — seuil $<input data-sym="XAUUSD" name="trail_l4_above" type="number" min="5.00" step="1.00"></label>
-          <label>Palier 4 — recul<input data-sym="XAUUSD" name="trail_l4_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
-          <label>Score momentum sortie<input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
-          <label class="check"><input name="profit_protection_enabled" type="checkbox"> Protection du profit active</label>
-          <label>Recul depuis pic %<input name="profit_drawdown_pct" type="number" min="1" max="90" step="1"></label>
-          <label>Recul minimum $<input name="profit_drawdown_min" type="number" min="0" step="1"></label>
-          <label>Zone avertissement %<input name="profit_warning_ratio" type="number" min="0.1" max="0.95" step="0.05"></label>
+          <label>Palier 1 — seuil $ <span class="info-dot" data-tip="À partir de ce profit ($), le palier 1 du trail dynamique devient actif.">ⓘ</span><input data-sym="XAUUSD" name="trail_l1_above" type="number" min="0.10" step="0.05"></label>
+          <label>Palier 1 — recul <span class="info-dot" data-tip="Fraction de recul tolérée depuis le pic une fois le palier 1 atteint, avant fermeture.">ⓘ</span><input data-sym="XAUUSD" name="trail_l1_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 2 — seuil $ <span class="info-dot" data-tip="À partir de ce profit ($), le palier 2 (plus strict) du trail dynamique devient actif.">ⓘ</span><input data-sym="XAUUSD" name="trail_l2_above" type="number" min="0.50" step="0.50"></label>
+          <label>Palier 2 — recul <span class="info-dot" data-tip="Fraction de recul tolérée depuis le pic une fois le palier 2 atteint.">ⓘ</span><input data-sym="XAUUSD" name="trail_l2_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 3 — seuil $ <span class="info-dot" data-tip="À partir de ce profit ($), le palier 3 du trail dynamique devient actif.">ⓘ</span><input data-sym="XAUUSD" name="trail_l3_above" type="number" min="1.00" step="1.00"></label>
+          <label>Palier 3 — recul <span class="info-dot" data-tip="Fraction de recul tolérée depuis le pic une fois le palier 3 atteint.">ⓘ</span><input data-sym="XAUUSD" name="trail_l3_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Palier 4 — seuil $ <span class="info-dot" data-tip="À partir de ce profit ($), le palier 4 (le plus protecteur) du trail dynamique devient actif.">ⓘ</span><input data-sym="XAUUSD" name="trail_l4_above" type="number" min="5.00" step="1.00"></label>
+          <label>Palier 4 — recul <span class="info-dot" data-tip="Fraction de recul tolérée depuis le pic une fois le palier 4 atteint — la plus faible, profits élevés très protégés.">ⓘ</span><input data-sym="XAUUSD" name="trail_l4_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
+          <label>Score momentum sortie <span class="info-dot" data-tip="Sort la position si le score du sens opposé dépasse ce seuil.">ⓘ</span><input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
+          <label class="check"><input name="profit_protection_enabled" type="checkbox"> Protection du profit active <span class="info-dot" data-tip="Active/désactive tout le module de protection de bénéfice (paliers de trail + recul depuis pic).">ⓘ</span></label>
+          <label>Recul depuis pic % <span class="info-dot" data-tip="Pourcentage de retracement depuis le pic de profit toléré avant clôture de protection.">ⓘ</span><input name="profit_drawdown_pct" type="number" min="1" max="90" step="1"></label>
+          <label>Recul minimum $ <span class="info-dot" data-tip="Montant minimum de retracement en dollars avant que la protection ne se déclenche.">ⓘ</span><input name="profit_drawdown_min" type="number" min="0" step="1"></label>
+          <label>Zone avertissement % <span class="info-dot" data-tip="Ratio du pic de profit à partir duquel une alerte de protection est déclenchée, avant la clôture complète.">ⓘ</span><input name="profit_warning_ratio" type="number" min="0.1" max="0.95" step="0.05"></label>
           <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Emplacement réservé pour le futur Break-Even automatique (Phase 9, calibré par broker).</p>
         </article>
         </div>
@@ -692,6 +707,30 @@
           <div class="params-doc-kv"><span>Impact</span><b>Score minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée</b></div>
           <div class="params-doc-kv"><span>Valeur par défaut</span><b>70%</b></div>
           <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="originModal" class="params-doc-modal">
+      <div class="params-doc-card origin-modal-card">
+        <span class="params-doc-close" id="originModalClose">×</span>
+        <h3 id="originModalTitle">Ajouter une origine <span class="info-dot" data-tip="Ces règles déterminent comment une position MT5 est identifiée : par son magic number (priorité) ou par des mots-clés dans son commentaire.">ⓘ</span></h3>
+        <p class="mini-help" id="originModalSub"></p>
+        <label class="origin-field">Nom<input id="originFieldName" type="text" placeholder="Ex: KB1000 Gold AI"></label>
+        <label class="origin-field">Type
+          <select id="originFieldType">
+            <option value="INTERNAL_BOT">BOT interne</option>
+            <option value="EXTERNAL_AI">IA externe</option>
+            <option value="EXTERNAL_EA">EA externe</option>
+            <option value="MANUAL">Manuel</option>
+          </select>
+        </label>
+        <label class="origin-field">Magic numbers (séparés par une virgule)<input id="originFieldMagic" type="text" placeholder="Ex: 900001"></label>
+        <label class="origin-field">Mots-clés reconnus dans le commentaire<input id="originFieldKeywords" type="text" placeholder="Ex: kb1000, gold-ai"></label>
+        <label class="origin-field-row"><span>Activer cette origine</span><input id="originFieldEnabled" type="checkbox" checked></label>
+        <div class="origin-modal-actions">
+          <button type="button" id="originCancelBtn" class="ghost-btn">Annuler</button>
+          <button type="button" id="originSaveBtn" class="save-btn">Enregistrer</button>
         </div>
       </div>
     </div>

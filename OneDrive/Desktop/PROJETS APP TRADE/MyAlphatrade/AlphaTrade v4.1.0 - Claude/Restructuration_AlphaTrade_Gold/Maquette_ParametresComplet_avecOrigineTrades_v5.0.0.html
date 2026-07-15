@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Page Paramètres complète avec Origine des trades</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433; --muted:#7c9284; --text:#d7e6db;
+    --green:#39ff88; --blue:#5cc8ff; --red:#ff5c6c; --orange:#ffb454;
+    --card2:#0f1811; --border-strong:#2a4433; --red-dim:#4a1c22; --green-dim:#1c6e3f; --green-soft:#8fd8ab; --blue-dim:#123a4a;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1200px; margin:0 auto; padding:0 20px 90px;}
+  header.hero{padding:32px 20px 22px; text-align:center; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px;}
+  header.hero h1{font-size:1.5rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:760px; margin:0 auto; font-size:0.9rem;}
+
+  .app-shell{max-width:1600px; margin:26px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left,.tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--muted);}
+  .tb-acct,.tb-clock{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--muted); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--muted); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text);}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px;}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--muted); font-size:10px; padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--muted); font-size:11px;}
+  .app-tabs{display:flex; background:var(--panel); border-bottom:1px solid var(--line); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 15px; font-size:12px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:20px;}
+
+  .settings-header-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px; flex-wrap:wrap;}
+  .mini-help{color:var(--muted); font-size:12px; margin:6px 0;}
+  .params-doc-btn{background:var(--blue-dim); border:1px solid #1c5a78; color:var(--blue); padding:7px 13px; border-radius:7px; font-size:12.5px;}
+  .settings-toolbar{display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border:1px solid var(--line);
+    border-radius:8px; color:var(--muted); background:var(--panel); margin-bottom:14px; font-size:12.5px; flex-wrap:wrap; gap:10px;}
+  .settings-toolbar select{background:#070c16; border:1px solid var(--line); border-radius:6px; color:var(--text); padding:5px 9px;}
+  .strategy-applied-state{background:var(--green-dim); color:var(--green-soft); padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;}
+  .adv-toggle{background:rgba(46,116,181,.15); border:1px solid var(--blue); color:#dcecff; padding:6px 10px; border-radius:6px; font-size:12px;}
+
+  /* Sélecteur moteur IA */
+  .engine-picker{background:var(--panel2); border:1px solid var(--border-strong); border-radius:12px; padding:14px 16px; margin-bottom:14px;}
+  .engine-picker .ep-label{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px;}
+  .engine-cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px;}
+  .engine-card{background:var(--panel); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;}
+  .engine-card.selected{border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset; background:var(--card2);}
+  .engine-card.future{opacity:.45;}
+  .engine-card .en-name{color:#fff; font-weight:700; font-size:13px;}
+  .engine-card.selected .en-name{color:var(--green);}
+  .engine-card .en-badge{font-size:9px; background:var(--line); color:var(--muted); padding:2px 7px; border-radius:10px; margin-left:6px;}
+  .engine-card .en-desc{color:var(--muted); font-size:11.5px; margin:5px 0 8px; line-height:1.4;}
+  .chips{display:flex; flex-wrap:wrap; gap:4px;}
+  .chip{font-size:9.5px; padding:2px 7px; border-radius:10px; border:1px solid var(--border-strong); color:var(--blue); background:var(--blue-dim);}
+
+  /* Panels réels (.panel/.panel-title de styles.css) */
+  .panel{border:1px solid var(--border-strong); border-radius:12px; background:var(--panel); padding:12px; margin-bottom:14px;}
+  .panel-title{background:var(--card2); border-bottom:1px solid var(--line); margin:-12px -12px 12px; padding:11px 15px;
+    border-radius:12px 12px 0 0; color:var(--green); font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px; justify-content:space-between;}
+  .grid4{display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px 14px;}
+  .grid4 label{display:flex; align-items:center; justify-content:space-between; gap:10px; color:#b1bad0; font-size:12.5px;}
+  .grid4 label input, .grid4 label select{width:110px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; color:var(--text); background:#070c16; font-size:12.5px;}
+  .grid4 .check{grid-column:1/-1; justify-content:flex-start;}
+  .grid4 .check input{width:auto;}
+  .info-dot{position:relative; color:var(--blue); font-size:10px; cursor:help; font-weight:700; margin-left:4px;}
+  .info-dot::after{content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%); width:220px;
+    background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px; line-height:1.5; padding:9px 11px;
+    border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s; box-shadow:0 8px 24px rgba(0,0,0,.6); z-index:20;}
+  .info-dot:hover::after{opacity:1;}
+  .adv-badge{font-size:9px; background:var(--blue-dim); color:var(--blue); padding:1px 7px; border-radius:10px; font-weight:700;}
+
+  /* Nouveau : panneau Origine des trades — table au lieu de label/input */
+  table.origins{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.origins th{text-align:left; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.4px; padding:6px 8px; border-bottom:1px solid var(--border-strong);}
+  table.origins td{padding:8px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  .origin-name{color:#fff; font-weight:600;}
+  .type-badge{font-size:9px; padding:2px 7px; border-radius:10px; font-weight:700;}
+  .type-badge.internal{background:var(--green-dim); color:var(--green-soft);}
+  .type-badge.external{background:var(--blue-dim); color:var(--blue);}
+  .switch{width:30px; height:16px; border-radius:20px; background:var(--line); position:relative; display:inline-block;}
+  .switch::after{content:""; position:absolute; width:12px; height:12px; border-radius:50%; background:var(--muted); top:2px; left:2px;}
+  .switch.on{background:var(--green-dim);}
+  .switch.on::after{background:var(--green); left:16px;}
+  .icon-btn{width:22px; height:22px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted);
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; margin-right:4px;}
+  .add-btn{background:var(--green-dim); color:var(--green-soft); border:1px solid var(--green-dim); border-radius:7px; padding:7px 13px; font-size:12px; margin-top:10px;}
+
+  .callout-box{background:var(--panel2); border:1px solid var(--border-strong); border-left:3px solid var(--orange); border-radius:8px; padding:10px 14px; margin:16px 20px; font-size:13px;}
+  .callout-box b{color:#fff;}
+  .new-flag{background:var(--orange); color:#241300; font-size:9px; font-weight:800; padding:2px 8px; border-radius:10px; letter-spacing:.3px;}
+
+  footer{padding:30px 22px; text-align:center; color:var(--muted); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — page Paramètres complète, en contexte</div>
+  <h1>Toute la page Paramètres avec "Origine des trades" insérée à sa place</h1>
+  <p>Reproduction fidèle de l'état réel actuel de <code>index.html</code> (sections déjà en production : sélecteur de moteur, Connexion &amp; IA, Risque &amp; Session, Stratégie Or, Rebond, Trailing &amp; Protection), avec la nouvelle carte "🟦 Origine des trades" insérée juste après "Connexion &amp; IA" — même famille (réglages système, avancés, peu fréquents). Vue AlphaTrade AI (moteur par défaut) ; le panneau KB1000 Gold AI se substituerait à "Stratégie Or" en changeant de moteur, comme déjà validé et testé.</p>
+</header>
+
+<div class="callout-box">
+  <b>Sur ta remarque :</b> oui, la présentation change volontairement pour cette carte — un tableau de lignes au lieu de champs label/valeur, parce que le contenu est une <i>liste de règles</i> (plusieurs origines, chacune avec plusieurs propriétés), pas une poignée de valeurs isolées comme le reste de la page. Regarde ci-dessous si cette rupture de style te semble cohérente à côté des autres cartes, ou si tu préfères une autre présentation.
+</div>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--muted); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span><span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>10:42:18</b></div>
+      <div class="tb-session">Session <b>Londres</b> 06:17:42</div>
+      <div class="tb-clock">jeu. 12h42 18s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn">⏻</div><div class="tb-icon-btn">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button>×</button></div>
+    </div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div><div class="t">Trades</div><div class="t">Sessions IA</div><div class="t">Microstructure</div>
+    <div class="t">Sessions marché</div><div class="t">Calendrier</div><div class="t active">Paramètres</div><div class="t">Journal</div><div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+    <div class="settings-header-row">
+      <p class="mini-help">Chaque champ visible est lu par le moteur et modifie réellement son comportement.</p>
+      <div class="params-doc-btn">ⓘ Documentation paramètres</div>
+    </div>
+    <div class="settings-toolbar">
+      <span>Réglages avancés affichés</span>
+      <label style="display:flex; align-items:center; gap:8px;">Mode stratégie
+        <select><option>Scalping rapide</option></select>
+      </label>
+      <span class="strategy-applied-state">Actif : Scalping rapide</span>
+      <div class="adv-toggle">Masquer les réglages avancés</div>
+    </div>
+
+    <!-- Moteur IA actif -->
+    <div class="engine-picker">
+      <div class="ep-label">Moteur IA actif</div>
+      <div class="engine-cards">
+        <div class="engine-card selected">
+          <div class="en-name">⭐ AlphaTrade AI</div>
+          <div class="en-desc">Moteur historique — EMA, RSI, MACD, momentum, multi-timeframe, mémoire adaptative.</div>
+          <div class="chips"><span class="chip">Multi-TF</span><span class="chip">EMA/RSI/MACD</span><span class="chip">IA locale</span><span class="chip">IA cloud</span><span class="chip">Mémoire</span></div>
+        </div>
+        <div class="engine-card">
+          <div class="en-name">⭐ KB1000 Gold AI</div>
+          <div class="en-desc">Structure, zones, Fibonacci, Smart Money, confirmations, gestion de position intelligente.</div>
+          <div class="chips"><span class="chip">Multi-TF D1→M1</span><span class="chip">Smart Money</span><span class="chip">Fibonacci</span><span class="chip">Zones</span></div>
+        </div>
+        <div class="engine-card future"><div class="en-name">Institutional AI <span class="en-badge">BIENTÔT</span></div></div>
+      </div>
+    </div>
+
+    <!-- Connexion & IA -->
+    <div class="panel">
+      <div class="panel-title">🟦 Connexion &amp; IA <span class="adv-badge">AVANCÉ</span></div>
+      <div class="grid4">
+        <label>Terminal MT5 <span class="info-dot" data-tip="Chemin vers le terminal MetaTrader 5.">ⓘ</span><input value="C:\...\terminal64.exe"></label>
+        <label>Actif principal <span class="info-dot" data-tip="Actif unique de l'application.">ⓘ</span><select><option>XAU/USD</option></select></label>
+        <label class="check"><input type="checkbox" checked> Activer le serveur d'apprentissage <span class="info-dot" data-tip="Synchronisation IA locale.">ⓘ</span></label>
+        <label>Adresse du serveur<input value="127.0.0.1:8765"></label>
+        <label>Synchronisation (s)<input value="5"></label>
+        <label>Réentraînement (min)<input value="60"></label>
+        <label class="check"><input type="checkbox"> Valider les entrées avec IA serveur</label>
+        <label>Clé API Anthropic<input value="••••••••••" type="password"></label>
+        <label class="check"><input type="checkbox" checked> Observation microstructure</label>
+        <label>Intervalle microstructure (s)<input value="2"></label>
+      </div>
+    </div>
+
+    <!-- NOUVEAU : Origine des trades -->
+    <div class="panel">
+      <div class="panel-title">🟦 Origine des trades <span class="new-flag">NOUVEAU — PHASE 8</span>
+        <span class="info-dot" data-tip="Permet d'identifier automatiquement quel moteur ou utilisateur a créé une position MT5. Les positions inconnues ne sont jamais attribuées automatiquement à une autre IA." style="margin-left:auto;">ⓘ</span>
+      </div>
+      <table class="origins">
+        <thead><tr><th>Nom</th><th>Type</th><th>Magic number(s)</th><th>Mots-clés commentaire</th><th>Actif</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="origin-name">⭐ AlphaTrade AI</span></td><td><span class="type-badge internal">BOT INTERNE</span></td><td>20260607</td><td>alphatrade, alphakaris</td><td><span class="switch on"></span></td><td><span class="icon-btn">✏</span></td></tr>
+          <tr><td><span class="origin-name">AVA Assistant</span></td><td><span class="type-badge external">IA EXTERNE</span></td><td>7525001</td><td>ava, bridge</td><td><span class="switch on"></span></td><td><span class="icon-btn">✏</span><span class="icon-btn">🗑</span></td></tr>
+          <tr><td><span class="origin-name" style="color:var(--muted);">KB1000 Gold AI</span></td><td><span class="type-badge external">IA EXTERNE</span></td><td style="color:var(--muted);">—</td><td>kb1000</td><td><span class="switch"></span></td><td><span class="icon-btn">✏</span><span class="icon-btn">🗑</span></td></tr>
+        </tbody>
+      </table>
+      <div class="add-btn">+ Ajouter une origine</div>
+      <p class="mini-help" style="margin-top:10px;">Tout magic number non listé ci-dessus s'affiche "Autre EA (12345)" — jamais rattaché automatiquement à AVA ou une autre origine.</p>
+    </div>
+
+    <!-- Risque & Session -->
+    <div class="panel">
+      <div class="panel-title">🟦 Risque &amp; Session</div>
+      <div class="grid4">
+        <label>Risque / trade %<input value="0.35"></label>
+        <label>Lot max compte réel<input value="0.80"></label>
+        <label>Lot max compte démo<input value="0.80"></label>
+        <label>Lot fixe<input value="0.30"></label>
+        <label>Lot minimum<input value="0.10"></label>
+        <label>Lot maximum<input value="0.80"></label>
+        <label>Positions auto max<input value="3"></label>
+        <label>Positions max (symbole)<input value="5"></label>
+        <label>Perte max session $<input value="-2000"></label>
+        <label>Objectif session $<input value="500"></label>
+        <label>Objectif journalier $<input value="1000"></label>
+        <label>Giveback $<input value="100"></label>
+        <label class="check"><input type="checkbox"> Trader uniquement pendant une plage horaire</label>
+        <label>Ouverture UTC<input value="8"></label>
+        <label>Fermeture UTC<input value="17"></label>
+        <label>Stop avant fin (min)<input value="30"></label>
+        <label class="check"><input type="checkbox" checked> Apprentissage adaptatif actif</label>
+        <label>Écart confiance renfort %<input value="10"></label>
+        <label>Écart score renfort<input value="15"></label>
+        <label>Pause entre renforts (s)<input value="300"></label>
+        <label>Multiplicateur lot renfort<input value="1"></label>
+        <label>Confiance min. renfort %<input value="75"></label>
+        <label>Pause après perte (s)<input value="60"></label>
+      </div>
+    </div>
+
+    <!-- Stratégie Or -->
+    <div class="panel">
+      <div class="panel-title">🟦 Stratégie Or <span style="color:var(--muted); font-size:10px; font-weight:400;">(AlphaTrade AI)</span></div>
+      <div class="grid4">
+        <label>Seuil de confiance min %<input value="90"></label>
+        <label>Timeframe d'analyse<select><option>M15</option></select></label>
+        <label>Cadence d'analyse (s)<input value="30"></label>
+        <label>Max trades / heure<input value="120"></label>
+        <label>Max hold (s)<input value="120"></label>
+        <label>Délai de réanalyse (s)<input value="120"></label>
+        <label>Cible profit $<input value="15"></label>
+        <label class="check"><input type="checkbox"> Éviter achat au sommet / vente au creux</label>
+        <label>Bougies analysées<input value="200"></label>
+        <label>Zone de bord %<input value="20"></label>
+        <label>Écart BUY/SELL minimum<input value="12"></label>
+        <label>Marge retournement signal<input value="7"></label>
+      </div>
+    </div>
+
+    <!-- Gestion Rebond -->
+    <div class="panel">
+      <div class="panel-title">🟦 Gestion Rebond XAUUSD <span class="adv-badge">AVANCÉ</span> <span style="color:var(--muted); font-size:10px; font-weight:400;">module optionnel, désactivé par défaut</span></div>
+      <div class="grid4">
+        <label class="check"><input type="checkbox"> Activer la stratégie Rebond</label>
+        <label>Seuil signal contraire min %<input value="55"></label>
+        <label>Force min de zone<input value="28"></label>
+        <label>Distance stop rebond (pips)<input value="2.0"></label>
+        <label>Durée max maintien (s)<input value="90"></label>
+        <label>Cooldown rebond (s)<input value="60"></label>
+        <label>Multiplicateur lot rebond<input value="3.0"></label>
+        <label>Rebonds actifs max<input value="3"></label>
+      </div>
+    </div>
+
+    <!-- Trailing & Protection -->
+    <div class="panel">
+      <div class="panel-title">🟦 Trailing &amp; Protection</div>
+      <div class="grid4">
+        <label>Protection catastrophe $<input value="15"></label>
+        <label>Perte max / position $<input value="15"></label>
+        <label>Flottant max portefeuille $<input value="50"></label>
+        <label>Profit min. sortie $<input value="0.09"></label>
+        <label>Verrou profit dès $<input value="1"></label>
+        <label>Recul max profit<input value="0.5"></label>
+        <label>Palier 1 — seuil $<input value="0.5"></label>
+        <label>Palier 1 — recul<input value="0.2"></label>
+        <label>Palier 2 — seuil $<input value="5"></label>
+        <label>Palier 2 — recul<input value="0.15"></label>
+        <label>Palier 3 — seuil $<input value="10"></label>
+        <label>Palier 3 — recul<input value="0.1"></label>
+        <label>Palier 4 — seuil $<input value="25"></label>
+        <label>Palier 4 — recul<input value="0.07"></label>
+        <label>Score momentum sortie<input value="55"></label>
+        <label class="check"><input type="checkbox" checked> Protection du profit active</label>
+        <label>Recul depuis pic %<input value="5"></label>
+        <label>Recul minimum $<input value="10"></label>
+        <label>Zone avertissement %<input value="0.75"></label>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Maquette statique, en contexte complet — aucune valeur réelle n'est modifiée.</footer>
+</body>
+</html>

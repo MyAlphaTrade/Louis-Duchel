@@ -31,6 +31,7 @@ from market_confirmations import confirmations as kb6_confirmations_check
 from market_decision import decision_score
 from market_position_sizing import (
     calculate_lot, take_profit_levels, break_even_trigger, break_even_level, stop_placement_from_structure,
+    manage_position as kb8_manage_position,
 )
 
 MAGIC = 20260607
@@ -60,6 +61,12 @@ DEFAULT_PARAMS = {
     "kb1000_candles_per_level": 160,
     "kb1000_coherence_min_pct": 60.0,
     "kb1000_min_confirmations": 3,
+    "trade_origins": [
+        {"name": "AlphaTrade AI", "type": "INTERNAL_BOT", "magic_numbers": [MAGIC],
+         "comment_keywords": ["alphatrade", "alphakaris"], "enabled": True},
+        {"name": "AVA Assistant", "type": "EXTERNAL_AI", "magic_numbers": [AVA_MAGIC],
+         "comment_keywords": ["ava", "bridge"], "enabled": True},
+    ],
     "trading_enabled": False,
     "demo_only": False,
     "capital_min": 0.0,
@@ -194,6 +201,11 @@ AI_SERVER_STATE = {
 AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
 PARTIAL_TP_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applied}}
+# {ticket: {entry_price, stop_price (mutable: BE/trailing), direction, levels, tp_hit: set(), be_applied}}
+# En mémoire uniquement (comme PARTIAL_TP_STATE) : un redémarrage pendant qu'une
+# position KB1000 est ouverte perd le plan associé (limite déjà acceptée pour
+# le mécanisme équivalent d'AlphaTrade AI).
+KB1000_POSITION_STATE: dict[int, dict] = {}
 
 # ── Module Capture Rebond ──────────────────────────────────────────────────────
 # Gère les positions contra-tendance sur rebonds identifiés via zones S&D
@@ -1244,22 +1256,38 @@ def symbol_candles(symbol: str, params: dict, limit: int = 90) -> list[dict]:
     return candles
 
 
-def trade_origin(magic: int, comment: str = "") -> str:
+def _origin_rule_result(rule: dict, magic: int) -> dict:
+    origin_type = str(rule.get("type") or "EXTERNAL_AI")
+    origin = "BOT" if origin_type == "INTERNAL_BOT" else "EXTERNAL_AI"
+    return {"origin_name": str(rule.get("name") or "?"), "origin_type": origin_type,
+            "origin_magic": magic, "origin": origin}
+
+
+def trade_origin(magic: int, comment: str = "", params: dict | None = None) -> dict:
+    """Identifie l'origine d'un trade MT5 via un registre configurable
+    (params["trade_origins"]) au lieu de constantes en dur — priorité au
+    magic number exact, puis aux mots-clés du commentaire (certains comptes
+    démo ne conservent pas toujours le magic number). Une origine inconnue
+    n'est JAMAIS attribuée automatiquement à une origine existante (ex: AVA) :
+    elle retourne "Autre EA (magic)", type UNKNOWN. Le champ "origin"
+    (BOT/EXTERNAL_AI/MANUAL) est dérivé pour rester strictement compatible
+    avec les filtres existants ailleurs dans le moteur (aucun n'est modifié)."""
     normalized = str(comment or "").lower()
-    if int(magic or 0) == MAGIC:
-        return "BOT"
-    # Deriv Demo ne conserve pas toujours le magic number
-    # On identifie aussi par le commentaire de l'ordre
-    if "alphatrade" in normalized or "alphakaris" in normalized:
-        return "BOT"
-    if int(magic or 0) == AVA_MAGIC or "ava" in normalized or "bridge" in normalized:
-        return "EXTERNAL_AI"
-    if int(magic or 0) != 0:
-        return "EXTERNAL_AI"
-    return "MANUAL"
+    magic = int(magic or 0)
+    rules = (params or {}).get("trade_origins") or DEFAULT_PARAMS["trade_origins"]
+    for rule in rules:
+        if not rule.get("enabled", True):
+            continue
+        if magic and magic in (rule.get("magic_numbers") or []):
+            return _origin_rule_result(rule, magic)
+        if any(kw in normalized for kw in (rule.get("comment_keywords") or []) if kw):
+            return _origin_rule_result(rule, magic)
+    if magic == 0:
+        return {"origin_name": "Manuel", "origin_type": "MANUAL", "origin_magic": 0, "origin": "MANUAL"}
+    return {"origin_name": f"Autre EA ({magic})", "origin_type": "UNKNOWN", "origin_magic": magic, "origin": "EXTERNAL_AI"}
 
 
-def live_positions(symbol_names: dict[str, str]) -> list[dict]:
+def live_positions(symbol_names: dict[str, str], params: dict | None = None) -> list[dict]:
     if mt5 is None:
         return []
     rows = []
@@ -1275,16 +1303,17 @@ def live_positions(symbol_names: dict[str, str]) -> list[dict]:
             key = "XAUUSD"
         if key is None:
             continue
+        origin_info = trade_origin(int(getattr(p, "magic", 0)), str(getattr(p, "comment", "")), params)
         rows.append(
             {
                 "ticket": int(p.ticket),
                 "symbol_key": key,
                 "symbol": p.symbol,
                 "direction": "BUY" if p.type == mt5.POSITION_TYPE_BUY else "SELL",
-                "origin": trade_origin(
-                    int(getattr(p, "magic", 0)),
-                    str(getattr(p, "comment", "")),
-                ),
+                "origin": origin_info["origin"],
+                "origin_name": origin_info["origin_name"],
+                "origin_type": origin_info["origin_type"],
+                "origin_magic": origin_info["origin_magic"],
                 "lot": float(p.volume),
                 "open_price": float(p.price_open),
                 "current_price": float(p.price_current),
@@ -1297,8 +1326,22 @@ def live_positions(symbol_names: dict[str, str]) -> list[dict]:
     return rows
 
 
-def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], days: int = 7) -> list[dict]:
+def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params: dict | None = None, days: int = 7) -> list[dict]:
     reverse = {v: k for k, v in symbol_names.items()}
+
+    def legacy_origin_name(origin: str) -> tuple[str, str]:
+        """L'historique en base ne stocke que le bucket origin (BOT/EXTERNAL_AI/
+        MANUAL), pas le magic number ni le commentaire — impossible de
+        distinguer AVA d'un autre EA externe pour ces vieilles lignes. On
+        retombe sur le nom du moteur interne (registre) ou un libellé
+        générique honnête plutôt que de deviner."""
+        rules = (params or {}).get("trade_origins") or DEFAULT_PARAMS["trade_origins"]
+        if origin == "BOT":
+            bot_rule = next((r for r in rules if r.get("type") == "INTERNAL_BOT"), None)
+            return (str(bot_rule["name"]) if bot_rule else "AlphaTrade AI"), "INTERNAL_BOT"
+        if origin == "MANUAL":
+            return "Manuel", "MANUAL"
+        return "IA/EA externe (historique)", "EXTERNAL_AI"
 
     def from_db() -> list[dict]:
         rows = conn.execute(
@@ -1310,6 +1353,8 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], days: i
             item = dict(zip(keys, row))
             item["symbol_key"] = reverse.get(item["symbol"], "EURUSD" if "EURUSD" in item["symbol"].upper() else "XAUUSD" if "XAU" in item["symbol"].upper() else item["symbol"])
             item["move"] = round((item["close_price"] - item["open_price"]) if item["direction"] == "BUY" else (item["open_price"] - item["close_price"]), 2)
+            item["origin_name"], item["origin_type"] = legacy_origin_name(str(item.get("origin") or ""))
+            item["origin_magic"] = None
             output.append(item)
         return output
 
@@ -1334,16 +1379,17 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], days: i
         entry_type = int(getattr(d, "entry", -1))
         pos_id = int(getattr(d, "position_id", 0) or getattr(d, "order", 0))
         if entry_type == mt5.DEAL_ENTRY_IN:
+            origin_info = trade_origin(int(getattr(d, "magic", 0)), str(getattr(d, "comment", "")), params)
             entries[pos_id] = {
                 "position_id": pos_id,
                 "ticket": int(getattr(d, "ticket", 0)),
                 "symbol": symbol,
                 "symbol_key": key,
                 "direction": "BUY" if int(getattr(d, "type", -1)) == mt5.DEAL_TYPE_BUY else "SELL",
-                "origin": trade_origin(
-                    int(getattr(d, "magic", 0)),
-                    str(getattr(d, "comment", "")),
-                ),
+                "origin": origin_info["origin"],
+                "origin_name": origin_info["origin_name"],
+                "origin_type": origin_info["origin_type"],
+                "origin_magic": origin_info["origin_magic"],
                 "lot": float(getattr(d, "volume", 0)),
                 "open_price": float(getattr(d, "price", 0)),
                 "open_time": datetime.fromtimestamp(int(getattr(d, "time", 0))).isoformat(timespec="seconds"),
@@ -1924,7 +1970,7 @@ def send_deal(request: dict):
     return last_result
 
 
-def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL"):
+def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL", tp_override: float | None = None):
     account = mt5.account_info()
     if not account:
         return False, "Compte MT5 indisponible.", None
@@ -1950,11 +1996,17 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
         effective_target = raw_target * confidence_ratio
     else:
         effective_target = raw_target
-    tp_distance = max(
-        min_distance,
-        money_price_distance(symbol, direction, volume, price, info, effective_target),
-    )
-    tp = price + tp_distance if direction == "BUY" else price - tp_distance
+    if tp_override is not None:
+        # Moteur avec sa propre gestion de sortie (ex: KB1000 Gold AI, clôtures
+        # partielles par paliers) : pas de TP broker unique, tout est piloté
+        # en logiciel comme le SL (voir kb1000_manage_positions()).
+        tp = float(tp_override)
+    else:
+        tp_distance = max(
+            min_distance,
+            money_price_distance(symbol, direction, volume, price, info, effective_target),
+        )
+        tp = price + tp_distance if direction == "BUY" else price - tp_distance
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -2183,6 +2235,121 @@ def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str,
         else:
             retcode = int(result.retcode) if result else None
             log(f"[TP{next_tp}] Fermeture partielle refusée ({retcode}) — {symbol_key}", "ERROR")
+
+
+def kb1000_manage_positions(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
+    """Exécute en direct le plan KB8 (TP par paliers, passage à Break-Even)
+    des positions ouvertes par KB1000 Gold AI, selon le même schéma MT5 que
+    partial_tp_step() (TRADE_ACTION_DEAL pour les clôtures partielles,
+    TRADE_ACTION_SLTP pour le Break-Even). Le trailing KB8 n'est pas encore
+    activé ici (trail_config=None) — periode de wiring initiale, à activer
+    dans un passage ultérieur une fois la mécanique de paliers/BE validée en
+    conditions réelles. Le filet de sécurité logiciel (position_exit_reason,
+    protections de compte) reste géré séparément et s'applique de façon
+    identique à tous les moteurs — cette fonction ne touche qu'au plan de
+    sortie propre à KB1000."""
+    global KB1000_POSITION_STATE
+    if not KB1000_POSITION_STATE:
+        return
+    open_tickets = {int(p.get("ticket", 0)) for p in positions}
+    for ticket in list(KB1000_POSITION_STATE.keys()):
+        if ticket not in open_tickets:
+            del KB1000_POSITION_STATE[ticket]
+    for position in positions:
+        ticket = int(position.get("ticket", 0))
+        plan_state = KB1000_POSITION_STATE.get(ticket)
+        if plan_state is None:
+            continue
+        symbol_key = position.get("symbol_key", "")
+        symbol = symbol_names.get(symbol_key)
+        if not symbol:
+            continue
+        sym_info = mt5.symbol_info(symbol)
+        tick = mt5.symbol_info_tick(symbol)
+        if sym_info is None or tick is None:
+            continue
+        direction = str(plan_state.get("direction"))
+        is_buy = direction == "bullish"
+        current_price = float(tick.bid if is_buy else tick.ask)
+        tick_size = float(getattr(sym_info, "trade_tick_size", 0) or sym_info.point)
+        spread = float(sym_info.ask - sym_info.bid)
+        action = kb8_manage_position(
+            {
+                "entry_price": float(plan_state["entry_price"]),
+                "stop_price": float(plan_state["stop_price"]),
+                "current_price": current_price,
+                "direction": direction,
+                "tp_hit": plan_state.get("tp_hit") or set(),
+                "be_applied": bool(plan_state.get("be_applied")),
+            },
+            plan_state.get("levels") or [],
+            be_config={
+                "activation_rr": float(plan_state.get("activation_rr", 0.5)),
+                "spread": spread,
+                "tick_size": tick_size,
+                "buffer_ticks": float(plan_state.get("be_buffer_ticks", 5)),
+            },
+            trail_config=None,
+        )
+        act = action.get("action")
+        if act == "PARTIAL_CLOSE":
+            tier = int(action["tier"])
+            close_pct = float(action["close_pct"])
+            orig_vol = float(plan_state.get("orig_vol") or position.get("lot") or 0)
+            current_vol = float(position.get("lot") or 0)
+            lot_step = float(sym_info.volume_step)
+            lot_min = float(sym_info.volume_min)
+            vol_to_close = round((orig_vol * close_pct) / lot_step) * lot_step
+            # Ne jamais fermer plus que le volume réellement ouvert (contrairement à
+            # max(lot_min, ...), qui forcerait à lot_min même si current_vol est plus
+            # petit — risque d'envoyer un ordre de clôture surdimensionné).
+            vol_to_close = min(vol_to_close, current_vol)
+            if vol_to_close < lot_min:
+                log(f"[KB1000 TP{tier}] Volume {vol_to_close:.2f} < minimum {lot_min}, palier ignoré.", "WARNING")
+                plan_state.setdefault("tp_hit", set()).add(tier)
+                continue
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "position": ticket,
+                "symbol": symbol,
+                "volume": vol_to_close,
+                "type": mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY,
+                "price": current_price,
+                "deviation": 40,
+                "magic": MAGIC,
+                "comment": f"KB1000 TP{tier}",
+                "type_time": mt5.ORDER_TIME_GTC,
+            }
+            result = mt5.order_send(request)
+            ok = result is not None and int(result.retcode) in {
+                mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_DONE_PARTIAL, mt5.TRADE_RETCODE_PLACED
+            }
+            if ok:
+                plan_state.setdefault("tp_hit", set()).add(tier)
+                log(
+                    f"[KB1000 TP{tier}] Fermeture partielle {int(close_pct*100)}%"
+                    f" ({vol_to_close:.2f} lot) — {symbol_key}",
+                    "SUCCESS",
+                )
+            else:
+                retcode = int(result.retcode) if result else None
+                log(f"[KB1000 TP{tier}] Fermeture partielle refusée ({retcode}) — {symbol_key}", "ERROR")
+        elif act == "MOVE_TO_BREAK_EVEN":
+            new_sl = float(action["price"])
+            sl_req = {
+                "action": mt5.TRADE_ACTION_SLTP,
+                "position": ticket,
+                "symbol": symbol,
+                "sl": new_sl,
+                "tp": 0.0,
+            }
+            sl_res = mt5.order_send(sl_req)
+            if sl_res is not None and int(sl_res.retcode) in {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED}:
+                plan_state["be_applied"] = True
+                plan_state["stop_price"] = new_sl
+                log(f"[KB1000] Break-Even appliqué à {new_sl} sur ticket {ticket}", "SUCCESS")
+            else:
+                log(f"[KB1000] Break-Even refusé sur ticket {ticket}: {sl_res}", "WARNING")
 
 
 def position_exit_reason(
@@ -2685,7 +2852,7 @@ def auto_rebond_step(
     )
     if ok_open and event:
         time.sleep(0.2)
-        fresh_positions = live_positions({symbol_key: symbol})
+        fresh_positions = live_positions({symbol_key: symbol}, params)
         known_now = {s.get("ticket") for s in REBOND_STATES}
         new_pos = next(
             (p for p in sorted(fresh_positions, key=lambda x: -int(x.get("open_timestamp", 0)))
@@ -2955,6 +3122,24 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 broker_min = float(lot_info.get("broker_min", 0))
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
+
+    # KB1000 Gold AI: sizing propre (KB8) au lieu du lot configuré à plat.
+    # Le stop est dérivé de la structure réelle (KB2), le lot du risque réel
+    # (risk_pct, déjà un paramètre partagé existant — pas de nouvelle valeur
+    # en dur). Le plan (TP par paliers, BE) est stocké pour être exécuté par
+    # kb1000_manage_positions() une fois la position ouverte.
+    kb1000_plan = None
+    if str(decision.get("engine")) == "kb1000_gold_ai":
+        direction_word = "bullish" if str(decision.get("signal")) == "BUY" else "bearish"
+        kb1000_plan = kb8_position_plan(symbol, direction_word, risk_pct=float(params.get("risk_pct", 0.35)))
+        kb8_lot = float((kb1000_plan.get("sizing") or {}).get("lot") or 0)
+        if kb8_lot <= 0:
+            reason = str((kb1000_plan.get("sizing") or {}).get("reason") or kb1000_plan.get("reason") or "KB1000: lot invalide.")
+            state["reason"] = reason
+            save_trading_state(state)
+            return state
+        lot_info = {"effective_lot": kb8_lot, "reason": "KB8 — lot calculé depuis le risque réel"}
+
     approved_by_server, server_reply = server_trade_confirmation(
         params,
         active,
@@ -2986,6 +3171,7 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         lot_info,
         analysis,
         bool(demo or state.get("real_confirmed")),
+        tp_override=(0.0 if kb1000_plan else None),
     )
     log(message, "SUCCESS" if ok else "ERROR")
     state["last_action"] = message
@@ -2994,6 +3180,31 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         state["last_entry_at"] = now
         state["entry_times"] = [*entry_times, now]
         state["last_error"] = ""
+        if kb1000_plan:
+            time.sleep(0.2)
+            fresh_positions = live_positions({active: symbol}, params)
+            known_now = {int(p.get("ticket", 0)) for p in positions}
+            new_pos = next(
+                (p for p in sorted(fresh_positions, key=lambda x: -int(x.get("open_timestamp", 0)))
+                 if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+                 and p.get("direction") == str(decision.get("signal"))
+                 and p.get("symbol_key") == active
+                 and int(p.get("ticket", 0)) not in known_now),
+                None,
+            )
+            if new_pos:
+                KB1000_POSITION_STATE[int(new_pos["ticket"])] = {
+                    "entry_price": float(kb1000_plan["entry_price"]),
+                    "stop_price": float(kb1000_plan["stop_price"]),
+                    "direction": kb1000_plan["direction"],
+                    "levels": kb1000_plan["take_profit_levels"],
+                    "activation_rr": 0.5,
+                    "be_buffer_ticks": 5,
+                    "orig_vol": float(new_pos.get("lot") or 0),
+                    "tp_hit": set(),
+                    "be_applied": False,
+                }
+                log(f"[KB1000] Plan de gestion enregistré pour ticket #{new_pos['ticket']}.", "INFO")
     else:
         state["last_error"] = message
     save_trading_state(state)
@@ -3474,10 +3685,10 @@ def main() -> int:
                 reset_session_state(int(live_account.login), 0.0)
                 log("Nouvelle session AlphaTrade initialisee pour ce compte.", "SUCCESS")
 
-        positions = live_positions(symbol_names)
+        positions = live_positions(symbol_names, params)
         now = time.time()
         if now - last_history > 2:
-            trades = sync_history(conn, symbol_names)
+            trades = sync_history(conn, symbol_names, params)
             write_json("trades.json", {"trades": trades, "ts": int(time.time())})
             last_history = now
         if cmd.get("command") == "NEW_SESSION" and is_new_command:
@@ -3548,7 +3759,8 @@ def main() -> int:
         else:
             partial_tp_step(positions, params, symbol_names)
             auto_state = auto_trade_step(params, symbol_names, payload, positions)
-            positions = live_positions(symbol_names)
+            positions = live_positions(symbol_names, params)
+            kb1000_manage_positions(positions, params, symbol_names)
             payload = status_payload(params, symbol_names, trades, positions)
             payload["microstructure"] = microstructure.snapshot()
             # Restaurer l'analyse du premier appel pour l'affichage temps réel.

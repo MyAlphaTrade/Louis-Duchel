@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Phase 6 — Étude d'impact Microstructure sur XAUUSD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:720px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.15rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1rem; margin:20px 0 8px;}
+  p{line-height:1.6;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.3px; line-height:1.55; color:var(--green-soft);}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+  .stat-row{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .stat-box{background:var(--card2); border:1px solid var(--border-strong); border-radius:8px; padding:10px 16px; flex:1; min-width:150px;}
+  .stat-box .k{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .stat-box .v{color:#fff; font-size:1.3rem; font-weight:700; margin-top:2px;}
+  .stat-box .v.small{font-size:1rem;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Phase 6 — Étude empirique — aucun code touché</div>
+  <h1>Impact de la Microstructure sur XAUUSD</h1>
+  <p>Étude basée sur les données réelles déjà accumulées par l'application : 188 562 relevés microstructure XAUUSD (13,5 jours) et 2 307 trades AlphaTrade réellement exécutés — pas une estimation théorique.</p>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>1. Méthode</h2>
+  <p>Pour chaque trade AlphaTrade fermé sur XAUUSD, le relevé microstructure (<code>market_data.db → microstructure_snapshots</code>) le plus proche dans le temps de l'ouverture a été apparié (écart médian réel : <b>0,8 seconde</b>). Hypothèse testée : si OBI/OFI/Kyle λ portent une vraie information, les trades où le signal était <b>aligné</b> avec la direction prise (OBI/OFI positif pour un BUY, négatif pour un SELL) devraient statistiquement mieux réussir que ceux où il était <b>opposé</b>.</p>
+  <div class="stat-row">
+    <div class="stat-box"><div class="k">Relevés XAUUSD (MT5)</div><div class="v">188 562</div></div>
+    <div class="stat-box"><div class="k">Trades BOT XAUUSD fermés</div><div class="v">2 307</div></div>
+    <div class="stat-box"><div class="k">Trades appariés (&lt;120s)</div><div class="v">492</div></div>
+    <div class="stat-box"><div class="k">Écart médian appariement</div><div class="v">0,8s</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>2. Découverte majeure — trois indicateurs sur quatre sont structurellement cassés pour XAUUSD</h2>
+  <div class="card finding bug">
+    <span class="badge bug">Bug confirmé, vérifié directement en base</span>
+    <p><code>observe_mt5_tick()</code> (<code>market_microstructure.py</code>) construit le carnet d'ordres avec <b>la même valeur de volume des deux côtés</b> :</p>
+    <pre>self.observe_book("MT5", ..., [(bid, volume)], [(ask, volume)], ...)  <span style="color:var(--muted)"># même "volume" pour bid ET ask</span></pre>
+    <p>Conséquence vérifiée sur les 188 562 relevés réels :</p>
+    <table>
+      <tr><th>Indicateur</th><th>Constat vérifié en base</th><th>Cause</th></tr>
+      <tr><td><b>OBI</b> (déséquilibre du carnet)</td><td><code>0,0 dans 100% des cas</code> (0 sur 188 562)</td><td><code>bid_volume − ask_volume</code> = 0 puisque les deux valent la même chose</td></tr>
+      <tr><td><b>Kyle λ</b> (impact de prix)</td><td><code>0,0 dans 100% des cas</code> (0 sur 188 562)</td><td>dépend de <code>signed_volume = bid_size − ask_size</code>, toujours 0 pour la même raison</td></tr>
+      <tr><td><b>POC</b> (point de contrôle du volume)</td><td>varie, mais verrouillé sur le bas de la fourchette de prix récente — pas un vrai point de concentration de volume</td><td>tous les volumes internes étant à 0, le classement par volume est une égalité parfaite ; le calcul retombe systématiquement sur le premier bucket (le prix le plus bas)</td></tr>
+      <tr><td><b>OFI</b> (flux d'ordres)</td><td>seul indicateur réellement variable (55% des relevés non-nuls), mais saturé à <code>-1 / 0 / +1</code> uniquement — un simple indicateur de sens de la dernière variation de prix, pas un vrai flux d'ordres</td><td>utilise aussi les prix bid/ask (qui varient réellement), contrairement aux trois autres</td></tr>
+    </table>
+    <p><b>Cause racine :</b> MT5, pour un compte CFD retail comme celui utilisé ici, ne fournit qu'une seule cotation bid/ask avec un seul volume de tick — pas un vrai carnet d'ordres à plusieurs niveaux avec volumes distincts côté achat/vente. OBI, Kyle λ et POC nécessitent structurellement des données de profondeur de marché (Level 2) que MT5 ne fournit pas ici. Ce n'est pas un bug de calcul isolé à corriger facilement — c'est une <b>limite de la source de données</b> pour XAUUSD (le flux Hyperliquid pour BTC/ETH, lui, reçoit un vrai carnet à plusieurs niveaux et n'est pas concerné par ce problème).</p>
+  </div>
+</section>
+
+<section>
+  <h2>3. Résultat empirique — même le seul indicateur valide (OFI) ne montre aucun edge</h2>
+  <table>
+    <tr><th>Test</th><th>Aligné avec la direction du trade</th><th>Opposé à la direction du trade</th></tr>
+    <tr><td><b>OFI</b></td><td>n=226 · winrate 92,0% · profit moyen +$1,93</td><td>n=266 · winrate 90,6% · profit moyen +$2,02</td></tr>
+  </table>
+  <div class="card finding">
+    <span class="badge warn">Aucune différence significative</span>
+    <p>Un écart de 1,4 point de winrate et quelques centimes de profit moyen sur des échantillons de cette taille est parfaitement compatible avec du bruit statistique — <b>rien n'indique qu'OFI ait porté une information exploitable</b> dans les trades réellement passés par AlphaTrade. (Le winrate global de ~91% reflète la qualité de la stratégie EMA/RSI/MACD elle-même, pas un effet de la microstructure.)</p>
+  </div>
+</section>
+
+<section>
+  <h2>4. Constat secondaire — couverture partielle</h2>
+  <p>Seuls 492 des 2 307 trades (21%) ont pu être appariés à un relevé récent (&lt;120s). Les 79% restants n'ont aucun relevé microstructure à proximité — probablement des périodes où <code>microstructure_enabled</code> était désactivé ou l'application arrêtée. Point mineur par rapport à la découverte du §2, mais à noter si l'observation microstructure doit un jour être fiabilisée.</p>
+</section>
+
+<section>
+  <h2>5. Recommandation</h2>
+  <div class="card finding ok">
+    <span class="badge ok">Recommandation</span>
+    <p><b>Retirer OBI, Kyle λ et POC de l'affichage/decision pour XAUUSD</b> — ils sont mathématiquement garantis d'être soit toujours nuls, soit un artefact sans rapport avec le volume réel, avec les données MT5 actuellement disponibles. Les corriger nécessiterait une source de données Level 2 différente (non disponible via le flux MT5 standard d'un compte retail), un chantier hors de portée de cette phase.</p>
+    <p><b>OFI peut rester affiché à titre informatif</b> (il est au moins calculé correctement), mais ne montre aucune valeur prédictive démontrée sur 2 307 trades réels — il ne doit pas être utilisé comme signal de décision.</p>
+    <p><b>Aucune intégration de la microstructure dans le calcul de la décision d'entrée</b> n'est justifiée à ce stade pour XAUUSD, pour AlphaTrade AI comme pour KB1000 Gold AI.</p>
+  </div>
+</section>
+
+</div>
+<footer>Phase 6 — Étude empirique sur données réelles — 16/07/2026 — AlphaTrade Gold v5.0.0 — aucun code modifié</footer>
+</body>
+</html>

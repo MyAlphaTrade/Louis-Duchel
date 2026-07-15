@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Phase 8 — Audit + Proposition : Origine des trades</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1000px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:700px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.15rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1rem; margin:20px 0 8px;}
+  p{line-height:1.6;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.3px; line-height:1.55; color:var(--green-soft);}
+  pre .c{color:var(--muted);}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .card.accent{border-left:3px solid var(--green);}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+  .opt{background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:14px 16px; margin:10px 0;}
+  .opt.reject{opacity:.75;}
+  .opt h4{margin:0 0 8px; color:#fff;}
+  .opt .verdict{font-size:11px; font-weight:700; padding:2px 9px; border-radius:12px; float:right;}
+  .verdict.recommande{background:var(--green-dim); color:var(--green-soft);}
+  .verdict.rejete{background:#4a1a1a; color:var(--red);}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Phase 8 — Audit + Proposition technique — aucun code touché</div>
+  <h1>Origine des trades — retrait du hardcode "AVA"</h1>
+  <p>Analyse complète des fichiers concernés, deux architectures possibles avec recommandation motivée, et impacts sur Paramètres/Journal/Dashboard/Historique/futur AI Brain.</p>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>1. Audit — ce qui existe aujourd'hui</h2>
+  <p><code>alphatrade_engine.py</code> lignes 36-37 : deux constantes en dur.</p>
+  <pre>MAGIC = 20260607       <span class="c"># AlphaTrade lui-même</span>
+AVA_MAGIC = 7525001     <span class="c"># un robot externe précis, nommé "AVA" en dur</span></pre>
+  <p><code>trade_origin(magic, comment)</code> (ligne 1247) — logique de détection réelle :</p>
+  <pre>if magic == MAGIC or "alphatrade"/"alphakaris" dans le commentaire: <span class="c">→</span> "BOT"
+if magic == AVA_MAGIC or "ava"/"bridge" dans le commentaire:          <span class="c">→</span> "EXTERNAL_AI"
+if magic != 0 (n'importe quel autre EA inconnu):                       <span class="c">→</span> "EXTERNAL_AI"  <span class="c">← fusionné avec AVA !</span>
+sinon (magic == 0):                                                    <span class="c">→</span> "MANUAL"</pre>
+  <div class="card finding bug">
+    <span class="badge bug">Bug confirmé</span>
+    <p>Le backend ne mélange pas vraiment "AVA" avec le reste — il les fusionne délibérément dans une seule catégorie <code>"EXTERNAL_AI"</code> dès la détection. Le vrai problème est dans <code>renderer.js</code> ligne 965 :</p>
+    <pre>if (key === 'EXTERNAL_AI') return 'AVA / IA EXTERNE';</pre>
+    <p><b>N'importe quel trade externe non reconnu — un futur KB1000 partageant le même compte MT5, un autre robot, un script quelconque — s'affiche comme "AVA"</b>, même si ce n'est pas lui. L'info est perdue avant même d'arriver à l'affichage : le magic number réel n'est jamais transmis au frontend.</p>
+  </div>
+  <h3>Emplacements exacts concernés</h3>
+  <table>
+    <tr><th>Fichier</th><th>Élément</th><th>Rôle</th></tr>
+    <tr><td><code>alphatrade_engine.py:1247</code></td><td><code>trade_origin()</code></td><td>Détection — seule fonction à modifier pour la logique</td></tr>
+    <tr><td><code>alphatrade_engine.py:1284</code></td><td><code>live_positions()</code></td><td>Appelle <code>trade_origin()</code> pour les positions ouvertes</td></tr>
+    <tr><td><code>alphatrade_engine.py:1343</code></td><td>historique des trades</td><td>Appelle <code>trade_origin()</code> pour les trades fermés (via <code>mt5.history_deals_get</code>)</td></tr>
+    <tr><td><code>alphatrade_engine.py</code> (~15 emplacements)</td><td><code>position.get("origin","").upper() in ("BOT","ALPHATRADE","ALPHAKARIS")</code></td><td>Filtre "est-ce une position à moi ?" dans <code>auto_trade_step</code>, la protection de portefeuille, le rebond, les clôtures partielles, les stats, le lot safety…</td></tr>
+    <tr><td><code>renderer.js:962</code></td><td><code>originLabel()</code></td><td>Traduit <code>origin</code> en texte affiché — <b>source du mot "AVA" en dur</b></td></tr>
+    <tr><td><code>index.html:246-249</code></td><td>Filtres onglet Trades</td><td>Boutons "AlphaTrade / IA externe / Manuel" — le bouton "IA externe" a déjà une info-bulle annonçant ce correctif (ajoutée en Phase 1)</td></tr>
+    <tr><td><code>index.html:330</code></td><td>Carte Sessions IA</td><td>Sous-titre en dur : <code>"Ava et autres robots MT5"</code></td></tr>
+    <tr><td><code>learning_events.jsonl</code></td><td>Événements ENTRY/EXIT</td><td>Ne contiennent l'origine que pour les trades du bot lui-même (implicite) — les trades externes/manuels ne passent jamais par ces événements, ils sont seulement lus a posteriori via <code>trade_origin()</code></td></tr>
+  </table>
+  <h3>Découverte annexe — infobulles manquantes</h3>
+  <div class="card finding">
+    <span class="badge warn">Confirmé, quantifié</span>
+    <p>Vérifié dans le code : la page Paramètres compte <b>79 champs</b> mais seulement <b>37 infobulles ⓘ</b> — 42 champs (53%) n'en ont pas, en contradiction avec la règle "info-bulle sur chaque paramètre" posée en Phase 1. Question séparée de l'origine des trades — traité au §5.</p>
+  </div>
+</section>
+
+<section>
+  <h2>2. Proposition technique — deux architectures possibles</h2>
+
+  <div class="opt">
+    <span class="verdict recommande">RECOMMANDÉE</span>
+    <h4>Option B — Ajouter un nom lisible, sans toucher au classement interne</h4>
+    <p>Le champ <code>origin</code> existant (<code>"BOT"</code> / <code>"EXTERNAL_AI"</code> / <code>"MANUAL"</code>) reste strictement inchangé — c'est lui que lisent les ~15 endroits du moteur qui décident "est-ce une position à moi ?" (protection, comptage des positions max, stats, rebond…). On ajoute simplement <b>3 nouveaux champs</b> à côté : <code>origin_name</code> (le vrai nom, ex. "AVA Assistant"), <code>origin_type</code> (le type détaillé du registre), <code>origin_magic</code> (le magic number brut). Le frontend affiche <code>origin_name</code> au lieu de deviner.</p>
+    <p><b>Pourquoi :</b> zéro risque sur la boucle de trading en direct — aucun des ~15 filtres qui protègent/comptent/gèrent les positions du bot n'est touché. Seule une information d'affichage est ajoutée.</p>
+  </div>
+
+  <div class="opt reject">
+    <span class="verdict rejete">DÉCONSEILLÉE</span>
+    <h4>Option A — Remplacer origin par un objet structuré partout</h4>
+    <p>Conforme à la demande initiale telle quelle : <code>trade_origin()</code> retourne <code>{origin_name, origin_type, origin_magic}</code> et plus une simple chaîne. Nécessite de réécrire les ~15 filtres <code>origin in ("BOT","ALPHATRADE","ALPHAKARIS")</code> en <code>origin_type == "INTERNAL_BOT"</code>, partout dans <code>auto_trade_step</code>, les stats, la protection, le rebond, les clôtures partielles.</p>
+    <p><b>Pourquoi déconseillée :</b> ce sont exactement les filtres qui décident quelles positions le bot protège, compte, ferme automatiquement. Une seule condition mal réécrite dans ces ~15 endroits peut faire deux choses graves : le bot cesse de protéger ses propres positions, <b>ou pire, se met à fermer une position manuelle ou externe qui n'est pas la sienne</b>. Risque disproportionné par rapport au bénéfice (le bénéfice — un nom correct affiché — est atteint intégralement par l'Option B, sans ce risque).</p>
+  </div>
+
+  <h3>2.1 — Registre configurable (commun aux deux options)</h3>
+  <p>Nouveau paramètre <code>trade_origins</code> dans <code>params.json</code>, éditable depuis la nouvelle carte Paramètres (§4) :</p>
+  <pre>"trade_origins": [
+  {"name": "AlphaTrade AI",  "type": "INTERNAL_BOT", "magic_numbers": [20260607],
+   "comment_keywords": ["alphatrade", "alphakaris"], "enabled": true},
+  {"name": "AVA Assistant",  "type": "EXTERNAL_AI",  "magic_numbers": [7525001],
+   "comment_keywords": ["ava", "bridge"], "enabled": true}
+  <span class="c">// KB1000 Gold AI, ou tout autre EA futur : une entrée de plus ici, ajoutée par toi
+  // depuis la carte Paramètres — aucune modification de code nécessaire.</span>
+]</pre>
+  <h3>2.2 — Nouvelle logique de <code>trade_origin()</code></h3>
+  <pre><span class="k">def</span> trade_origin(magic, comment, params) -> dict:
+    normalized = comment.lower()
+    <span class="c"># 1. Magic number exact (priorité la plus haute — le plus fiable)</span>
+    <span class="c"># 2. Mots-clés du commentaire</span>
+    <span class="c"># 3. Si rien ne correspond : jamais attribué à AVA ni à AlphaTrade par défaut</span>
+    <span class="k">for</span> rule <span class="k">in</span> params.get("trade_origins", []):
+        <span class="k">if</span> not rule["enabled"]: continue
+        <span class="k">if</span> magic <span class="k">in</span> rule["magic_numbers"] <span class="k">or</span> any(kw <span class="k">in</span> normalized <span class="k">for</span> kw <span class="k">in</span> rule["comment_keywords"]):
+            <span class="k">return</span> {"origin_name": rule["name"], "origin_type": rule["type"], "origin_magic": magic,
+                    "origin": "BOT" <span class="k">if</span> rule["type"] == "INTERNAL_BOT" <span class="k">else</span> "EXTERNAL_AI"}
+    <span class="k">if</span> magic == 0:
+        <span class="k">return</span> {"origin_name": "Manuel", "origin_type": "MANUAL", "origin_magic": 0, "origin": "MANUAL"}
+    <span class="k">return</span> {"origin_name": f"Autre EA ({magic})", "origin_type": "UNKNOWN", "origin_magic": magic, "origin": "EXTERNAL_AI"}</pre>
+  <p>Le dernier champ <code>origin</code> (BOT/EXTERNAL_AI/MANUAL) est calculé automatiquement à partir de <code>origin_type</code> pour que les ~15 filtres existants continuent de fonctionner sans aucune modification (Option B).</p>
+</section>
+
+<section>
+  <h2>3. Impacts</h2>
+  <table>
+    <tr><th>Zone</th><th>Impact</th></tr>
+    <tr><td><b>Paramètres</b></td><td>Nouvelle carte "🟦 Origine des trades" (maquette §4) — seule zone où du code UI est ajouté.</td></tr>
+    <tr><td><b>Journal</b></td><td>Les lignes de log de fermeture/protection peuvent désormais citer <code>origin_name</code> réel au lieu de "AVA" générique.</td></tr>
+    <tr><td><b>Dashboard</b></td><td>Liste des positions (<code>originLabel()</code>) affiche le vrai nom. Carte "Observation IA externe" (Sessions IA) : sous-titre "Ava et autres robots MT5" à généraliser.</td></tr>
+    <tr><td><b>Historique / Trades</b></td><td>Colonne "Origine" du tableau affiche le vrai nom au lieu de "AVA / IA EXTERNE" pour tout ce qui n'est pas AVA. Filtre "IA externe" reste un filtre par <em>type</em> (regroupe toutes les IA externes), le nom précis apparaît dans la ligne.</td></tr>
+    <tr><td><b>Futur AI Brain multi-moteurs</b></td><td>Directement compatible : quand KB1000 Gold AI (ou un futur moteur) ouvrira réellement des positions sur ce même compte MT5, il suffira d'ajouter une ligne au registre <code>trade_origins</code> avec son magic number — aucune modification de code, exactement l'objectif "compatibilité future" demandé.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>4. Méthode — étapes suivantes</h2>
+  <p>Étapes 1-3 (audit, proposition, maquette) livrées dans ce document + le document maquette séparé. En attente de ta validation (étape 4) avant l'implémentation (étape 5) puis les tests avec plusieurs magic numbers (étape 6 : AlphaTrade, AVA, KB1000 simulé, EA inconnu, manuel — magic=0).</p>
+</section>
+
+<section>
+  <h2>5. Infobulles manquantes — question séparée</h2>
+  <p>42 champs sur 79 dans Paramètres n'ont pas d'infobulle ⓘ. Je peux soit (a) les ajouter en même temps que la nouvelle carte Origine des trades dans ce même passage de code, soit (b) en faire un petit passage de nettoyage séparé juste après. Dis-moi ce que tu préfères.</p>
+</section>
+
+</div>
+<footer>Phase 8 — Audit + Proposition technique — 16/07/2026 — AlphaTrade Gold v5.0.0 — aucun code modifié</footer>
+</body>
+</html>
