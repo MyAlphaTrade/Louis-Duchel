@@ -120,13 +120,48 @@
     </div>
   </div>
 
-  <div class="phase pending"><div class="num">3</div><div class="content"><span class="status pending">En cours</span><h3>Phase 3 — Audit stratégie XAUUSD actuelle</h3><p class="desc">Audit de la logique de décision réelle (EMA/RSI/MACD/momentum/consensus) + étude d'extensibilité : comment ajouter facilement de nouvelles stratégies (dont la future stratégie de gestion de position portée de KB1000) dans le sélecteur "Mode de stratégie" des Paramètres, et vérification que les modes de stratégie existants sont réellement fonctionnels.</p></div></div>
-  <div class="phase pending"><div class="num">4</div><div class="content"><span class="status pending">À venir</span><h3>Phase 4 — Module multi_timeframe_analyzer.py</h3></div></div>
-  <div class="phase pending"><div class="num">5</div><div class="content"><span class="status pending">À venir</span><h3>Phase 5 — Nouveau AI Brain AlphaTrade</h3></div></div>
+  <div class="phase">
+    <div class="num">3</div>
+    <div class="content">
+      <span class="status done">Validé — 15/07/2026</span>
+      <h3>Phase 3 — Audit stratégie XAUUSD actuelle + extensibilité</h3>
+      <p class="desc">Logique de décision réelle décortiquée (EMA/RSI/MACD/momentum/edge/multi-timeframe/gouverneur quantitatif). Les 4 modes de stratégie sont bien fonctionnels côté entrée, mais un <b>bug de désynchronisation confirmé</b> a été trouvé (3 définitions divergentes du même mode entre Python/renderer.js/HTML). Proposition d'architecture "registre de stratégies" pour permettre l'ajout facile de nouvelles stratégies (dont la future gestion de position KB1000) directement dans le sélecteur Paramètres.</p>
+      <div class="docs"><a class="doc" href="Audit_Phase3_Strategie_XAUUSD_v5.0.0.html">Audit_Phase3_Strategie_XAUUSD_v5.0.0.html</a></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="num">3bis</div>
+    <div class="content">
+      <span class="status done">Validé — 15/07/2026</span>
+      <h3>Phase 3bis — Architecture multi-moteurs IA</h3>
+      <p class="desc">Évolution majeure décidée avec Louis : KB1000 Gold devient un second moteur IA complet (au même niveau qu'AlphaTrade AI), pas une simple stratégie de sortie. Registre de moteurs extensible, gestionnaire de compte partagé jamais dupliqué, page Paramètres générée dynamiquement selon le moteur actif, ordre de construction KB1000 Gold AI en 8 étapes (KB1 multi-timeframe → KB8 gestion de position).</p>
+      <div class="docs">
+        <a class="doc" href="Proposition_Technique_MultiMoteurs_v5.0.0.html">Proposition_Technique_MultiMoteurs_v5.0.0.html</a>
+        <a class="doc" href="Maquette_Parametres_MultiMoteurs_v5.0.0.html">Maquette_Parametres_MultiMoteurs_v5.0.0.html</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">4</div>
+    <div class="content">
+      <span class="status done">Codé et testé isolément — 15/07/2026</span>
+      <h3>Phase 4 — KB1 : infrastructure multi-timeframe partagée (D1→M1)</h3>
+      <p class="desc"><code>python/multi_timeframe_cascade.py</code> (module pur, testable sans MT5) + <code>kb1_multi_timeframe_cascade()</code> dans <code>alphatrade_engine.py</code> (fetch MT5 réel via <code>timeframe_trend_context()</code> déjà existant). Cascade hiérarchique D1→H4→H1→M30→M15→M5→M1, distincte de l'agrégation à plat déjà utilisée par AlphaTrade AI. 5 scénarios testés (dont l'exemple exact de la maquette — cassure à M30, cohérence 42.9%), un bug trouvé et corrigé pendant les tests (D1 en collecte comptait à tort comme "aligné"). Pas encore branchée sur un moteur actif — fonction isolée, zéro régression sur les 13 tests Phase 1 existants.</p>
+    </div>
+  </div>
+  <div class="phase pending"><div class="num">5</div><div class="content"><span class="status pending">À venir</span><h3>Phase 5 — AI Brain : orchestrateur au-dessus des moteurs</h3></div></div>
   <div class="phase pending"><div class="num">6</div><div class="content"><span class="status pending">À venir</span><h3>Phase 6 — Étude d'impact Microstructure sur XAUUSD</h3></div></div>
   <div class="phase pending"><div class="num">7</div><div class="content"><span class="status pending">À venir</span><h3>Phase 7 — Assistant IA : fluidité + reconnaissance vocale</h3></div></div>
   <div class="phase pending"><div class="num">8</div><div class="content"><span class="status pending">À venir</span><h3>Phase 8 — Origine des trades (retrait hardcode "AVA")</h3></div></div>
-  <div class="phase pending"><div class="num">9/10</div><div class="content"><span class="status pending">À venir</span><h3>Phase 9/10 — Stratégie de gestion de position (portage KB1000) + tests/build final</h3><p class="desc">En attente du document Word/PDF détaillant la stratégie KB1000.</p></div></div>
+  <div class="phase">
+    <div class="num">9/10</div>
+    <div class="content">
+      <span class="status done">KB1 à KB8 codés et testés — 16/07/2026</span>
+      <h3>Phase 9/10 — KB1000 Gold AI (KB1-KB8) — tous les modules livrés</h3>
+      <p class="desc"><b>KB1 — Multi-timeframe</b> : cascade hiérarchique D1→M1 (5 scénarios).<br><b>KB2 — Structure</b> : swings, régime + retournement (6 scénarios).<br><b>KB3 — Zones</b> : Support/Résistance, Supply/Demand, institutionnelles (6 scénarios).<br><b>KB4 — Fibonacci</b> : niveaux 38.2-78.6, zone d'achat privilégiée (5 scénarios).<br><b>KB5 — Smart Money</b> : FVG, Order Blocks, BOS/CHOCH, Liquidity Grab, Equal Highs/Lows, Premium/Discount (6 concepts).<br><b>KB6 — Confirmations</b> : EMA/RSI/MACD/Momentum comme votes de confirmation, pas cœur de décision (6 scénarios).<br><b>KB7 — IA décisionnelle</b> : synthèse pondérée de KB1-KB6 en score/qualité/probabilité BUY-SELL/autorisation d'entrée (7 scénarios).<br><b>KB8 — Gestion intelligente de position</b> : <code>python/market_position_sizing.py</code> + <code>kb8_position_plan()</code>. Lot calculé depuis le capital réel et le risque accepté (jamais fixe), TP1/TP2/TP3 en risk:reward de la distance au stop, Break-Even calibré par les specs réelles du broker (tick_value/tick_size/spread — jamais un nombre de pips fixe, conformément à la règle posée dès le début du projet pour la stratégie KB1000), trailing en ticks, orchestrateur <code>manage_position()</code> qui décide de l'action (clôture partielle / passage BE / trailing / rien). 8 scénarios testés dont l'enchaînement complet NONE→BE→clôture TP1→trailing.<br><br><b>Bilan</b> : 8 modules Python purs et testés (48 scénarios au total), zéro régression sur l'ensemble. Tous encore isolés — aucun moteur actif ne les consomme pour l'instant. <b>Prochaine étape naturelle</b> : l'intégration réelle décrite en Phase 3bis (registre <code>ENGINE_REGISTRY</code>, contrat moteur, page Paramètres dynamique) pour que KB1000 Gold AI devienne un second moteur IA réellement sélectionnable dans l'application, aux côtés d'AlphaTrade AI.</p>
+    </div>
+  </div>
 
 </div>
 <footer>Ce sommaire est mis à jour à chaque nouvelle étape produite ou validée.</footer>

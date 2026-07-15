@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Phase 3 — Audit stratégie XAUUSD + extensibilité</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:980px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:680px; margin:0 auto;}
+
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.15rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1rem; margin:22px 0 8px;}
+  p{color:var(--text); line-height:1.6;}
+  .muted{color:var(--muted);}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .finding .badge{display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
+  th{color:var(--green-soft); font-weight:600;}
+  td.mono, th.mono, code{font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft);}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.5px; line-height:1.5; color:var(--green-soft);}
+  pre .c{color:var(--muted);}
+
+  .flow{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0;}
+  .flow .step{background:var(--card2); border:1px solid var(--border-strong); border-radius:8px; padding:8px 12px; font-size:13px;}
+  .flow .arrow{color:var(--dim);}
+
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Phase 3 — Audit</div>
+  <h1>Audit de la stratégie XAUUSD actuelle + extensibilité</h1>
+  <p>Analyse de code (pas de modification) : logique de décision réelle, fonctionnement effectif des 4 modes de stratégie existants, et étude d'architecture pour permettre l'ajout facile de nouvelles stratégies — notamment la future stratégie de gestion de position portée de KB1000.</p>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>1. Comment la décision d'entrée est calculée aujourd'hui</h2>
+  <p>Tout part de <code>compute_signal()</code> dans <code>alphatrade_engine.py</code>. Le score BUY/SELL (0-100) est construit par addition pondérée de plusieurs composantes :</p>
+  <table>
+    <tr><th>Composante</th><th>Base</th><th>Pondérable via</th></tr>
+    <tr><td>Tendance</td><td>EMA9 / EMA21 / EMA50</td><td>poids appris (reinforcement)</td></tr>
+    <tr><td>Momentum</td><td>variation de clôture récente</td><td>poids appris</td></tr>
+    <tr><td>RSI</td><td>survente/surachat</td><td>filtre de blocage (zone extrême)</td></tr>
+    <tr><td>MACD</td><td>croisement</td><td>composante du score</td></tr>
+    <tr><td>Zone (edge)</td><td>position dans le range récent (haut/bas)</td><td>poids appris</td></tr>
+    <tr><td>Multi-timeframe</td><td><code>multi_timeframe_context()</code> — biais BULLISH/BEARISH/RANGE</td><td>poids variable <b>selon le mode de stratégie</b> (8 à 18)</td></tr>
+  </table>
+  <p>Le signal n'est retenu que si la confiance dépasse <code>confidence_min</code> (ajusté par un offset appris). Un second filtre — le <b>gouverneur quantitatif</b> (<code>quant_veto</code>) — peut bloquer l'entrée même si le signal est valide, en cas de risque de régime élevé (écart BUY/SELL trop faible, conflit multi-timeframe, sur-réaction de la bougie rapide, retournement de bougie).</p>
+  <div class="card finding ok">
+    <span class="badge ok">Fonctionnel</span>
+    <p>Ce n'est pas un habillage : chaque composante est réellement calculée à partir de données de marché réelles (<code>mt5.copy_rates_from_pos</code>) et pèse effectivement dans le score final. Le "Consensus quantitatif" affiché au Tableau de bord reflète ce calcul réel.</p>
+  </div>
+</section>
+
+<section>
+  <h2>2. Les 4 modes de stratégie sont-ils réellement fonctionnels ?</h2>
+  <p><b>Oui, en partie — avec un vrai bug de désynchronisation trouvé.</b> Voici comment ça devrait marcher, puis ce qui casse en pratique.</p>
+
+  <h3>2.1 — Ce qui fonctionne réellement</h3>
+  <p>Le mode choisi (<code>scalping_fast</code> / <code>scalping_safe</code> / <code>long_analysis</code> / <code>combined</code>) influence deux choses côté moteur Python :</p>
+  <ul>
+    <li><b>Le poids du biais multi-timeframe</b> dans le score (ligne 839-847) : 18 en Analyse longue, 12 en Mode combiné, 10 en Scalping prudent, 8 en Scalping rapide.</li>
+    <li><b>Le blocage d'entrée en cas de conflit de tendance large</b> (ligne 2885-2896) : en <code>combined</code>/<code>long_analysis</code> uniquement, une entrée est refusée si la tendance multi-timeframe contredit le signal — sauf retournement confirmé.</li>
+    <li><b><code>effective_params_for_strategy()</code></b> (ligne 266) applique aussi, par profil, un <code>timeframe</code>/<code>confidence_min</code>/<code>cadence_sec</code>/<code>profit_target</code>/<code>max_hold_sec</code> différent par défaut — <i>mais seulement si l'utilisateur n'a jamais modifié/sauvegardé ce champ</i>.</li>
+  </ul>
+
+  <h3>2.2 — Le bug trouvé : trois définitions du même mode, non synchronisées</h3>
+  <div class="card finding bug">
+    <span class="badge bug">Bug confirmé</span>
+    <p>Le mode de stratégie est défini <b>trois fois indépendamment</b>, avec des valeurs différentes :</p>
+    <table>
+      <tr><th>Emplacement</th><th>Rôle</th><th>Exemple — <code>scalping_fast</code></th></tr>
+      <tr><td class="mono">STRATEGY_PROFILES (Python)</td><td>Profil réellement utilisé par le moteur à chaque décision</td><td class="mono">confidence_min: 55, cadence_sec: 10, max_hold_sec: 600</td></tr>
+      <tr><td class="mono">strategyProfiles (renderer.js)</td><td>Valeurs écrites dans le formulaire + <code>params</code> au clic sur le sélecteur</td><td class="mono">confidence_min: 64, cadence_sec: 15, max_hold_sec: 90</td></tr>
+      <tr><td class="mono">&lt;option&gt; (index.html)</td><td>Liste affichée dans le sélecteur (juste des libellés, sans valeurs)</td><td class="mono">—</td></tr>
+    </table>
+    <p><b>Conséquence concrète :</b> quand tu choisis un mode dans le sélecteur, <code>applyStrategyProfile()</code> (renderer.js ligne 1725) écrit ses propres valeurs dans les champs du formulaire <i>et</i> dans <code>params</code>. Si tu cliques ensuite "Sauvegarder", ces valeurs sont écrites dans <code>params.json</code> comme des valeurs "choisies par l'utilisateur". Résultat : côté Python, <code>effective_params_for_strategy()</code> (ligne 282) compare la valeur sauvegardée au défaut d'origine — comme elle a changé, le moteur considère que <i>tu</i> as personnalisé ce champ, et n'appliquera plus jamais sa propre définition du profil pour ce paramètre, même si tu reviens plus tard sur ce même mode. <b>Le mode affiché et le comportement réel du moteur divergent silencieusement dès la première sauvegarde.</b></p>
+  </div>
+
+  <h3>2.3 — Reste mort dans le code</h3>
+  <div class="card finding">
+    <span class="badge warn">Résidu mineur</span>
+    <p>Ligne 846 : <code>elif strategy_mode in ("scalping_safe", "synthetic_scalp"):</code> — <code>synthetic_scalp</code> a été retiré de <code>STRATEGY_PROFILES</code> et du sélecteur UI lors de l'isolation Or, mais cette référence traîne encore. Inoffensif (mode inaccessible désormais) mais à nettoyer.</p>
+  </div>
+</section>
+
+<section>
+  <h2>3. Où se trouve la gestion de position (sorties) aujourd'hui ?</h2>
+  <p>Recherche exhaustive : <code>strategy_mode</code> n'apparaît <b>jamais</b> dans la logique de sortie (trailing, break-even, rebond, clôtures partielles). Ces mécanismes sont <b>globaux et uniformes</b>, appliqués de la même façon quel que soit le mode de stratégie choisi.</p>
+  <div class="flow">
+    <div class="step">Sélecteur "Mode de stratégie"</div>
+    <span class="arrow">→</span>
+    <div class="step">Décision d'ENTRÉE seulement<br><span class="muted" style="font-size:11px">(timeframe, confiance, poids MTF, blocage conflit)</span></div>
+  </div>
+  <div class="flow">
+    <div class="step" style="opacity:.5">Aucun sélecteur</div>
+    <span class="arrow">→</span>
+    <div class="step">Gestion de POSITION (identique pour tous les modes)<br><span class="muted" style="font-size:11px">(trailing, break-even, rebond, clôtures partielles)</span></div>
+  </div>
+  <div class="card finding">
+    <span class="badge warn">Point d'architecture important</span>
+    <p>Le "Mode de stratégie" actuel est donc <b>exclusivement un profil de style d'entrée</b>, pas une stratégie complète au sens où tu l'entends pour KB1000. La stratégie KB1000 que tu veux porter est avant tout une <b>stratégie de gestion de position</b> (break-even réel, paliers de take-profit, clôtures partielles) — un axe aujourd'hui totalement séparé et non pilotable par mode. L'ajouter "dans" le même sélecteur suppose donc d'élargir ce que "mode de stratégie" veut dire : ne plus être seulement un profil d'entrée, mais un <b>couple (profil d'entrée + comportement de gestion de position)</b>.</p>
+  </div>
+</section>
+
+<section>
+  <h2>4. Proposition d'architecture — registre de stratégies extensible</h2>
+  <p>Objectif : qu'ajouter une stratégie (KB1000 ou une future) ne demande <b>plus qu'une seule déclaration</b>, au lieu de toucher 3 fichiers en espérant qu'ils restent synchronisés (cause du bug ci-dessus).</p>
+
+  <h3>4.1 — Source unique de vérité côté Python</h3>
+  <p>Étendre <code>STRATEGY_PROFILES</code> pour que chaque entrée décrive, en plus du profil d'entrée déjà existant, sa gestion de position :</p>
+  <pre>STRATEGY_PROFILES = {
+  "scalping_fast": {
+    "label": "Scalping rapide",
+    "description": "...",
+    "global": {...}, "symbols": {...},        <span class="c"># existant, inchangé</span>
+    "position_management": "generic"           <span class="c"># nouveau : handler de sortie utilisé</span>
+  },
+  ...
+  "kb1000_position": {
+    "label": "Gestion de position KB1000",
+    "description": "Break-even réel calibré broker, paliers de TP, clôtures partielles natives MT5.",
+    "global": {...}, "symbols": {...},
+    "position_management": "kb1000"             <span class="c"># nouveau handler, code séparé</span>
+  },
+}
+
+POSITION_MANAGERS = {
+  "generic": manage_position_generic,           <span class="c"># logique de sortie actuelle, renommée/isolée</span>
+  "kb1000":  manage_position_kb1000,             <span class="c"># nouveau module, Phase 9</span>
+}</pre>
+  <p>Dans la boucle de gestion des positions ouvertes, un seul point de branchement :</p>
+  <pre>handler = POSITION_MANAGERS.get(profile.get("position_management", "generic"))
+close_reason = handler(position, params, ...)</pre>
+
+  <h3>4.2 — Le formulaire génère la liste, il ne la recopie plus</h3>
+  <p>Aujourd'hui <code>index.html</code> a une liste <code>&lt;option&gt;</code> écrite en dur, et <code>renderer.js</code> a sa propre copie <code>strategyProfiles</code> avec des valeurs différentes (la source du bug §2.2). La correction : le backend expose la liste des stratégies disponibles (labels + valeurs) via l'IPC déjà utilisé pour charger les paramètres, et le frontend <b>construit dynamiquement</b> le sélecteur et les valeurs appliquées à partir de cette unique réponse — plus aucune valeur numérique dupliquée côté JS.</p>
+
+  <h3>4.3 — Ce que ça change pour l'ajout de KB1000 (Phase 9)</h3>
+  <ul>
+    <li>Écrire <code>manage_position_kb1000()</code> (break-even calibré broker via <code>tick_value</code>/<code>tick_size</code>/spread/lot, paliers de TP configurables, clôtures partielles natives MT5) — un seul nouveau module Python, sans toucher au reste du moteur.</li>
+    <li>Ajouter une entrée dans <code>STRATEGY_PROFILES</code> avec <code>"position_management": "kb1000"</code>.</li>
+    <li>Le sélecteur "Mode de stratégie" dans Paramètres l'affiche automatiquement (généré dynamiquement, §4.2) — aucune modif HTML/JS supplémentaire.</li>
+    <li>Une fois sélectionné et sauvegardé, l'application l'exécute exactement comme les autres modes : le moteur route vers <code>manage_position_kb1000</code> pour la gestion de position, tout en gardant le profil d'entrée (timeframe/confiance/cadence) que ce mode définit.</li>
+  </ul>
+  <div class="card finding ok">
+    <span class="badge ok">Réponse directe à la demande</span>
+    <p>Avec cette architecture, ajouter une stratégie future ne nécessite plus de savoir jongler entre 3 fichiers : une déclaration dans <code>STRATEGY_PROFILES</code> + un handler de gestion de position suffisent, et le sélecteur de Paramètres se met à jour tout seul.</p>
+  </div>
+</section>
+
+<section>
+  <h2>5. Ce que cette phase ne fait pas (rappel méthode)</h2>
+  <p>Conformément au cycle en 8 étapes, cette Phase 3 est un audit + une proposition d'architecture — <b>aucun code n'a été modifié</b>. Le bug de désynchronisation (§2.2) sera corrigé lors du codage réel de cette refonte (probablement rattaché à la Phase 4/5, puisqu'il touche directement le mécanisme que le nouveau AI Brain devra piloter), pas avant ta validation.</p>
+</section>
+
+</div>
+<footer>Phase 3 — Audit stratégie XAUUSD &amp; extensibilité — 14/07/2026 — AlphaTrade Gold v5.0.0</footer>
+</body>
+</html>

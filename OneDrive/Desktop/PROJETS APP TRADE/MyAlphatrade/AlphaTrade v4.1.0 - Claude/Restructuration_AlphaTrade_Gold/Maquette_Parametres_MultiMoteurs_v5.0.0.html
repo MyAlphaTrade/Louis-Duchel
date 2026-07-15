@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Paramètres multi-moteurs IA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454;
+    --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:1200px; margin:0 auto; padding:0 20px 90px;}
+
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:720px; margin:0 auto; font-size:0.92rem;}
+
+  /* ---- App chrome replica (fidèle à l'app réelle, 9 onglets) ---- */
+  .app-shell{max-width:1600px; margin:30px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-icon-btn:hover{color:var(--red);}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 15px; font-size:12px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:22px;}
+
+  .params-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;}
+  .params-header h2{margin:0; color:#fff; font-size:1.15rem;}
+  .params-header .sub{color:var(--dim); font-size:12px; margin-top:2px;}
+  .doc-btn{background:var(--blue-dim); border:1px solid #1c5a78; color:var(--blue); padding:8px 14px; border-radius:7px;
+    font-size:12.5px; cursor:pointer; display:flex; align-items:center; gap:6px;}
+
+  /* ---- Sélecteur "Moteur IA actif" ---- */
+  .engine-picker{background:var(--panel2); border:1px solid var(--border-strong); border-radius:12px; padding:16px 18px; margin-bottom:18px;}
+  .engine-picker .ep-label{color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;}
+  .engine-cards{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px;}
+  .engine-card{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:13px 15px; cursor:pointer; transition:.15s;}
+  .engine-card:hover{border-color:var(--green-dim);}
+  .engine-card.selected{border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset; background:var(--card2);}
+  .engine-card.future{opacity:.45; cursor:not-allowed;}
+  .engine-card .en-name{color:#fff; font-weight:700; font-size:13.5px; display:flex; align-items:center; justify-content:space-between;}
+  .engine-card.selected .en-name{color:var(--green);}
+  .engine-card .en-badge{font-size:9px; background:var(--green-dim); color:var(--green-soft); padding:2px 7px; border-radius:10px;}
+  .engine-card.future .en-badge{background:#1a2620; color:var(--dim);}
+  .engine-card .en-desc{color:var(--muted); font-size:11.5px; margin:6px 0 9px; line-height:1.4;}
+  .chips{display:flex; flex-wrap:wrap; gap:4px;}
+  .chip{font-size:9.5px; padding:2px 7px; border-radius:10px; border:1px solid var(--border-strong); color:var(--muted);}
+  .chip.on{background:var(--blue-dim); color:var(--blue); border-color:#1c5a78;}
+
+  .psection{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; margin-bottom:16px; overflow:hidden;}
+  .psection .phead{display:flex; align-items:center; justify-content:space-between; padding:13px 18px; background:var(--card2);
+    border-bottom:1px solid var(--border);}
+  .psection .phead .title{color:var(--green); font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px;}
+  .psection.shared .phead .title{color:var(--orange);}
+  .psection .phead .count{color:var(--dim); font-size:11px;}
+  .pbody{padding:16px 18px;}
+  .field-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 14px;}
+  @media (max-width:820px){.field-grid{grid-template-columns:repeat(2,1fr);}}
+  .field{background:var(--panel2); border:1px solid var(--border); border-radius:7px; padding:8px 10px;}
+  .field label{display:flex; align-items:center; gap:5px; color:var(--dim); font-size:10px; text-transform:uppercase;
+    letter-spacing:0.3px; margin-bottom:5px;}
+  .field .fval{color:var(--text); font-size:13px;}
+  .field.check .fval{display:flex; align-items:center; gap:6px;}
+  .field.check .fval::before{content:"☑"; color:var(--green);}
+  .field.new{border-color:var(--blue-dim);}
+  .tag-mini{font-size:8.5px; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:middle; background:var(--blue-dim); color:var(--blue);}
+
+  .info-dot{position:relative; color:var(--blue); font-size:10.5px; cursor:help; font-weight:700;}
+  .info-dot::after{
+    content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%);
+    width:220px; background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px;
+    line-height:1.5; padding:9px 11px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20; text-transform:none;
+  }
+  .info-dot:hover::after{opacity:1;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--orange);
+    border-radius:8px; padding:12px 16px; margin:14px 0; font-size:0.88rem;}
+  .callout b{color:#fff;}
+  .callout.shared{border-left-color:var(--orange);}
+
+  /* ---- Aperçu cascade KB1 ---- */
+  .cascade-preview{background:var(--panel2); border:1px solid var(--border-strong); border-radius:10px; padding:14px 16px; margin-top:12px;}
+  .cascade-preview .cp-label{color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;}
+  .cascade-chain{display:flex; align-items:center; flex-wrap:wrap; gap:2px;}
+  .cascade-node{display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 10px; border-radius:8px; min-width:64px;}
+  .cascade-node .cn-tf{font-size:11px; font-weight:700; color:#fff;}
+  .cascade-node .cn-trend{font-size:9.5px; padding:1px 6px; border-radius:8px;}
+  .cascade-node.aligned{background:rgba(57,255,136,0.08); border:1px solid var(--green-dim);}
+  .cascade-node.aligned .cn-trend{background:var(--green-dim); color:var(--green-soft);}
+  .cascade-node.broken{background:rgba(255,92,108,0.08); border:1px solid var(--red-dim);}
+  .cascade-node.broken .cn-trend{background:var(--red-dim); color:var(--red);}
+  .cascade-node.neutral{background:var(--card); border:1px solid var(--border);}
+  .cascade-node.neutral .cn-trend{background:var(--border-strong); color:var(--dim);}
+  .cascade-arrow{color:var(--dim); font-size:13px; padding:0 2px;}
+  .cascade-result{display:flex; gap:18px; flex-wrap:wrap; margin-top:12px; font-size:12px;}
+  .cascade-result .cr-item .cr-k{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .cascade-result .cr-item .cr-v{color:var(--text); font-weight:700; margin-top:2px;}
+  .cascade-result .cr-item .cr-v.bad{color:var(--red);}
+  .cascade-result .cr-item .cr-v.good{color:var(--green-soft);}
+
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — Phase 3bis — aucun code touché</div>
+  <h1>Page Paramètres — Sélecteur "Moteur IA actif"</h1>
+  <p>La page se reconstruit selon le moteur choisi. La section "Protection du compte" (en orange) reste strictement identique quel que soit le moteur sélectionné — c'est la preuve visuelle qu'elle n'est jamais dupliquée. Cliquez sur une carte moteur pour voir la page changer.</p>
+</header>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span>
+      <span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>03:12:44</b></div>
+      <div class="tb-session">Session <b>Tokyo</b> 06:12:44</div>
+      <div class="tb-clock">mer. 03h12 44s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn" title="Déconnexion">⏻</div>
+      <div class="tb-icon-btn" title="Thème">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div>
+    <div class="t">Trades</div>
+    <div class="t">Sessions IA</div>
+    <div class="t">Microstructure</div>
+    <div class="t">Sessions marché</div>
+    <div class="t">Calendrier</div>
+    <div class="t active">Paramètres</div>
+    <div class="t">Journal</div>
+    <div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+    <div class="params-header">
+      <div>
+        <h2>Paramètres</h2>
+        <div class="sub">Chaque champ affiché dépend du moteur IA actif — généré dynamiquement, pas de page codée en dur par moteur.</div>
+      </div>
+      <div class="doc-btn">ⓘ Documentation paramètres</div>
+    </div>
+
+    <!-- SÉLECTEUR MOTEUR IA -->
+    <div class="engine-picker">
+      <div class="ep-label">Moteur IA actif</div>
+      <div class="engine-cards">
+        <div class="engine-card selected" id="cardAlphaTrade" onclick="selectEngine('alphatrade')">
+          <div class="en-name">⭐ AlphaTrade AI <span class="en-badge">ACTIF</span></div>
+          <div class="en-desc">Moteur historique — EMA, RSI, MACD, momentum, multi-timeframe, mémoire adaptative.</div>
+          <div class="chips">
+            <span class="chip on">Multi-TF</span><span class="chip on">EMA/RSI/MACD</span><span class="chip on">IA locale</span>
+            <span class="chip on">IA cloud</span><span class="chip on">Mémoire</span><span class="chip">Smart Money</span><span class="chip">Fibonacci</span>
+          </div>
+        </div>
+        <div class="engine-card" id="cardKb1000" onclick="selectEngine('kb1000')">
+          <div class="en-name">⭐ KB1000 Gold AI</div>
+          <div class="en-desc">Analyse Smart Money complète — structure, zones, Fibonacci, FVG/BOS/CHOCH, gestion de position intelligente.</div>
+          <div class="chips">
+            <span class="chip on">Multi-TF D1→M1</span><span class="chip on">Smart Money</span><span class="chip on">Fibonacci</span>
+            <span class="chip on">Zones</span><span class="chip on">Lot auto</span><span class="chip on">TP paliers</span><span class="chip on">Break-Even</span>
+          </div>
+        </div>
+        <div class="engine-card future">
+          <div class="en-name">Institutional AI <span class="en-badge">BIENTÔT</span></div>
+          <div class="en-desc">Futur moteur — non construit.</div>
+        </div>
+        <div class="engine-card future">
+          <div class="en-name">News AI <span class="en-badge">BIENTÔT</span></div>
+          <div class="en-desc">Futur moteur — non construit.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VUE ALPHATRADE AI ================= -->
+    <div id="viewAlphaTrade">
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 Stratégie Or — AlphaTrade AI</div><div class="count">10 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Seuil de confiance min <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade.">ⓘ</span></label><div class="fval">60%</div></div>
+            <div class="field"><label>Timeframe d'analyse <span class="info-dot" data-tip="M1 à H1.">ⓘ</span></label><div class="fval">M15</div></div>
+            <div class="field"><label>Cadence d'analyse (s) <span class="info-dot" data-tip="Fréquence de ré-analyse.">ⓘ</span></label><div class="fval">30</div></div>
+            <div class="field"><label>Écart score min BUY/SELL <span class="info-dot" data-tip="Évite les signaux ambigus.">ⓘ</span></label><div class="fval">8</div></div>
+            <div class="field"><label>Zone extrême (edge) % <span class="info-dot" data-tip="Zone haute/basse du range récent.">ⓘ</span></label><div class="fval">15%</div></div>
+            <div class="field"><label>Poids biais multi-timeframe <span class="info-dot" data-tip="Poids du biais M5→H1 dans le score.">ⓘ</span></label><div class="fval">8</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 Connexion &amp; IA</div><div class="count">6 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Serveur IA actif <span class="info-dot" data-tip="Synchronisation serveur local.">ⓘ</span></label><div class="fval">Oui</div></div>
+            <div class="field"><label>Clé API Anthropic <span class="info-dot" data-tip="Prioritaire pour le chat et la validation.">ⓘ</span></label><div class="fval">••••••••••</div></div>
+            <div class="field"><label>Microstructure active <span class="info-dot" data-tip="OBI/OFI/Kyle λ/POC.">ⓘ</span></label><div class="fval">Oui</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 Trailing &amp; Protection (moteur)</div><div class="count">8 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Trail palier 1 <span class="info-dot" data-tip="Premier palier dynamique.">ⓘ</span></label><div class="fval">0.50$ / 20%</div></div>
+            <div class="field"><label>Score sortie momentum <span class="info-dot" data-tip="Sortie si score opposé élevé.">ⓘ</span></label><div class="fval">55</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VUE KB1000 GOLD AI ================= -->
+    <div id="viewKb1000" style="display:none;">
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB1 — Multi-Timeframe (cascade hiérarchique)</div><div class="count">4 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Cascade active <span class="info-dot" data-tip="Ordre fixe, du contexte le plus large au plus fin. Chaque niveau doit s'accorder avec son parent.">ⓘ</span></label><div class="fval">D1 → H4 → H1 → M30 → M15 → M5 → M1</div></div>
+            <div class="field new"><label>Bougies analysées / niveau <span class="tag-mini">nouveau</span><span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer le trend de chaque timeframe (timeframe_trend_context).">ⓘ</span></label><div class="fval">160</div></div>
+            <div class="field new"><label>Seuil de cohérence min % <span class="tag-mini">nouveau</span><span class="info-dot" data-tip="Proportion minimale de niveaux alignés avec D1 pour que la cascade soit considérée exploitable par KB2-KB8. En dessous, KB1 renvoie un biais faible/neutre.">ⓘ</span></label><div class="fval">60%</div></div>
+            <div class="field new"><label>Pondération par niveau <span class="tag-mini">nouveau</span><span class="info-dot" data-tip="Poids décroissant D1→M1 dans le calcul du score de cohérence — un conflit sur D1/H4 pèse plus qu'un conflit sur M5/M1.">ⓘ</span></label><div class="fval">Décroissant (D1 le plus lourd)</div></div>
+          </div>
+
+          <div class="cascade-preview">
+            <div class="cp-label">Aperçu diagnostic (exemple en direct — lecture seule, pas un paramètre)</div>
+            <div class="cascade-chain">
+              <div class="cascade-node aligned"><div class="cn-tf">D1</div><div class="cn-trend">BULLISH</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node aligned"><div class="cn-tf">H4</div><div class="cn-trend">BULLISH</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node aligned"><div class="cn-tf">H1</div><div class="cn-trend">BULLISH</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node broken"><div class="cn-tf">M30</div><div class="cn-trend">BEARISH</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node neutral"><div class="cn-tf">M15</div><div class="cn-trend">RANGE</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node neutral"><div class="cn-tf">M5</div><div class="cn-trend">RANGE</div></div>
+              <div class="cascade-arrow">→</div>
+              <div class="cascade-node neutral"><div class="cn-tf">M1</div><div class="cn-trend">RANGE</div></div>
+            </div>
+            <div class="cascade-result">
+              <div class="cr-item"><div class="cr-k">Biais global (D1)</div><div class="cr-v good">BULLISH</div></div>
+              <div class="cr-item"><div class="cr-k">Cassure de cascade</div><div class="cr-v bad">à M30</div></div>
+              <div class="cr-item"><div class="cr-k">Score de cohérence</div><div class="cr-v">3/7 = 43%</div></div>
+              <div class="cr-item"><div class="cr-k">Utilisable par KB2-KB8 ?</div><div class="cr-v bad">Non (sous le seuil 60%)</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB2 — Structure du marché</div><div class="count">4 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field check"><label>Détection HH/HL/LH/LL <span class="info-dot" data-tip="Points de swing structurants.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field"><label>Classification régime <span class="info-dot" data-tip="Tendance / range / correction / retournement.">ⓘ</span></label><div class="fval">Auto</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB3 — Zones importantes</div><div class="count">5 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field check"><label>Support / Résistance <span class="info-dot" data-tip="Zones de prix clés.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Supply / Demand <span class="info-dot" data-tip="Zones institutionnelles.">ⓘ</span></label><div class="fval">Activé</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB4 — Fibonacci automatique</div><div class="count">3 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Niveaux calculés <span class="info-dot" data-tip="À partir du swing High/Low de KB2.">ⓘ</span></label><div class="fval">38.2 / 50 / 61.8 / 70.5 / 78.6</div></div>
+            <div class="field"><label>Zone d'achat privilégiée <span class="info-dot" data-tip="Zone Fibo considérée favorable.">ⓘ</span></label><div class="fval">61.8 - 78.6</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB5 — Smart Money</div><div class="count">7 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field check"><label>Fair Value Gap (FVG) <span class="info-dot" data-tip="Déséquilibre de prix à combler.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Order Blocks <span class="info-dot" data-tip="Dernière bougie avant impulsion.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Break Of Structure (BOS) <span class="info-dot" data-tip="Confirmation de continuation.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Change Of Character (CHOCH) <span class="info-dot" data-tip="Signal de retournement précoce.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Liquidity Grab <span class="info-dot" data-tip="Chasse aux stops avant retournement.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Equal Highs / Lows <span class="info-dot" data-tip="Zones de liquidité égales.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Premium / Discount <span class="info-dot" data-tip="Position dans le range institutionnel.">ⓘ</span></label><div class="fval">Activé</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB6 — Confirmations</div><div class="count">4 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field check"><label>Confirmation RSI <span class="info-dot" data-tip="Filtre uniquement, plus le cœur du signal.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field check"><label>Confirmation MACD <span class="info-dot" data-tip="Filtre de confirmation.">ⓘ</span></label><div class="fval">Activé</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB7 — IA décisionnelle</div><div class="count">3 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Seuil de qualité min <span class="info-dot" data-tip="Ex: n'autoriser que A+ / A.">ⓘ</span></label><div class="fval">A</div></div>
+            <div class="field"><label>Probabilité min BUY/SELL <span class="info-dot" data-tip="Score de confiance final requis.">ⓘ</span></label><div class="fval">80%</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="psection">
+        <div class="phead"><div class="title">🟦 KB8 — Gestion intelligente de position</div><div class="count">7 champs</div></div>
+        <div class="pbody">
+          <div class="field-grid">
+            <div class="field"><label>Calcul lot auto <span class="info-dot" data-tip="Capital → risque% → distance stop → lot.">ⓘ</span></label><div class="fval">Activé</div></div>
+            <div class="field"><label>Paliers TP <span class="info-dot" data-tip="TP1 / TP2 / TP3 configurables.">ⓘ</span></label><div class="fval">TP1 / TP2 / TP3</div></div>
+            <div class="field"><label>Break-Even réel <span class="info-dot" data-tip="Calibré broker : spread, tick_value, tick_size, lot. Jamais un nombre de pips fixe.">ⓘ</span></label><div class="fval">Activé</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION PARTAGÉE — IDENTIQUE QUEL QUE SOIT LE MOTEUR ================= -->
+    <div class="psection shared">
+      <div class="phead"><div class="title">🟧 Protection du compte <span class="tag-mini" style="background:var(--red-dim); color:var(--red);">COMMUN — NON DUPLIQUÉ</span></div><div class="count">6 champs</div></div>
+      <div class="pbody">
+        <div class="field-grid">
+          <div class="field"><label>Risk % par trade <span class="info-dot" data-tip="Plafonné en dur à 0.50% quel que soit le moteur.">ⓘ</span></label><div class="fval">1.0%</div></div>
+          <div class="field"><label>Plafond lot réel <span class="info-dot" data-tip="Vraie limite envoyée à MT5.">ⓘ</span></label><div class="fval">0.80</div></div>
+          <div class="field"><label>Positions max simultanées <span class="info-dot" data-tip="Plafonné en dur à 8.">ⓘ</span></label><div class="fval">6</div></div>
+          <div class="field"><label>Perte max session <span class="info-dot" data-tip="Protection de perte de session.">ⓘ</span></label><div class="fval">-30$</div></div>
+          <div class="field"><label>Objectif journalier <span class="info-dot" data-tip="Déclenche la protection de bénéfice.">ⓘ</span></label><div class="fval">50$</div></div>
+          <div class="field"><label>Filtre horaire autorisé <span class="info-dot" data-tip="Plage de trading autorisée.">ⓘ</span></label><div class="fval">08:00 → 17:00</div></div>
+        </div>
+        <div class="callout shared"><b>Cette section ne change jamais</b> quand tu changes de moteur ci-dessus — c'est le gestionnaire de compte, indépendant de toute stratégie.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Maquette interactive (cliquez sur une carte moteur) — aucune valeur réelle n'est modifiée.</footer>
+
+<script>
+  function selectEngine(engine){
+    document.getElementById('cardAlphaTrade').classList.toggle('selected', engine === 'alphatrade');
+    document.getElementById('cardKb1000').classList.toggle('selected', engine === 'kb1000');
+    document.getElementById('viewAlphaTrade').style.display = engine === 'alphatrade' ? 'block' : 'none';
+    document.getElementById('viewKb1000').style.display = engine === 'kb1000' ? 'block' : 'none';
+    document.querySelector('#cardAlphaTrade .en-badge')?.remove();
+    document.querySelector('#cardKb1000 .en-badge')?.remove();
+    const badge = document.createElement('span');
+    badge.className = 'en-badge';
+    badge.textContent = 'ACTIF';
+    document.querySelector('#card' + (engine === 'alphatrade' ? 'AlphaTrade' : 'Kb1000') + ' .en-name').appendChild(badge);
+  }
+</script>
+
+</body>
+</html>

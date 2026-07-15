@@ -19,6 +19,17 @@ if str(ENGINE_DIR) not in sys.path:
     sys.path.insert(0, str(ENGINE_DIR))
 
 from market_microstructure import MicrostructureObserver
+from multi_timeframe_cascade import multi_timeframe_cascade, CASCADE_LEVELS
+from market_structure import market_structure, detect_swings, classify_swings
+from market_zones import market_zones
+from market_fibonacci import fibonacci_from_swings
+from market_smart_money import (
+    detect_fvg, detect_order_blocks, detect_bos_choch,
+    detect_liquidity_grabs, detect_equal_levels, premium_discount,
+)
+from market_confirmations import confirmations as kb6_confirmations_check
+from market_decision import decision_score
+from market_position_sizing import calculate_lot, take_profit_levels, break_even_trigger, break_even_level
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
@@ -762,6 +773,188 @@ def multi_timeframe_context(symbol: str, symbol_key: str | None) -> dict:
         "frames": contexts,
         "support_zone": round(max(supports), 5) if supports else 0,
         "resistance_zone": round(min(resistances), 5) if resistances else 0,
+    }
+
+
+def kb1_multi_timeframe_cascade(symbol: str, candles_per_level: int = 160, coherence_threshold_pct: float = 60.0) -> dict:
+    """KB1000 Gold AI — KB1. Cascade hiérarchique D1→M1, indépendante de
+    multi_timeframe_context() (utilisée par AlphaTrade AI, agrégation à plat).
+    Pas encore branchée sur un moteur actif : fonction isolée et testable."""
+    level_contexts = {tf: timeframe_trend_context(symbol, tf, limit=candles_per_level) for tf in CASCADE_LEVELS}
+    return multi_timeframe_cascade(level_contexts, coherence_threshold_pct=coherence_threshold_pct)
+
+
+def kb2_market_structure(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
+    """KB1000 Gold AI — KB2. HH/HL/LH/LL et régime (tendance/range/correction/
+    retournement) sur un timeframe donné. Le détecteur de swing est réutilisé
+    par KB4 (Fibonacci). Pas encore branchée sur un moteur actif."""
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
+    if rates is None or len(rates) < 2 * swing_lookback + 5:
+        return {"regime": "COLLECTING", "swings": [], "swing_count": 0}
+    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
+    return market_structure(ohlc, lookback=swing_lookback)
+
+
+def kb3_market_zones(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
+    """KB1000 Gold AI — KB3. Support/Résistance, Supply/Demand, zones
+    institutionnelles (confluence) — réutilise detect_swings() de KB2.
+    Pas encore branchée sur un moteur actif."""
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
+    if rates is None or len(rates) < 2 * swing_lookback + 5:
+        return {"support": [], "resistance": [], "supply_demand": [], "institutional": []}
+    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
+    swings = detect_swings(ohlc, lookback=swing_lookback)
+    return market_zones(swings)
+
+
+def kb4_fibonacci(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
+    """KB1000 Gold AI — KB4. Niveaux de Fibonacci automatiques à partir du
+    dernier mouvement (swing précédent -> dernier swing), réutilise
+    detect_swings() de KB2. Pas encore branchée sur un moteur actif."""
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
+    if rates is None or len(rates) < 2 * swing_lookback + 5:
+        return {"levels": {}, "direction": None, "swing_low": None, "swing_high": None,
+                "golden_zone": None, "in_golden_zone": None, "nearest_level": None}
+    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
+    swings = detect_swings(ohlc, lookback=swing_lookback)
+    current_price = float(rates[-1][4])
+    return fibonacci_from_swings(swings, current_price=current_price)
+
+
+def kb5_smart_money(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
+    """KB1000 Gold AI — KB5. FVG, Order Blocks, BOS/CHOCH, Liquidity Grab,
+    Equal Highs/Lows, Premium/Discount. Réutilise detect_swings()/
+    classify_swings() de KB2 et la logique de range de KB4.
+    Pas encore branchée sur un moteur actif."""
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
+    empty = {"fvg": [], "order_blocks": [], "bos_choch": [], "liquidity_grabs": [],
+             "equal_highs": [], "equal_lows": [], "premium_discount": {"zone": None, "position_pct": None}}
+    if rates is None or len(rates) < 2 * swing_lookback + 5:
+        return empty
+    ohlc = [{"open": float(row[1]), "high": float(row[2]), "low": float(row[3]), "close": float(row[4])} for row in rates]
+    swings = detect_swings(ohlc, swing_lookback)
+    labeled = classify_swings(swings)
+
+    leg = fibonacci_from_swings(swings, current_price=float(rates[-1][4]))
+    pd = {"zone": None, "position_pct": None}
+    if leg["swing_low"] is not None and leg["swing_high"] is not None:
+        pd = premium_discount(leg["swing_low"], leg["swing_high"], float(rates[-1][4]))
+
+    equals = detect_equal_levels(swings)
+    return {
+        "fvg": detect_fvg(ohlc),
+        "order_blocks": detect_order_blocks(ohlc),
+        "bos_choch": detect_bos_choch(labeled),
+        "liquidity_grabs": detect_liquidity_grabs(ohlc, swings),
+        "equal_highs": equals["equal_highs"],
+        "equal_lows": equals["equal_lows"],
+        "premium_discount": pd,
+    }
+
+
+def kb6_confirmations(symbol: str, candidate_direction: str, timeframe: str = "H1", candles: int = 300,
+                       min_confirmations: int = 3) -> dict:
+    """KB1000 Gold AI — KB6. EMA/RSI/MACD/Momentum comme simples filtres de
+    confirmation d'une direction déjà identifiée par KB1-KB5 (pas le cœur de
+    la décision, contrairement à AlphaTrade AI). Pas encore branchée sur un
+    moteur actif."""
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
+    if rates is None or len(rates) < 55:
+        return {"direction": candidate_direction, "checks": {}, "confirmed_count": 0,
+                "total": 4, "confirmation_pct": 0.0, "confirmed": False, "min_confirmations": min_confirmations}
+    closes = [float(row[4]) for row in rates]
+    return kb6_confirmations_check(closes, candidate_direction, min_confirmations=min_confirmations)
+
+
+def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2,
+                  entry_threshold: float = 70.0) -> dict:
+    """KB1000 Gold AI — KB7. Synthèse pondérée de KB1-KB6 (voir
+    market_decision.decision_score). La direction candidate vient du biais
+    global de KB1 (contexte le plus large en premier, comme demandé) ; si KB1
+    ne donne aucun biais exploitable, aucune décision n'est prise.
+    Extraction des signaux volontairement simplifiée pour cette première
+    version (présence de zones/FVG/Order Block/Liquidity Grab dans la liste,
+    pas encore une vérification de proximité au prix actuel) — à affiner
+    quand ce module sera réellement branché sur un moteur actif.
+    Pas encore branchée sur un moteur actif."""
+    cascade = kb1_multi_timeframe_cascade(symbol, candles_per_level=160)
+    if cascade["global_bias"] == "BULLISH":
+        candidate_direction = "bullish"
+    elif cascade["global_bias"] == "BEARISH":
+        candidate_direction = "bearish"
+    else:
+        return {"candidate_direction": None, "reason": "Biais KB1 non exploitable (RANGE/collecte).",
+                "entry_authorized": False}
+
+    structure = kb2_market_structure(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
+    zones = kb3_market_zones(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
+    fibo = kb4_fibonacci(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
+    smart_money = kb5_smart_money(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
+    confirm = kb6_confirmations(symbol, candidate_direction, timeframe=timeframe, candles=candles)
+
+    zone_type = "demand" if candidate_direction == "bullish" else "supply"
+    zone_match = None
+    if any(z.get("type") == zone_type for z in zones.get("institutional", [])):
+        zone_match = "institutional"
+    elif any(z["type"] == zone_type for z in zones.get("supply_demand", [])):
+        zone_match = "supply_demand"
+
+    bos_choch = smart_money.get("bos_choch", [])
+    last_event = max(bos_choch, key=lambda e: e["index"]) if bos_choch else None
+
+    signals = {
+        "kb1_bias_strength": cascade.get("bias_strength"),
+        "kb1_usable": cascade.get("usable", True),
+        "kb2_regime": structure.get("regime"),
+        "kb3_zone_match": zone_match,
+        "kb4_in_golden_zone": fibo.get("in_golden_zone"),
+        "kb5_last_event": last_event,
+        "kb5_fvg_match": any(g["type"] == candidate_direction for g in smart_money.get("fvg", [])),
+        "kb5_order_block_match": any(o["type"] == candidate_direction for o in smart_money.get("order_blocks", [])),
+        "kb5_liquidity_grab_supportive": any(g["type"] == candidate_direction for g in smart_money.get("liquidity_grabs", [])),
+        "kb6_confirmation_pct": confirm.get("confirmation_pct"),
+    }
+    result = decision_score(signals, candidate_direction, entry_threshold=entry_threshold)
+    result["signals"] = signals
+    return result
+
+
+def kb8_position_plan(symbol: str, direction: str, stop_price: float, risk_pct: float = 1.0,
+                       rr_ratios=(1.0, 2.0, 3.0), close_pct=(0.4, 0.3, 0.3),
+                       activation_rr: float = 0.5, be_buffer_ticks: float = 5) -> dict:
+    """KB1000 Gold AI — KB8 (sizing). Lot calculé depuis le capital réel et le
+    risque accepté, TP par paliers en risk:reward, Break-Even calibré par les
+    specs réelles du broker (tick_value/tick_size/spread) — jamais de valeur
+    en dur. La gestion en direct (manage_position, dans market_position_sizing.py)
+    reste pure et est appelée directement par l'engine avec les données déjà
+    disponibles, sans wrapper MT5 dédié. Pas encore branchée sur un moteur actif."""
+    info = mt5.symbol_info(symbol) if mt5 else None
+    account = mt5.account_info() if mt5 else None
+    if info is None or account is None:
+        return {"lot": 0.0, "reason": "symbol_info ou account_info indisponible"}
+
+    entry_price = float(info.ask if direction == "bullish" else info.bid)
+    tick_size = float(getattr(info, "trade_tick_size", 0) or info.point)
+    tick_value = float(getattr(info, "trade_tick_value", 0) or 0)
+    spread = float(info.ask - info.bid)
+    lot_min = float(getattr(info, "volume_min", 0.01) or 0.01)
+    lot_max = float(getattr(info, "volume_max", 100.0) or 100.0)
+    lot_step = float(getattr(info, "volume_step", 0.01) or 0.01)
+
+    sizing = calculate_lot(float(account.balance), risk_pct, entry_price, stop_price,
+                            tick_value, tick_size, lot_min=lot_min, lot_max=lot_max, lot_step=lot_step)
+    levels = take_profit_levels(entry_price, stop_price, direction, rr_ratios=rr_ratios, close_pct=close_pct)
+    be_trigger = break_even_trigger(entry_price, stop_price, direction, activation_rr=activation_rr)
+    be_price = break_even_level(entry_price, direction, spread, tick_size, buffer_ticks=be_buffer_ticks)
+
+    return {
+        "entry_price": entry_price,
+        "stop_price": stop_price,
+        "direction": direction,
+        "sizing": sizing,
+        "take_profit_levels": levels,
+        "break_even_trigger": be_trigger,
+        "break_even_price": be_price,
     }
 
 
