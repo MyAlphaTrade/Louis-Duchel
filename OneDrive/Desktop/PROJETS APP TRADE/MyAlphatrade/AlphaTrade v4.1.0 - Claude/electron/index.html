@@ -480,6 +480,37 @@
           <button id="advancedSettingsToggle" type="button">Afficher les réglages avancés</button>
         </div>
 
+        <!-- 🟦 Moteur IA actif -->
+        <div class="engine-picker">
+          <div class="ep-label">Moteur IA actif</div>
+          <select name="active_engine" id="activeEngineSelect" class="visually-hidden" tabindex="-1" aria-hidden="true">
+            <option value="alphatrade_ai">AlphaTrade AI</option>
+            <option value="kb1000_gold_ai">KB1000 Gold AI</option>
+          </select>
+          <div class="engine-cards">
+            <div class="engine-card" data-engine="alphatrade_ai">
+              <div class="en-name">⭐ AlphaTrade AI</div>
+              <div class="en-desc">Moteur historique — EMA, RSI, MACD, momentum, multi-timeframe, mémoire adaptative.</div>
+              <div class="chips">
+                <span class="chip on">Multi-TF</span><span class="chip on">EMA/RSI/MACD</span><span class="chip on">IA locale</span>
+                <span class="chip on">IA cloud</span><span class="chip on">Mémoire</span>
+              </div>
+            </div>
+            <div class="engine-card" data-engine="kb1000_gold_ai">
+              <div class="en-name">⭐ KB1000 Gold AI</div>
+              <div class="en-desc">Structure, zones, Fibonacci, Smart Money (FVG/BOS/CHOCH), confirmations, gestion de position intelligente.</div>
+              <div class="chips">
+                <span class="chip on">Multi-TF D1→M1</span><span class="chip on">Smart Money</span><span class="chip on">Fibonacci</span>
+                <span class="chip on">Zones</span>
+              </div>
+            </div>
+            <div class="engine-card future">
+              <div class="en-name">Institutional AI <span class="en-badge">BIENTÔT</span></div>
+              <div class="en-desc">Futur moteur — non construit.</div>
+            </div>
+          </div>
+        </div>
+
         <!-- 🟦 Connexion & IA (avancé) -->
         <article class="panel settings-full-width advanced-setting">
           <div class="panel-title">🟦 Connexion &amp; IA</div>
@@ -528,8 +559,8 @@
           <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
         </article>
 
-        <!-- 🟦 Stratégie Or -->
-        <article class="panel settings-full-width risk-session-panel">
+        <!-- 🟦 Stratégie Or (AlphaTrade AI uniquement) -->
+        <article class="panel settings-full-width risk-session-panel" id="strategieOrPanel">
           <div class="panel-title">🟦 Stratégie Or</div>
           <label>Seuil de confiance min % <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span><input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
           <label>Timeframe d'analyse<select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
@@ -543,6 +574,16 @@
           <label>Zone de bord %<input name="edge_zone_pct" type="number" min="5" max="45"></label>
           <label>Écart BUY/SELL minimum<input name="min_score_gap" type="number" min="5" max="40"></label>
           <label>Marge retournement signal <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span><input data-sym="XAUUSD" name="signal_reversal_margin" type="number" min="5" max="100"></label>
+        </article>
+
+        <!-- 🟦 KB1000 Gold AI — Réglages (KB1000 Gold AI uniquement) -->
+        <article class="panel settings-full-width risk-session-panel" id="kb1000Panel" style="display:none;">
+          <div class="panel-title">🟦 KB1000 Gold AI — Réglages</div>
+          <label>Bougies analysées / niveau (KB1) <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer le trend de chaque niveau de la cascade multi-timeframe D1→M1.">ⓘ</span><input name="kb1000_candles_per_level" type="number" min="60" max="500"></label>
+          <label>Seuil de cohérence min % (KB1) <span class="info-dot" data-tip="Proportion minimale de niveaux alignés avec D1 pour que la cascade multi-timeframe soit considérée exploitable.">ⓘ</span><input name="kb1000_coherence_min_pct" type="number" min="10" max="100"></label>
+          <label>Confirmations min. requises (KB6) <span class="info-dot" data-tip="Sur 4 indicateurs (EMA/RSI/MACD/Momentum), combien doivent confirmer la direction pour valider le setup.">ⓘ</span><input name="kb1000_min_confirmations" type="number" min="1" max="4"></label>
+          <label>Score d'entrée min % (KB7) <span class="info-dot" data-tip="Score de synthèse minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée.">ⓘ</span><input name="kb1000_entry_threshold" type="number" min="40" max="95"></label>
+          <p class="mini-help">KB2 à KB5 (structure, zones, Fibonacci, Smart Money) et KB8 (gestion de position) sont déjà codés et testés mais pas encore branchés sur l'exécution réelle des trades — leurs réglages apparaîtront ici au fur et à mesure de leur intégration.</p>
         </article>
 
         <!-- 🟦 Gestion Rebond XAUUSD (avancé, isolée) -->
@@ -623,6 +664,34 @@
           <div class="params-doc-kv"><span>Utilisation</span><b>position_exit_reason() — protection par position</b></div>
           <div class="params-doc-kv"><span>Impact</span><b>Ferme la position si sa perte dépasse ce seuil</b></div>
           <div class="params-doc-kv"><span>Codé en dur</span><b>NON (activé en Phase 1)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>kb1000_candles_per_level</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB1 (cascade multi-timeframe)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Nombre de bougies historiques utilisées pour calculer la tendance de chaque niveau (D1→M1)</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>160</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>kb1000_coherence_min_pct</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB1 (cascade multi-timeframe)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Sous ce seuil, le biais D1→M1 est jugé non exploitable — aucune décision KB1000 n'est prise</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>60%</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>kb1000_min_confirmations</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB6 (confirmations EMA/RSI/MACD/Momentum)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Nombre d'indicateurs sur 4 devant confirmer la direction du setup</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>3</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>kb1000_entry_threshold</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB7 (synthèse décisionnelle)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Score minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>70%</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
         </div>
       </div>
     </div>

@@ -57,6 +57,9 @@ DEFAULT_PARAMS = {
     "strategy_mode": "scalping_fast",
     "active_engine": "alphatrade_ai",
     "kb1000_entry_threshold": 70.0,
+    "kb1000_candles_per_level": 160,
+    "kb1000_coherence_min_pct": 60.0,
+    "kb1000_min_confirmations": 3,
     "trading_enabled": False,
     "demo_only": False,
     "capital_min": 0.0,
@@ -886,7 +889,8 @@ def kb6_confirmations(symbol: str, candidate_direction: str, timeframe: str = "H
 
 
 def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2,
-                  entry_threshold: float = 70.0) -> dict:
+                  entry_threshold: float = 70.0, kb1_candles_per_level: int = 160,
+                  kb1_coherence_threshold_pct: float = 60.0, kb6_min_confirmations: int = 3) -> dict:
     """KB1000 Gold AI — KB7. Synthèse pondérée de KB1-KB6 (voir
     market_decision.decision_score). La direction candidate vient du biais
     global de KB1 (contexte le plus large en premier, comme demandé) ; si KB1
@@ -896,7 +900,9 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
     pas encore une vérification de proximité au prix actuel) — à affiner
     quand ce module sera réellement branché sur un moteur actif.
     Pas encore branchée sur un moteur actif."""
-    cascade = kb1_multi_timeframe_cascade(symbol, candles_per_level=160)
+    cascade = kb1_multi_timeframe_cascade(
+        symbol, candles_per_level=kb1_candles_per_level, coherence_threshold_pct=kb1_coherence_threshold_pct,
+    )
     if cascade["global_bias"] == "BULLISH":
         candidate_direction = "bullish"
     elif cascade["global_bias"] == "BEARISH":
@@ -909,7 +915,8 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
     zones = kb3_market_zones(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
     fibo = kb4_fibonacci(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
     smart_money = kb5_smart_money(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
-    confirm = kb6_confirmations(symbol, candidate_direction, timeframe=timeframe, candles=candles)
+    confirm = kb6_confirmations(symbol, candidate_direction, timeframe=timeframe, candles=candles,
+                                 min_confirmations=kb6_min_confirmations)
 
     zone_type = "demand" if candidate_direction == "bullish" else "supply"
     zone_match = None
@@ -1002,12 +1009,14 @@ def kb1000_gold_ai_entry_decision(symbol: str, symbol_key: str, params: dict) ->
     """Construit une decision compatible avec le format 'simulated_decision'
     d'AlphaTrade AI (mêmes clés attendues par auto_trade_step), à partir de la
     synthèse KB7 (qui orchestre elle-même KB1-KB6)."""
-    entry_threshold = float(
-        params.get("symbols", {}).get(symbol_key, {}).get(
-            "kb1000_entry_threshold", params.get("kb1000_entry_threshold", 70.0)
-        )
+    entry_threshold = float(params.get("kb1000_entry_threshold", 70.0))
+    kb7 = kb7_decision(
+        symbol,
+        entry_threshold=entry_threshold,
+        kb1_candles_per_level=int(params.get("kb1000_candles_per_level", 160)),
+        kb1_coherence_threshold_pct=float(params.get("kb1000_coherence_min_pct", 60.0)),
+        kb6_min_confirmations=int(params.get("kb1000_min_confirmations", 3)),
     )
-    kb7 = kb7_decision(symbol, entry_threshold=entry_threshold)
     if kb7.get("candidate_direction") is None:
         return {
             "symbol": symbol_key, "signal": "WAIT", "confidence": 0, "eligible": False,

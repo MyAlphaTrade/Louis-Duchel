@@ -31,6 +31,11 @@ const defaults = {
   mt5_path: 'C:\\Program Files\\MetaTrader 5\\terminal64.exe',
   active_symbol: 'XAUUSD',
   strategy_mode: 'scalping_fast',
+  active_engine: 'alphatrade_ai',
+  kb1000_candles_per_level: 160,
+  kb1000_coherence_min_pct: 60,
+  kb1000_min_confirmations: 3,
+  kb1000_entry_threshold: 70,
   mode: 'monitor',
   trading_enabled: false,
   demo_only: false,
@@ -1700,7 +1705,22 @@ function fillSettings(values) {
   if ($('strategyModeToolbar')) $('strategyModeToolbar').value = params.strategy_mode || 'scalping_safe';
   updateStrategyAppliedState(params.strategy_mode || 'scalping_safe');
   updateAssetCards();
+  selectEngine(params.active_engine || 'alphatrade_ai');
 }
+
+function selectEngine(engine) {
+  if ($('activeEngineSelect')) $('activeEngineSelect').value = engine;
+  document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
+    card.classList.toggle('selected', card.dataset.engine === engine);
+  });
+  if ($('strategieOrPanel')) $('strategieOrPanel').style.display = engine === 'alphatrade_ai' ? '' : 'none';
+  if ($('kb1000Panel')) $('kb1000Panel').style.display = engine === 'kb1000_gold_ai' ? '' : 'none';
+  if (params) params.active_engine = engine;
+}
+
+document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
+  card.addEventListener('click', () => selectEngine(card.dataset.engine));
+});
 
 function updateAssetCards() {
   const active = $('settingsForm')?.elements.namedItem('active_symbol')?.value || params?.active_symbol || 'XAUUSD';
