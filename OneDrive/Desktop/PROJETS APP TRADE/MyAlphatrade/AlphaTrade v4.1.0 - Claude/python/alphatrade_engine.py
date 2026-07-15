@@ -29,7 +29,9 @@ from market_smart_money import (
 )
 from market_confirmations import confirmations as kb6_confirmations_check
 from market_decision import decision_score
-from market_position_sizing import calculate_lot, take_profit_levels, break_even_trigger, break_even_level
+from market_position_sizing import (
+    calculate_lot, take_profit_levels, break_even_trigger, break_even_level, stop_placement_from_structure,
+)
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
@@ -53,6 +55,8 @@ DEFAULT_PARAMS = {
     "active_symbol": "XAUUSD",
     "mode": "monitor",
     "strategy_mode": "scalping_fast",
+    "active_engine": "alphatrade_ai",
+    "kb1000_entry_threshold": 70.0,
     "trading_enabled": False,
     "demo_only": False,
     "capital_min": 0.0,
@@ -780,6 +784,8 @@ def kb1_multi_timeframe_cascade(symbol: str, candles_per_level: int = 160, coher
     """KB1000 Gold AI — KB1. Cascade hiérarchique D1→M1, indépendante de
     multi_timeframe_context() (utilisée par AlphaTrade AI, agrégation à plat).
     Pas encore branchée sur un moteur actif : fonction isolée et testable."""
+    if mt5 is None:
+        return multi_timeframe_cascade({}, coherence_threshold_pct=coherence_threshold_pct)
     level_contexts = {tf: timeframe_trend_context(symbol, tf, limit=candles_per_level) for tf in CASCADE_LEVELS}
     return multi_timeframe_cascade(level_contexts, coherence_threshold_pct=coherence_threshold_pct)
 
@@ -788,6 +794,8 @@ def kb2_market_structure(symbol: str, timeframe: str = "H1", candles: int = 300,
     """KB1000 Gold AI — KB2. HH/HL/LH/LL et régime (tendance/range/correction/
     retournement) sur un timeframe donné. Le détecteur de swing est réutilisé
     par KB4 (Fibonacci). Pas encore branchée sur un moteur actif."""
+    if mt5 is None:
+        return {"regime": "COLLECTING", "swings": [], "swing_count": 0}
     rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     if rates is None or len(rates) < 2 * swing_lookback + 5:
         return {"regime": "COLLECTING", "swings": [], "swing_count": 0}
@@ -799,6 +807,8 @@ def kb3_market_zones(symbol: str, timeframe: str = "H1", candles: int = 300, swi
     """KB1000 Gold AI — KB3. Support/Résistance, Supply/Demand, zones
     institutionnelles (confluence) — réutilise detect_swings() de KB2.
     Pas encore branchée sur un moteur actif."""
+    if mt5 is None:
+        return {"support": [], "resistance": [], "supply_demand": [], "institutional": []}
     rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     if rates is None or len(rates) < 2 * swing_lookback + 5:
         return {"support": [], "resistance": [], "supply_demand": [], "institutional": []}
@@ -811,10 +821,13 @@ def kb4_fibonacci(symbol: str, timeframe: str = "H1", candles: int = 300, swing_
     """KB1000 Gold AI — KB4. Niveaux de Fibonacci automatiques à partir du
     dernier mouvement (swing précédent -> dernier swing), réutilise
     detect_swings() de KB2. Pas encore branchée sur un moteur actif."""
+    empty = {"levels": {}, "direction": None, "swing_low": None, "swing_high": None,
+             "golden_zone": None, "in_golden_zone": None, "nearest_level": None}
+    if mt5 is None:
+        return empty
     rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     if rates is None or len(rates) < 2 * swing_lookback + 5:
-        return {"levels": {}, "direction": None, "swing_low": None, "swing_high": None,
-                "golden_zone": None, "in_golden_zone": None, "nearest_level": None}
+        return empty
     ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
     swings = detect_swings(ohlc, lookback=swing_lookback)
     current_price = float(rates[-1][4])
@@ -826,9 +839,11 @@ def kb5_smart_money(symbol: str, timeframe: str = "H1", candles: int = 300, swin
     Equal Highs/Lows, Premium/Discount. Réutilise detect_swings()/
     classify_swings() de KB2 et la logique de range de KB4.
     Pas encore branchée sur un moteur actif."""
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     empty = {"fvg": [], "order_blocks": [], "bos_choch": [], "liquidity_grabs": [],
              "equal_highs": [], "equal_lows": [], "premium_discount": {"zone": None, "position_pct": None}}
+    if mt5 is None:
+        return empty
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     if rates is None or len(rates) < 2 * swing_lookback + 5:
         return empty
     ohlc = [{"open": float(row[1]), "high": float(row[2]), "low": float(row[3]), "close": float(row[4])} for row in rates]
@@ -858,6 +873,10 @@ def kb6_confirmations(symbol: str, candidate_direction: str, timeframe: str = "H
     confirmation d'une direction déjà identifiée par KB1-KB5 (pas le cœur de
     la décision, contrairement à AlphaTrade AI). Pas encore branchée sur un
     moteur actif."""
+    empty = {"direction": candidate_direction, "checks": {}, "confirmed_count": 0,
+             "total": 4, "confirmation_pct": 0.0, "confirmed": False, "min_confirmations": min_confirmations}
+    if mt5 is None:
+        return empty
     rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
     if rates is None or len(rates) < 55:
         return {"direction": candidate_direction, "checks": {}, "confirmed_count": 0,
@@ -919,15 +938,20 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
     return result
 
 
-def kb8_position_plan(symbol: str, direction: str, stop_price: float, risk_pct: float = 1.0,
+def kb8_position_plan(symbol: str, direction: str, stop_price: float | None = None, risk_pct: float = 1.0,
                        rr_ratios=(1.0, 2.0, 3.0), close_pct=(0.4, 0.3, 0.3),
-                       activation_rr: float = 0.5, be_buffer_ticks: float = 5) -> dict:
+                       activation_rr: float = 0.5, be_buffer_ticks: float = 5,
+                       structure_timeframe: str = "H1", structure_candles: int = 300,
+                       swing_lookback: int = 2) -> dict:
     """KB1000 Gold AI — KB8 (sizing). Lot calculé depuis le capital réel et le
     risque accepté, TP par paliers en risk:reward, Break-Even calibré par les
     specs réelles du broker (tick_value/tick_size/spread) — jamais de valeur
-    en dur. La gestion en direct (manage_position, dans market_position_sizing.py)
-    reste pure et est appelée directement par l'engine avec les données déjà
-    disponibles, sans wrapper MT5 dédié. Pas encore branchée sur un moteur actif."""
+    en dur. Si stop_price n'est pas fourni, il est dérivé automatiquement du
+    dernier swing de structure opposé (KB2, réutilise detect_swings) — jamais
+    une distance fixe. La gestion en direct (manage_position, dans
+    market_position_sizing.py) reste pure et est appelée directement par
+    l'engine avec les données déjà disponibles, sans wrapper MT5 dédié.
+    Pas encore branchée sur un moteur actif."""
     info = mt5.symbol_info(symbol) if mt5 else None
     account = mt5.account_info() if mt5 else None
     if info is None or account is None:
@@ -940,6 +964,15 @@ def kb8_position_plan(symbol: str, direction: str, stop_price: float, risk_pct: 
     lot_min = float(getattr(info, "volume_min", 0.01) or 0.01)
     lot_max = float(getattr(info, "volume_max", 100.0) or 100.0)
     lot_step = float(getattr(info, "volume_step", 0.01) or 0.01)
+
+    if stop_price is None:
+        structure = kb2_market_structure(symbol, timeframe=structure_timeframe,
+                                          candles=structure_candles, swing_lookback=swing_lookback)
+        stop_price = stop_placement_from_structure(
+            structure.get("swings", []), direction, buffer_ticks=be_buffer_ticks, tick_size=tick_size,
+        )
+        if stop_price is None:
+            return {"lot": 0.0, "reason": "aucun niveau de structure exploitable pour placer le stop"}
 
     sizing = calculate_lot(float(account.balance), risk_pct, entry_price, stop_price,
                             tick_value, tick_size, lot_min=lot_min, lot_max=lot_max, lot_step=lot_step)
@@ -956,6 +989,67 @@ def kb8_position_plan(symbol: str, direction: str, stop_price: float, risk_pct: 
         "break_even_trigger": be_trigger,
         "break_even_price": be_price,
     }
+
+
+# ── Registre de moteurs IA (Phase 3bis) ─────────────────────────────────────
+# AlphaTrade AI reste calculé inline dans status_payload() pour l'instant
+# (extraction dans une fonction dédiée volontairement différée pour ne pas
+# risquer de modifier son comportement en direct — c'est le moteur qui trade
+# aujourd'hui). Seul le routage change : status_payload() choisit quel
+# résultat utiliser comme decision finale ("simulated_decision") selon
+# active_engine. KB1000 Gold AI est le premier moteur réellement branché ici.
+def kb1000_gold_ai_entry_decision(symbol: str, symbol_key: str, params: dict) -> dict:
+    """Construit une decision compatible avec le format 'simulated_decision'
+    d'AlphaTrade AI (mêmes clés attendues par auto_trade_step), à partir de la
+    synthèse KB7 (qui orchestre elle-même KB1-KB6)."""
+    entry_threshold = float(
+        params.get("symbols", {}).get(symbol_key, {}).get(
+            "kb1000_entry_threshold", params.get("kb1000_entry_threshold", 70.0)
+        )
+    )
+    kb7 = kb7_decision(symbol, entry_threshold=entry_threshold)
+    if kb7.get("candidate_direction") is None:
+        return {
+            "symbol": symbol_key, "signal": "WAIT", "confidence": 0, "eligible": False,
+            "reason": kb7.get("reason", "KB1000 Gold AI: aucun biais exploitable."),
+            "engine": "kb1000_gold_ai",
+        }
+    signal = "BUY" if kb7["candidate_direction"] == "bullish" else "SELL"
+    eligible = bool(kb7.get("entry_authorized"))
+    reason = (
+        f"KB1000 Gold AI: setup {kb7['grade']} ({kb7['score']}%), "
+        f"BUY {kb7['probability_buy_pct']}% / SELL {kb7['probability_sell_pct']}%."
+        if eligible else
+        f"KB1000 Gold AI: score {kb7['score']}% insuffisant (seuil {kb7['entry_threshold']}%)."
+    )
+    return {
+        "symbol": symbol_key, "signal": signal, "confidence": kb7["score"],
+        "eligible": eligible, "reason": reason, "engine": "kb1000_gold_ai",
+        "grade": kb7["grade"], "probability_buy_pct": kb7["probability_buy_pct"],
+        "probability_sell_pct": kb7["probability_sell_pct"], "subscores": kb7["subscores"],
+    }
+
+
+ENGINE_REGISTRY = {
+    "alphatrade_ai": {
+        "label": "AlphaTrade AI",
+        "description": "Moteur historique : EMA, RSI, MACD, momentum, multi-timeframe, mémoire adaptative.",
+        "capabilities": {
+            "multi_timeframe": True, "ema_rsi_macd": True, "smart_money": False,
+            "fibonacci": False, "zones_institutionnelles": False, "ia_locale": True,
+            "ia_cloud": True, "memoire": True, "lot_auto": False, "tp_paliers": False, "break_even_reel": False,
+        },
+    },
+    "kb1000_gold_ai": {
+        "label": "KB1000 Gold AI",
+        "description": "Structure, zones, Fibonacci, Smart Money (FVG/BOS/CHOCH), confirmations, gestion de position intelligente.",
+        "capabilities": {
+            "multi_timeframe": True, "ema_rsi_macd": True, "smart_money": True,
+            "fibonacci": True, "zones_institutionnelles": True, "ia_locale": True,
+            "ia_cloud": True, "memoire": False, "lot_auto": True, "tp_paliers": True, "break_even_reel": True,
+        },
+    },
+}
 
 
 def symbol_analysis(symbol: str, params: dict, symbol_key: str | None = None, learning_state: dict | None = None) -> dict:
@@ -3175,7 +3269,15 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         "min_score_gap": min_score_gap,
         "eligible": eligible,
         "reason": decision_reason,
+        "engine": "alphatrade_ai",
     }
+    active_engine = str(params.get("active_engine") or "alphatrade_ai")
+    if active_engine == "kb1000_gold_ai":
+        # Le calcul AlphaTrade AI ci-dessus continue de tourner (analyses[key] est
+        # utilisé ailleurs dans le payload), mais la décision d'entrée retenue
+        # bascule entièrement sur KB1000 Gold AI — aucune ligne du bloc AlphaTrade AI
+        # n'est modifiée, seule la décision finale utilisée par auto_trade_step change.
+        simulated_decision = kb1000_gold_ai_entry_decision(symbol_names.get(active, ""), active, params)
     return {
         "version": VERSION,
         "state": "connected" if account else "disconnected",

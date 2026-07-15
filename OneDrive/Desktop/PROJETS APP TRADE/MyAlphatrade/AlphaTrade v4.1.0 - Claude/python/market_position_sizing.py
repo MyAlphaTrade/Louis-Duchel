@@ -22,6 +22,23 @@ from __future__ import annotations
 # gérée par l'engine au moment de l'intégration.
 
 
+def stop_placement_from_structure(swings: list[dict], direction: str, buffer_ticks: float, tick_size: float) -> float | None:
+    """Stop technique : dernier swing opposé à la direction du trade (dernier
+    swing low sous le prix pour un achat, dernier swing high au-dessus pour
+    une vente), avec une marge de sécurité en ticks. Réutilise directement les
+    swings déjà détectés par KB2 (market_structure.detect_swings) — aucune
+    nouvelle détection, pas de valeur en dur. None si aucun swing pertinent
+    n'est disponible (données insuffisantes)."""
+    relevant_type = "low" if direction == "bullish" else "high"
+    candidates = [s for s in swings if s["type"] == relevant_type]
+    if not candidates:
+        return None
+    last_swing = max(candidates, key=lambda s: s["index"])
+    buffer = buffer_ticks * tick_size
+    price = last_swing["price"] - buffer if direction == "bullish" else last_swing["price"] + buffer
+    return round(price, 5)
+
+
 def calculate_lot(capital: float, risk_pct: float, entry_price: float, stop_price: float,
                    tick_value: float, tick_size: float,
                    lot_min: float = 0.01, lot_max: float = 100.0, lot_step: float = 0.01) -> dict:
