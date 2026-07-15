@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Sommaire — Restructuration AlphaTrade Gold</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:900px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:640px; margin:0 auto;}
+
+  .phase{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:18px 20px; margin:16px 0;
+    display:flex; gap:16px; align-items:flex-start;}
+  .phase .num{width:36px; height:36px; border-radius:9px; background:var(--panel); border:1px solid var(--border-strong);
+    color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:700; flex-shrink:0;}
+  .phase.pending .num{color:var(--dim);}
+  .phase .content{flex:1;}
+  .phase h3{margin:0 0 4px; color:#fff; font-size:1.02rem;}
+  .phase .status{display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .status.done{background:var(--green-dim); color:var(--green-soft);}
+  .status.progress{background:#4a3417; color:var(--orange);}
+  .status.pending{background:#1a2620; color:var(--dim);}
+  .phase .docs{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .phase a.doc{color:var(--green-soft); text-decoration:none; font-size:12.5px; border:1px solid var(--border-strong);
+    border-radius:6px; padding:5px 10px; background:var(--panel);}
+  .phase a.doc:hover{border-color:var(--green-dim); color:var(--green);}
+  .phase p.desc{color:var(--muted); font-size:13px; margin:4px 0 0;}
+
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Sommaire chronologique</div>
+  <h1>Restructuration AlphaTrade Gold</h1>
+  <p>Point d'entrée unique pour retrouver tous les documents de la refonte — dans l'ordre où ils ont été produits, avec le statut de validation de chaque étape.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="phase">
+    <div class="num">0</div>
+    <div class="content">
+      <span class="status done">Validé — 12/07/2026</span>
+      <h3>Audit complet initial (5 axes)</h3>
+      <p class="desc">Isolation Or, état réel des paramètres, stratégie &amp; microstructure, Assistant IA, origine des trades "AVA".</p>
+      <div class="docs"><a class="doc" href="Audit_Complet_AlphaTrade_v4.1.0.html">Audit_Complet_AlphaTrade_v4.1.0.html</a></div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">1a</div>
+    <div class="content">
+      <span class="status done">Validé — 12/07/2026</span>
+      <h3>Phase 1 — Maquette isolation Or (1ère version)</h3>
+      <p class="desc">Avant/après : sélecteur d'actif, page Paramètres (retrait carte BOOM1000), Sessions IA.</p>
+      <div class="docs"><a class="doc" href="Maquette_Phase1_Isolation_Or_v4.1.0.html">Maquette_Phase1_Isolation_Or_v4.1.0.html</a></div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">1b</div>
+    <div class="content">
+      <span class="status done">Validé — 12/07/2026</span>
+      <h3>Phase 1 — Proposition technique paramètres</h3>
+      <p class="desc">Classification A-E de chaque paramètre XAUUSD survivant (garder / supprimer / reconnecter / exposer / fusionner).</p>
+      <div class="docs"><a class="doc" href="Proposition_Technique_Parametres_XAUUSD_v4.1.0.html">Proposition_Technique_Parametres_XAUUSD_v4.1.0.html</a></div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">1c</div>
+    <div class="content">
+      <span class="status done">Validé — 13/07/2026</span>
+      <h3>Phase 1 — Maquette finale Paramètres AlphaTrade Gold</h3>
+      <p class="desc">5 sections (Connexion &amp; IA, Risque &amp; Session, Stratégie Or, Gestion Rebond XAUUSD isolée, Trailing &amp; Protection), info-bulles, bouton Documentation, barre du haut complète sur une ligne, système essentiels/avancés (Connexion&amp;IA + Rebond repliées par défaut). Version <b>5.0.0</b>.</p>
+      <div class="docs"><a class="doc" href="Maquette_Parametres_AlphaTradeGold_v4.1.0.html">Maquette_Parametres_AlphaTradeGold_v4.1.0.html</a></div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">1d</div>
+    <div class="content">
+      <span class="status done">Tour complet des 10 écrans maquetté — 13/07/2026</span>
+      <h3>Phase 1 étendue — Refonte visuelle de toute l'application</h3>
+      <p class="desc">Décision du 12/07/2026 : le style validé pour Paramètres s'applique à toute l'app. Les 10 écrans (9 onglets + Espace client) sont maquettés. Assistant IA inclut la reconnaissance vocale (Phase 7 anticipée). En attente de validation finale avant code.</p>
+      <div class="docs">
+        <a class="doc" href="Maquette_Microstructure_v5.0.0.html">Maquette_Microstructure_v5.0.0.html</a>
+        <a class="doc" href="Maquette_SessionsMarche_Calendrier_Journal_v5.0.0.html">Maquette_SessionsMarche_Calendrier_Journal_v5.0.0.html</a>
+        <a class="doc" href="Maquette_EspaceClient_v5.0.0.html">Maquette_EspaceClient_v5.0.0.html</a>
+        <a class="doc" href="Maquette_AssistantIA_v5.0.0.html">Maquette_AssistantIA_v5.0.0.html</a>
+      </div>
+      <div class="docs">
+        <a class="doc" href="Maquette_Trades_v5.0.0.html">Maquette_Trades_v5.0.0.html</a>
+        <a class="doc" href="Maquette_SessionsIA_v5.0.0.html">Maquette_SessionsIA_v5.0.0.html</a>
+      </div>
+      <div class="docs"><a class="doc" href="Maquette_TableauDeBord_v5.0.0.html">Maquette_TableauDeBord_v5.0.0.html</a></div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="num">1e</div>
+    <div class="content">
+      <span class="status done">Codé, testé en conditions réelles, validé — 14/07/2026</span>
+      <h3>Phase 1 (étendue) — Codage réel + tests</h3>
+      <p class="desc">Retrait total BOOM1000/CRASH1000 (backend + frontend), nettoyage/reconnexion des ~110 paramètres, nouveau thème visuel vert sur toute l'app (10 écrans), cartes redimensionnables partout, infobulles ⓘ personnalisées, modal Documentation paramètres, reconnaissance vocale Assistant IA câblée, colonne "Symbole" retirée des tableaux Trades (app mono-actif), passage en version 5.0.0 (code + package.json + UI). Vérifié en direct dans l'app (login réel, MT5 connecté) sur toutes les pages : Tableau de bord, Trades, Sessions IA, Microstructure, Sessions marché, Calendrier, Journal, Paramètres, Assistant IA, Espace client.</p>
+    </div>
+  </div>
+
+  <div class="phase pending"><div class="num">3</div><div class="content"><span class="status pending">En cours</span><h3>Phase 3 — Audit stratégie XAUUSD actuelle</h3><p class="desc">Audit de la logique de décision réelle (EMA/RSI/MACD/momentum/consensus) + étude d'extensibilité : comment ajouter facilement de nouvelles stratégies (dont la future stratégie de gestion de position portée de KB1000) dans le sélecteur "Mode de stratégie" des Paramètres, et vérification que les modes de stratégie existants sont réellement fonctionnels.</p></div></div>
+  <div class="phase pending"><div class="num">4</div><div class="content"><span class="status pending">À venir</span><h3>Phase 4 — Module multi_timeframe_analyzer.py</h3></div></div>
+  <div class="phase pending"><div class="num">5</div><div class="content"><span class="status pending">À venir</span><h3>Phase 5 — Nouveau AI Brain AlphaTrade</h3></div></div>
+  <div class="phase pending"><div class="num">6</div><div class="content"><span class="status pending">À venir</span><h3>Phase 6 — Étude d'impact Microstructure sur XAUUSD</h3></div></div>
+  <div class="phase pending"><div class="num">7</div><div class="content"><span class="status pending">À venir</span><h3>Phase 7 — Assistant IA : fluidité + reconnaissance vocale</h3></div></div>
+  <div class="phase pending"><div class="num">8</div><div class="content"><span class="status pending">À venir</span><h3>Phase 8 — Origine des trades (retrait hardcode "AVA")</h3></div></div>
+  <div class="phase pending"><div class="num">9/10</div><div class="content"><span class="status pending">À venir</span><h3>Phase 9/10 — Stratégie de gestion de position (portage KB1000) + tests/build final</h3><p class="desc">En attente du document Word/PDF détaillant la stratégie KB1000.</p></div></div>
+
+</div>
+<footer>Ce sommaire est mis à jour à chaque nouvelle étape produite ou validée.</footer>
+</body>
+</html>

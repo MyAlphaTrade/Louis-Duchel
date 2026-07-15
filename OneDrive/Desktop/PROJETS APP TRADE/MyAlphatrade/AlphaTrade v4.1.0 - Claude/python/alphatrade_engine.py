@@ -22,9 +22,7 @@ from market_microstructure import MicrostructureObserver
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
-VERSION = "4.1.0"
-HARD_REAL_LOT_CAP = 0.10
-HARD_DEMO_LOT_CAP = 0.10
+VERSION = "5.0.0"
 HARD_RISK_PCT_CAP = 0.50
 HARD_AUTO_POSITION_CAP = 8
 
@@ -36,16 +34,6 @@ SYMBOLS = {
         "aliases": ["XAUUSD", "Gold vs US Dollar", "XAUUSD."],
         "label": "XAU/USD",
         "market": "gold",
-    },
-    "BOOM1000": {
-        "aliases": ["Boom 1000 Index", "BOOM1000", "Boom 1000 Index.", "BOOM1000."],
-        "label": "BOOM1000",
-        "market": "synthetic",
-    },
-    "CRASH1000": {
-        "aliases": ["Crash 1000 Index", "CRASH1000", "Crash 1000 Index.", "CRASH1000."],
-        "label": "CRASH1000",
-        "market": "synthetic",
     },
 }
 
@@ -63,12 +51,9 @@ DEFAULT_PARAMS = {
     "session_max_loss": -150.0,
     "giveback": 100.0,
     "profit_protection_enabled": True,
-    "profit_protection_start": 25.0,
     "profit_drawdown_pct": 30.0,
     "profit_drawdown_min": 10.0,
     "profit_warning_ratio": 0.75,
-    "profit_ai_grace_sec": 30,
-    "min_profit": 0.20,
     "risk_pct": 0.35,
     "real_lot_cap": 0.10,
     "demo_lot_cap": 0.10,
@@ -88,11 +73,11 @@ DEFAULT_PARAMS = {
     "ai_server_enabled": True,
     "ai_server_url": "http://127.0.0.1:8765",
     "ai_server_token": "",
-    "ai_observation_mode": True,
     "ai_server_trade_confirmation": True,
     "ai_sync_interval_sec": 5,
     "ai_retrain_interval_min": 360,
-    "rebond_enabled": True,
+    "rebond_enabled": False,
+    "rebond_min_signal_pct": 55,
     "rebond_min_zone_strength": 28,
     "rebond_cooldown_sec": 60,
     "rebond_max_hold_sec": 90,
@@ -107,7 +92,6 @@ DEFAULT_PARAMS = {
             "lot": 0.05,
             "lot_min": 0.01,
             "lot_max": 0.10,
-            "tp_pips": 30,
             "max_positions": 5,
             "max_position_loss": 20,
             "max_floating_loss": 50,
@@ -137,120 +121,9 @@ DEFAULT_PARAMS = {
             "partial_tp_count": 3,
             "partial_tp_close_pct": 25,
             "partial_tp_move_be": True,
-        },
-        "BOOM1000": {
-            "lot": 0.20,
-            "lot_min": 0.20,
-            "lot_max": 0.50,
-            "tp_pips": 15,
-            "max_positions": 3,
-            "max_position_loss": 150,
-            "max_floating_loss": 300,
-            "timeframe": "M1",
-            "confidence_min": 55,
-            "cadence_sec": 30,
-            "max_trades_hour": 40,
-            "max_hold_sec": 60,
-            "position_review_sec": 120,
-            "profit_target": 50.00,
-            "profit_lock_trigger": 3.00,
-            "profit_lock_drawdown": 1.00,
-            "emergency_loss_limit": 150.00,
-            "min_positive_exit": 0.09,
-            "signal_reversal_margin": 9,
-            "cooldown_after_loss_sec": 120,
-            "session_filter_enabled": False,
-            "partial_tp_enabled": False,
-            "partial_tp_count": 3,
-            "partial_tp_close_pct": 25,
-            "partial_tp_move_be": True,
-            # ── Cycle Manager Phase 2.3 — valeurs provisoires observation ──────
-            # Calibration après collecte données. Tous modules désactivés.
-            "cycle_manager_enabled": False,
-            # BPPL — Basket Profit Priority Layer
-            "bppl_enabled": False,
-            "bppl_trigger_profit": 5.0,        # seuil absolu $ (OU logique)
-            "bppl_trigger_profit_pct": 3.0,    # seuil relatif % exposition (OU logique)
-            "bppl_profit_reference_mode": "fixed",  # "fixed" | "exposure" | "risk"
-            "bppl_close_n_first": 2,
-            "bppl_tie_threshold_pct": 10.0,
-            "bppl_use_reversal_risk": True,
-            "bppl_risk_weight_extension": 50,
-            "bppl_risk_weight_distance": 30,
-            "bppl_risk_weight_spike_timing": 20,
-            "bppl_qpc_override_pips": 5,       # provisoire observation
-            "bppl_peg_override_pct": 0.20,
-            "bppl_max_hold_sec": 180,
-            "bppl_resume_min_profit": 0.50,
-            # QPC — Quick Profit Capture
-            "qpc_enabled": False,
-            "qpc_tier1_age_sec": 20,
-            "qpc_tier1_pips": 8,               # provisoire observation
-            "qpc_tier2_age_sec": 45,
-            "qpc_tier2_pips": 5,               # provisoire observation
-            "qpc_extended_reduction_pct": 30,
-            # ── Opportunity Engine v5 — valeurs provisoires observation ─────────
-            "oe_enabled": False,
-            "oe_level_accum": 35,
-            "oe_level_exhaust": 55,
-            "oe_level_prespike": 75,
-            "oe_decel_exhaust_min": 0.35,
-            "oe_decel_prespike_min": 0.55,
-            "oe_w_c_trending": 0.25, "oe_w_d_trending": 0.50, "oe_w_dec_trending": 0.25,
-            "oe_w_c_accum": 0.40,   "oe_w_d_accum": 0.35,   "oe_w_dec_accum": 0.25,
-            "oe_w_c_exhaust": 0.30, "oe_w_d_exhaust": 0.30,  "oe_w_dec_exhaust": 0.40,
-            "oe_w_c_prespike": 0.30, "oe_w_d_prespike": 0.35, "oe_w_dec_prespike": 0.35,
-            "oe_w_c_post": 0.50,    "oe_w_d_post": 0.30,     "oe_w_dec_post": 0.20,
-            "oe_candles_ref": 40,
-            "oe_lot_ratio_min": 0.10,
-            "oe_lot_cap_accumulation": 0.50,
-            "oe_lot_cap_exhaustion": 0.80,
-            "oe_lot_cap_prespike": 1.00,
-            "oe_basket_risk_ref": 50.0,
-            "oe_impulse_ratio": 1.5,
-            "oe_max_sell_count_accum": 3,
-            "oe_max_sell_count_exhaust": 2,
-            "oe_max_sell_count_prespike": 0,
-            "oe_block_sell_on_buy": False,
-            "oe_spike_amplitude_pts": 150.0,
-            "oe_sell_amplitude_pts": 50.0,
-            "oe_pip_value_per_lot": 0.01,
-            "oe_use_observed_stats": False,
-            "oe_min_obs_for_stats": 30,
-            "oe_priority_margin": 1.20,
-            # ── Spike Detector ──────────────────────────────────────────────────
-            "spike_detector_enabled": False,
-            "spike_candle_ratio": 2.5,
-            # ── Spike SELL Guard ────────────────────────────────────────────────
-            "spike_sell_guard_enabled": False,
-            "spike_sell_profit_pips_per_lot": 5.0,
-            "spike_sell_max_loss_pips_per_lot": 15.0,
-            "spike_sell_timeout_sec": 30,
-            "spike_sell_max_count": 2,
-        },
-        "CRASH1000": {
-            "enabled": False,
-            "lot": 0.20,
-            "lot_min": 0.20,
-            "lot_max": 0.50,
-            "tp_pips": 15,
-            "max_positions": 3,
-            "max_position_loss": 150,
-            "max_floating_loss": 300,
-            "timeframe": "M1",
-            "confidence_min": 55,
-            "cadence_sec": 30,
-            "max_trades_hour": 40,
-            "max_hold_sec": 60,
-            "position_review_sec": 120,
-            "profit_target": 50.00,
-            "profit_lock_trigger": 3.00,
-            "profit_lock_drawdown": 1.00,
-            "emergency_loss_limit": 150.00,
-            "min_positive_exit": 0.09,
-            "signal_reversal_margin": 9,
-            "cooldown_after_loss_sec": 120,
-            "session_filter_enabled": False,
+            "lot_multiplicateur_renfort": 1.0,
+            "renfort_high_confidence_min": 75,
+            "lot_multiplicateur_rebond": 3.0,
         },
     },
 }
@@ -262,8 +135,6 @@ STRATEGY_PROFILES = {
         "global": {"lookback_candles": 120, "min_score_gap": 8, "edge_zone_pct": 18},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 3.00,  "max_hold_sec": 600},
-            "BOOM1000":  {"timeframe": "M1", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 25.00, "max_hold_sec": 60},
-            "CRASH1000": {"timeframe": "M1", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 25.00, "max_hold_sec": 60},
         },
     },
     "scalping_safe": {
@@ -272,8 +143,6 @@ STRATEGY_PROFILES = {
         "global": {"lookback_candles": 200, "min_score_gap": 10, "edge_zone_pct": 20},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 60, "cadence_sec": 15, "position_review_sec": 120, "profit_target": 5.00,  "max_hold_sec": 1800},
-            "BOOM1000":  {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 20, "position_review_sec": 120, "profit_target": 50.00, "max_hold_sec": 120},
-            "CRASH1000": {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 20, "position_review_sec": 120, "profit_target": 50.00, "max_hold_sec": 120},
         },
     },
     "long_analysis": {
@@ -282,8 +151,6 @@ STRATEGY_PROFILES = {
         "global": {"lookback_candles": 300, "min_score_gap": 12, "edge_zone_pct": 24},
         "symbols": {
             "XAUUSD":   {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 60, "position_review_sec": 300, "profit_target": 10.0,  "max_hold_sec": 3600, "max_positions": 3},
-            "BOOM1000":  {"timeframe": "M5",  "confidence_min": 65, "cadence_sec": 30, "position_review_sec": 180, "profit_target": 100.00, "max_hold_sec": 300, "max_positions": 2},
-            "CRASH1000": {"timeframe": "M5",  "confidence_min": 65, "cadence_sec": 30, "position_review_sec": 180, "profit_target": 100.00, "max_hold_sec": 300, "max_positions": 2},
         },
     },
     "combined": {
@@ -292,18 +159,6 @@ STRATEGY_PROFILES = {
         "global": {"lookback_candles": 240, "min_score_gap": 8, "edge_zone_pct": 20},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 58, "cadence_sec": 12, "position_review_sec": 120, "profit_target": 5.00, "max_hold_sec": 1800},
-            "BOOM1000":  {"timeframe": "M1", "confidence_min": 58, "cadence_sec": 15, "position_review_sec": 90,  "profit_target": 40.00, "max_hold_sec": 90},
-            "CRASH1000": {"timeframe": "M1", "confidence_min": 58, "cadence_sec": 15, "position_review_sec": 90,  "profit_target": 40.00, "max_hold_sec": 90},
-        },
-    },
-    "synthetic_scalp": {
-        "label": "Scalping synthetiques",
-        "description": "Profil dedie aux indices synthetiques Deriv (BOOM1000): signaux M1 rapides, haute confiance requise.",
-        "global": {"lookback_candles": 150, "min_score_gap": 10, "edge_zone_pct": 18},
-        "symbols": {
-            "XAUUSD":   {"timeframe": "M5", "confidence_min": 62, "cadence_sec": 30, "position_review_sec": 120, "profit_target": 5.00,  "max_hold_sec": 600, "max_positions": 2},
-            "BOOM1000":  {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 50.00, "max_hold_sec": 90,  "max_positions": 3},
-            "CRASH1000": {"timeframe": "M1", "confidence_min": 60, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 50.00, "max_hold_sec": 90,  "max_positions": 3},
         },
     },
 }
@@ -332,32 +187,6 @@ REBOND_META: dict = {
     "zones": [],              # Zones S&D identifiées sur M5/M15
     "last_scan": 0.0,         # Dernier scan des zones
     "last_rebond_at": 0.0,    # Dernier rebond ouvert (cooldown)
-}
-
-# ── Module Drift Follower BOOM1000 ─────────────────────────────────────────────
-DRIFT_FOLLOWER_STATE: dict = {
-    "active": False,       # Un SELL de dérive est en cours
-    "ticket": None,        # Ticket MT5 de la position drift
-    "opened_at": 0.0,
-    "last_drift_at": 0.0,  # Cooldown entre deux ouvertures
-}
-
-# ── Module Cycle Manager BOOM1000 Phase 2.3 ────────────────────────────────────
-# Structure par symbole pour éviter les états persistants incorrects et préparer
-# les futurs symboles. Étape 1 : structure uniquement, aucun module actif.
-CYCLE_MANAGER_STATE: dict = {
-    "BOOM1000": {
-        "overlay": None,              # None | "PROFIT_PROTECTION"
-        "bppl_triggered_at": 0.0,
-        "bppl_trigger_source": None,  # "absolute" | "relative" | "both"
-        "bppl_profit_at_trigger": 0.0,
-        "bppl_positions_closed": [],  # [{"ticket": int, "profit": float}]
-        "bppl_profit_secured": 0.0,
-        "last_bppl_at": 0.0,
-        "oe_market_state": "TRENDING_DOWN",
-        "oe_memory": {},
-        "oe_post_spike_until": 0.0,
-    },
 }
 
 try:
@@ -1427,7 +1256,7 @@ def protection_state(params: dict, daily: dict, account_login: int | None) -> di
     session_profit = current - baseline
     daily_peak = max(float(stored.get("daily_peak") or stored.get("peak") or 0), current) if same_session else max(0.0, current)
     enabled = bool(params.get("profit_protection_enabled", True))
-    activation = max(0.0, float(params.get("daily_target", params.get("profit_protection_start", 50))) * 0.5)
+    activation = max(0.0, float(params.get("daily_target", 50)) * 0.5)
     pct = max(0.0, float(params.get("profit_drawdown_pct", 30)))
     pct_allowance = daily_peak * pct / 100
     min_allowance = max(0.0, float(params.get("profit_drawdown_min", 10)))
@@ -1488,7 +1317,6 @@ def protection_state(params: dict, daily: dict, account_login: int | None) -> di
         "allowance": round(allowance, 2),
         "floor": round(floor, 2),
         "warning_floor": round(warning_floor, 2),
-        "ai_grace_sec": max(0, int(params.get("profit_ai_grace_sec", 30))),
     }
     write_json("session_state.json", payload)
     return payload
@@ -1500,8 +1328,8 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         0.0,
         float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10 if is_demo else 0.10)),
     )
-    hard_account_cap = HARD_DEMO_LOT_CAP if is_demo else HARD_REAL_LOT_CAP
-    account_cap = configured_account_cap if configured_account_cap > 0 else hard_account_cap
+    # real_lot_cap / demo_lot_cap sont la vraie limite : aucun plafond caché derrière.
+    account_cap = configured_account_cap
     balance = float(account.balance) if account else 0.0
     effective_risk_pct = min(
         max(0.0, float(params.get("risk_pct", 0.35))),
@@ -1559,8 +1387,6 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         result[key] = {
             "configured_lot": configured,
             "account_cap": account_cap,
-            "configured_account_cap": configured_account_cap,
-            "hard_account_cap": hard_account_cap,
             "symbol_cap": symbol_cap,
             "broker_min": broker_min,
             "broker_step": broker_step,
@@ -1573,7 +1399,7 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             "reason": (
                 "Lot minimal du broker superieur a la limite de securite."
                 if rejected
-                else f"Lot limite par le profil de risque et le plafond absolu {hard_account_cap:.3f}."
+                else f"Lot limite par le profil de risque et le plafond de compte {account_cap:.3f}."
             ),
         }
     return result
@@ -2082,6 +1908,12 @@ def position_exit_reason(
         >= threshold + float(pos_params.get("signal_reversal_margin", 7))
     )
 
+    # Protection individuelle par position — max_position_loss, indépendante
+    # de l'âge de la position ou d'un signal inversé (filet de sécurité absolu).
+    max_position_loss = float(pos_params.get("max_position_loss", 0) or 0)
+    if max_position_loss > 0 and profit <= -abs(max_position_loss):
+        return "MAX_POSITION_LOSS"
+
     # Reaching the session target stops new entries, but must not liquidate
     # positions that were already open. Only a critical hard lock may force
     # an immediate protection exit.
@@ -2115,7 +1947,7 @@ def position_exit_reason(
             return "MOMENTUM_EXIT"
     # Si le module Capture Rebond est actif, on ne ferme JAMAIS sur signal inversé.
     # La position principale reste ouverte — le rebond est géré par auto_rebond_step.
-    rebond_enabled = bool(pos_params.get("rebond_enabled", True))
+    rebond_enabled = bool(pos_params.get("rebond_enabled", False))
     if not rebond_enabled:
         # Fermeture sur signal inversé uniquement si module rebond désactivé
         if age >= review_sec and reversal and profit >= min_positive_exit:
@@ -2235,23 +2067,16 @@ def nearest_obstacle(current_price: float, direction: str, zones: list[dict]) ->
 
 
 def rebond_lot(main_lot: float, zone_strength: int, params: dict, is_demo: bool) -> float:
-    """Calcule le lot du rebond selon la force de la zone détectée.
-    Plus la zone est forte, plus le lot est agressif (jusqu'au lot_max).
-    Le lot est toujours capé par les limites de sécurité existantes."""
+    """Calcule le lot du rebond : lot principal × lot_multiplicateur_rebond (configurable),
+    plafonné par lot_max et le plafond de compte configuré (demo_lot_cap / real_lot_cap)."""
     sym_params = params.get("symbols", {}).get("XAUUSD", {})
     lot_min = float(sym_params.get("lot_min", 0.01))
     lot_max = float(sym_params.get("lot_max", 0.10))
-    hard_cap = HARD_DEMO_LOT_CAP if is_demo else HARD_REAL_LOT_CAP
-    if zone_strength >= 80:
-        # Zone très forte → lot maximum pour maximiser le gain rapide
-        lot = lot_max
-    elif zone_strength >= 65:
-        # Zone forte → double du lot principal
-        lot = min(main_lot * 2, lot_max)
-    else:
-        # Zone modérée → lot standard
-        lot = main_lot
-    lot = max(lot_min, min(lot, lot_max, hard_cap))
+    account_cap = float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10))
+    mult_rebond = float(sym_params.get("lot_multiplicateur_rebond", 1.0))
+    lot = main_lot * max(0.0, mult_rebond)
+    caps = [c for c in (lot_max, account_cap) if c > 0]
+    lot = max(lot_min, min(lot, *caps)) if caps else max(lot_min, lot)
     # Arrondir au step 0.01
     lot = round(round(lot / 0.01) * 0.01, 3)
     return lot
@@ -2308,7 +2133,8 @@ def should_open_rebond(
     else:
         contra_score = score_sell
         rsi_ok = rsi_val >= 65
-    if contra_score < 55 and not rsi_ok:
+    min_signal_pct = float(params.get("rebond_min_signal_pct", 55))
+    if contra_score < min_signal_pct and not rsi_ok:
         reason_reject = f"Signal contra ({contra_score:.0f}%) insuffisant et RSI non extrême — rebond refusé."
         append_jsonl("rebond_log.jsonl", {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -2424,7 +2250,7 @@ def auto_rebond_step(
     """Étape principale du module Capture Rebond (multi-rebond).
     Gère jusqu'à rebond_max_active rebonds simultanés."""
     global REBOND_STATES, REBOND_META
-    rebond_enabled = bool(params.get("rebond_enabled", True))
+    rebond_enabled = bool(params.get("rebond_enabled", False))
     if not rebond_enabled:
         return {"rebond_active": False, "reason": "Module Capture Rebond désactivé."}
 
@@ -2452,7 +2278,7 @@ def auto_rebond_step(
     # ── 1. Fermeture des rebonds actifs ────────────────────────────────────────
     # Promotion: quand plus aucune position normale active, le rebond passe en mode position normale
     all_rebond_t = {int(s.get("ticket") or 0) for s in REBOND_STATES}
-    drift_t = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
+    drift_t = 0
     normal_count = sum(
         1 for p in positions
         if p.get("symbol_key") == symbol_key
@@ -2609,919 +2435,6 @@ def auto_rebond_step(
 # ── Fin module Capture Rebond ──────────────────────────────────────────────────
 
 
-# ── Module Drift Follower BOOM1000 ─────────────────────────────────────────────
-# Stratégie spécifique à BOOM1000 (dérive lente + spikes haussiers).
-# Quand un BUY principal atteint -$1.00, ouvre un SELL (TP=$1.00) dans le sens
-# de la dérive pour capturer des gains pendant la descente sans toucher à XAUUSD.
-
-
-def auto_drift_follower_step(
-    symbol_key: str,
-    symbol: str,
-    positions: list[dict],
-    params: dict,
-    allow_real: bool,
-    is_demo: bool,
-) -> dict:
-    """Module Drift Follower — BOOM1000 uniquement.
-    Ouvre un SELL avec TP=$1.00 quand le BUY principal atteint -$1.00.
-    Ferme automatiquement via TP broker ou à la détection du spike haussier."""
-    global DRIFT_FOLLOWER_STATE
-
-    bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
-    drift_ticket = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
-
-    # Récupération après redémarrage/mise à jour
-    if not DRIFT_FOLLOWER_STATE.get("active"):
-        recovered = next(
-            (p for p in positions
-             if p.get("symbol_key") == symbol_key
-             and p.get("direction") == "SELL"
-             and p.get("origin", "").upper() in bot_flag
-             and "DRIFT" in str(p.get("comment", "")).upper()),
-            None,
-        )
-        if recovered:
-            DRIFT_FOLLOWER_STATE.update({"active": True, "ticket": int(recovered["ticket"]), "last_drift_at": 0})
-            drift_ticket = int(recovered["ticket"])
-            log(f"[DRIFT] État restauré après redémarrage — ticket #{recovered['ticket']}", "INFO")
-
-    # ── 1. Gestion de la position drift en cours ──────────────────────────────
-    if DRIFT_FOLLOWER_STATE.get("active") and drift_ticket:
-        drift_pos = next(
-            (p for p in positions if int(p.get("ticket", 0)) == drift_ticket),
-            None,
-        )
-        if drift_pos is None:
-            # Fermé par le moteur (trail -20% ou TP sécurité MT5)
-            log("[DRIFT] Position drift fermée (trail ou TP).", "SUCCESS")
-            DRIFT_FOLLOWER_STATE.update({"active": False, "ticket": None, "last_drift_at": time.time()})
-            return {"drift_active": False, "reason": "Position drift fermée."}
-
-        drift_profit = float(drift_pos.get("profit", 0))
-        # La position reste ouverte — gérée par position_exit_reason (profit trail -20%)
-        # Pas de fermeture forcée en négatif.
-        return {
-            "drift_active": True,
-            "ticket": drift_ticket,
-            "profit": drift_profit,
-            "reason": "Drift SELL en surveillance.",
-        }
-
-    # ── 2. Cooldown entre deux drifts (60 s) ─────────────────────────────────
-    if time.time() - float(DRIFT_FOLLOWER_STATE.get("last_drift_at", 0)) < 60:
-        return {"drift_active": False, "reason": "Cooldown drift en cours."}
-
-    # ── 3. Chercher une position BUY principale ≤ -$1.00 ────────────────────
-    trigger_threshold = -1.0
-    buy_positions = [
-        p for p in positions
-        if p.get("symbol_key") == symbol_key
-        and p.get("direction") == "BUY"
-        and p.get("origin", "").upper() in bot_flag
-    ]
-    triggered = next(
-        (p for p in buy_positions if float(p.get("profit", 0)) <= trigger_threshold),
-        None,
-    )
-    if not triggered:
-        return {"drift_active": False, "reason": f"Aucun BUY <= {trigger_threshold}$ sur {symbol_key}."}
-
-    # ── 4. Ouvrir un SELL — lot = lot principal × lot_multiplicateur_rebond ──
-    sym_params = params.get("symbols", {}).get(symbol_key, {})
-    base_lot = float(triggered.get("lot") or sym_params.get("lot", 0.01))
-    mult_rebond = float(sym_params.get("lot_multiplicateur_rebond", 1.0))
-    lot_max = float(sym_params.get("lot_max", base_lot))
-    lot = round(min(base_lot * mult_rebond, lot_max), 3) if mult_rebond > 1.0 else base_lot
-    lot_info = {"effective_lot": lot, "reason": f"Drift Follower BOOM1000 x{mult_rebond}"}
-
-    # Override profit_target → 1.0$ sans modifier les params globaux
-    drift_params = {
-        **params,
-        "symbols": {
-            **params.get("symbols", {}),
-            symbol_key: {**sym_params, "profit_target": 1.0},
-        },
-    }
-
-    ok, msg, event = open_position(symbol_key, symbol, "SELL", drift_params, lot_info, {}, allow_real, position_type="DRIFT")
-    if ok:
-        time.sleep(0.2)
-        fresh = live_positions({symbol_key: symbol})
-        new_pos = next(
-            (
-                p for p in sorted(fresh, key=lambda x: -float(x.get("open_timestamp", 0)))
-                if p.get("origin", "").upper() in bot_flag
-                and p.get("direction") == "SELL"
-                and p.get("symbol_key") == symbol_key
-            ),
-            None,
-        )
-        DRIFT_FOLLOWER_STATE.update({
-            "active": True,
-            "ticket": int(new_pos["ticket"]) if new_pos else None,
-            "opened_at": time.time(),
-        })
-        buy_profit = float(triggered.get("profit", 0))
-        log(
-            f"[DRIFT] SELL {lot:.3f} ouvert — BUY principal a {buy_profit:.2f}$ "
-            f"| TP securite +1.00$ | trail -20% actif | {msg}",
-            "SUCCESS",
-        )
-        return {"drift_active": True, "ticket": DRIFT_FOLLOWER_STATE.get("ticket"), "reason": msg}
-
-    log(f"[DRIFT] Ouverture SELL refusee: {msg}", "WARNING")
-    return {"drift_active": False, "reason": msg}
-
-
-# ── Fin module Drift Follower ──────────────────────────────────────────────────
-
-
-# ── Module Cycle Manager BOOM1000 Phase 2.3 ────────────────────────────────────
-
-
-def _log_cycle_manager(symbol_key: str, event: str, **kwargs) -> None:
-    """Appende un événement dans cycle_manager_log.jsonl."""
-    cm = CYCLE_MANAGER_STATE.get(symbol_key, {})
-    payload = {
-        "timestamp": utc_now(),
-        "symbol": symbol_key,
-        "overlay": cm.get("overlay"),
-        "open_positions": kwargs.pop("open_positions", 0),
-        "basket_profit": kwargs.pop("basket_profit", 0.0),
-        "peak_profit": kwargs.pop("peak_profit", 0.0),
-        "event": event,
-    }
-    payload.update(kwargs)
-    append_jsonl("cycle_manager_log.jsonl", payload)
-
-
-def _bppl_exposure(positions: list[dict], sym_params: dict) -> float:
-    """Calcule l'exposition totale du panier (amplitude M1 comme proxy).
-    Valeurs bppl_amplitude_m1 / bppl_pip_value à calibrer après observation."""
-    amplitude_m1 = float(sym_params.get("bppl_amplitude_m1", 50.0))
-    pip_value = float(sym_params.get("bppl_pip_value", 0.01))
-    return sum(
-        float(p.get("lot") or sym_params.get("lot", 0.01)) * amplitude_m1 * pip_value
-        for p in positions
-    )
-
-
-def _bppl_sort_positions(positions: list[dict], sym_params: dict) -> list[dict]:
-    """Tri 3 critères : profit DESC → âge ASC (si profit ≃) → reversal_risk DESC."""
-    tie_pct = float(sym_params.get("bppl_tie_threshold_pct", 10.0)) / 100.0
-    use_risk = bool(sym_params.get("bppl_use_reversal_risk", True))
-    now = time.time()
-    max_profit = max((float(p.get("profit", 0)) for p in positions), default=1.0)
-
-    def sort_key(p):
-        profit = float(p.get("profit", 0))
-        age = now - float(p.get("open_timestamp") or now)
-        # Critère 3 : proxy risque retournement (âge normalisé + distance profit)
-        # Calibration réelle après collecte données — valeurs provisoires observation.
-        risk = min(100, int(age / 60.0 * 30.0 + profit * 2.0)) if use_risk else 0
-        # Regrouper profits similaires pour permettre au critère 2 (âge) de s'appliquer
-        bucket = round(profit / max(max_profit * tie_pct, 0.01)) if tie_pct > 0 else profit
-        return (-bucket, age, -risk)
-
-    return sorted(positions, key=sort_key)
-
-
-def _bppl_close_one(
-    symbol_key: str,
-    pos: dict,
-    reason: str,
-    basket_profit: float,
-    peak_profit: float,
-    all_positions: list[dict],
-) -> bool:
-    """Ferme une position et log l'événement dans cycle_manager_log.jsonl."""
-    global CYCLE_MANAGER_STATE
-    cm = CYCLE_MANAGER_STATE[symbol_key]
-    now = time.time()
-    ticket = int(pos.get("ticket", 0))
-    profit = float(pos.get("profit", 0))
-    ok, msg = close_bot_position(pos, reason)
-    if ok:
-        cm.setdefault("bppl_positions_closed", []).append({"ticket": ticket, "profit": profit})
-        cm["bppl_profit_secured"] = float(cm.get("bppl_profit_secured", 0.0)) + profit
-        log(
-            f"[BPPL] #{ticket} fermée ({reason}) — profit sécurisé: {profit:.2f}$ "
-            f"| total: {cm['bppl_profit_secured']:.2f}$",
-            "SUCCESS",
-        )
-        _log_cycle_manager(
-            symbol_key, "BPPL_POSITION_CLOSED",
-            open_positions=len(all_positions),
-            basket_profit=basket_profit,
-            peak_profit=peak_profit,
-            ticket=ticket,
-            close_reason=reason,
-            profit_closed=profit,
-            total_secured=cm["bppl_profit_secured"],
-        )
-        log_trade_exit(
-            ticket=ticket,
-            symbol_key=symbol_key,
-            direction=str(pos.get("direction", "")),
-            open_timestamp=float(pos.get("open_timestamp") or 0),
-            reason=reason,
-            profit=profit,
-            peak_profit=max(profit, peak_profit),
-            age=max(0.0, now - float(pos.get("open_timestamp") or now)),
-        )
-    else:
-        log(f"[BPPL] Échec fermeture #{ticket}: {msg}", "WARNING")
-    return ok
-
-
-def _bppl_exit(
-    symbol_key: str,
-    reason: str,
-    basket_profit: float,
-    peak_profit: float,
-    n_positions: int,
-) -> None:
-    """Désactive PROFIT_PROTECTION et log la sortie."""
-    cm = CYCLE_MANAGER_STATE.get(symbol_key, {})
-    secured = float(cm.get("bppl_profit_secured", 0.0))
-    cm["overlay"] = None
-    log(
-        f"[BPPL] PROFIT_PROTECTION désactivé ({reason}) — {symbol_key} "
-        f"| profit sécurisé: {secured:.2f}$ | positions restantes: {n_positions}",
-        "INFO",
-    )
-    _log_cycle_manager(
-        symbol_key, "BPPL_EXIT",
-        open_positions=n_positions,
-        basket_profit=basket_profit,
-        peak_profit=peak_profit,
-        exit_reason=reason,
-        total_secured=secured,
-    )
-
-
-def _bppl_step(
-    symbol_key: str,
-    positions: list[dict],
-    basket_profit: float,
-    peak_profit: float,
-    sym_params: dict,
-    allow_real: bool,
-    is_demo: bool,
-) -> dict:
-    """BPPL — Basket Profit Priority Layer. 1 action max par tick moteur."""
-    global CYCLE_MANAGER_STATE
-    cm = CYCLE_MANAGER_STATE[symbol_key]
-    now = time.time()
-
-    # ── Trigger hybride (OU logique) ─────────────────────────────────────────
-    trigger_abs = float(sym_params.get("bppl_trigger_profit", 5.0))
-    trigger_pct = float(sym_params.get("bppl_trigger_profit_pct", 3.0))
-    ref_mode = str(sym_params.get("bppl_profit_reference_mode", "fixed"))
-
-    total_exposure = _bppl_exposure(positions, sym_params) if ref_mode != "fixed" else 0.0
-    hit_abs = basket_profit >= trigger_abs
-    hit_rel = (
-        ref_mode != "fixed"
-        and total_exposure > 0
-        and basket_profit >= total_exposure * trigger_pct / 100.0
-    )
-    trigger_source = (
-        "both" if (hit_abs and hit_rel) else
-        "absolute" if hit_abs else
-        "relative" if hit_rel else
-        None
-    )
-
-    currently_active = cm.get("overlay") == "PROFIT_PROTECTION"
-
-    # ── Activation ───────────────────────────────────────────────────────────
-    if trigger_source and basket_profit > 0 and not currently_active:
-        cm.update({
-            "overlay": "PROFIT_PROTECTION",
-            "bppl_triggered_at": now,
-            "bppl_trigger_source": trigger_source,
-            "bppl_profit_at_trigger": basket_profit,
-            "bppl_positions_closed": [],
-            "bppl_profit_secured": 0.0,
-            "last_bppl_at": now,
-        })
-        log(
-            f"[BPPL] PROFIT_PROTECTION activé — {symbol_key} | "
-            f"profit panier: {basket_profit:.2f}$ | trigger: {trigger_source} | "
-            f"positions: {len(positions)}",
-            "INFO",
-        )
-        _log_cycle_manager(
-            symbol_key, "BPPL_TRIGGERED",
-            open_positions=len(positions),
-            basket_profit=basket_profit,
-            peak_profit=peak_profit,
-            trigger_source=trigger_source,
-            trigger_abs=trigger_abs,
-            trigger_pct=trigger_pct,
-        )
-        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "activated", "blocks_new_entries": True}
-
-    if not currently_active:
-        return {"active": False, "blocks_new_entries": False}
-
-    # ── PROFIT_PROTECTION actif ───────────────────────────────────────────────
-    elapsed = now - float(cm.get("bppl_triggered_at", now))
-    max_hold = int(sym_params.get("bppl_max_hold_sec", 180))
-    peg_pct = float(sym_params.get("bppl_peg_override_pct", 0.20))
-    n_first = int(sym_params.get("bppl_close_n_first", 2))
-    resume_min = float(sym_params.get("bppl_resume_min_profit", 0.50))
-
-    closed_tickets = {int(c["ticket"]) for c in cm.get("bppl_positions_closed", [])}
-    profitable = [
-        p for p in positions
-        if float(p.get("profit", 0)) > 0
-        and int(p.get("ticket", 0)) not in closed_tickets
-    ]
-
-    # PEG renforcé — priorité sur toute autre action
-    if peak_profit > 0 and basket_profit < peak_profit * (1.0 - peg_pct) and profitable:
-        pos = _bppl_sort_positions(profitable, sym_params)[0]
-        _bppl_close_one(symbol_key, pos, "BPPL_PEG", basket_profit, peak_profit, positions)
-        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "peg_close", "blocks_new_entries": True}
-
-    # Timeout — forcer la fermeture d'une position restante en profit
-    if elapsed >= max_hold and profitable:
-        pos = _bppl_sort_positions(profitable, sym_params)[0]
-        _bppl_close_one(symbol_key, pos, "BPPL_TIMEOUT", basket_profit, peak_profit, positions)
-        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "timeout_close", "blocks_new_entries": True}
-
-    # Fermeture prioritaire — 1 position par tick jusqu'à n_first fermées
-    already_closed_n = len(cm.get("bppl_positions_closed", []))
-    if already_closed_n < n_first and profitable:
-        pos = _bppl_sort_positions(profitable, sym_params)[0]
-        _bppl_close_one(symbol_key, pos, "BPPL_PROTECTION", basket_profit, peak_profit, positions)
-        return {"active": True, "overlay": "PROFIT_PROTECTION", "action": "priority_close", "blocks_new_entries": True}
-
-    # Sortie de la protection — aucune position rentable restante ou profit résiduel suffisant
-    if not profitable or basket_profit < resume_min:
-        _bppl_exit(symbol_key, "secured", basket_profit, peak_profit, len(positions))
-        return {"active": False, "blocks_new_entries": False, "action": "exited"}
-    if elapsed >= max_hold:
-        _bppl_exit(symbol_key, "timeout", basket_profit, peak_profit, len(positions))
-        return {"active": False, "blocks_new_entries": False, "action": "timeout_exit"}
-
-    # Surveillance continue — PROFIT_PROTECTION maintenu, QPC override passif
-    return {
-        "active": True,
-        "overlay": "PROFIT_PROTECTION",
-        "action": "monitoring",
-        "elapsed_sec": int(elapsed),
-        "max_hold_sec": max_hold,
-        "profit_secured": float(cm.get("bppl_profit_secured", 0.0)),
-        "blocks_new_entries": True,
-    }
-
-
-def _qpc_step(
-    symbol_key: str,
-    positions: list[dict],
-    basket_profit: float,
-    peak_profit: float,
-    sym_params: dict,
-) -> dict:
-    """QPC — Quick Profit Capture. Ferme 1 position par tick selon ancienneté + seuil.
-    Valeurs tier1/tier2 provisoires — calibration après collecte données."""
-    now = time.time()
-    tier1_age  = int(sym_params.get("qpc_tier1_age_sec", 20))
-    tier1_pips = float(sym_params.get("qpc_tier1_pips", 8.0))
-    tier2_age  = int(sym_params.get("qpc_tier2_age_sec", 45))
-    tier2_pips = float(sym_params.get("qpc_tier2_pips", 5.0))
-
-    tier1, tier2 = [], []
-    for pos in positions:
-        profit = float(pos.get("profit", 0))
-        if profit <= 0:
-            continue
-        age = now - float(pos.get("open_timestamp") or now)
-        if age <= tier1_age and profit >= tier1_pips:
-            tier1.append((profit, age, pos))
-        elif tier1_age < age <= tier2_age and profit >= tier2_pips:
-            tier2.append((profit, age, pos))
-
-    # Tier 1 prioritaire — sinon tier 2 ; dans chaque tier : profit DESC
-    pool = sorted(tier1, key=lambda x: -x[0]) or sorted(tier2, key=lambda x: -x[0])
-    if not pool:
-        return {"active": False}
-
-    tier_name = "tier1" if tier1 else "tier2"
-    profit, age, pos = pool[0]
-    ticket = int(pos.get("ticket", 0))
-    reason = f"QPC_{tier_name.upper()}"
-
-    ok, msg = close_bot_position(pos, reason)
-    if ok:
-        log(
-            f"[QPC] #{ticket} fermée {tier_name} | age: {age:.0f}s | profit: {profit:.2f}$",
-            "SUCCESS",
-        )
-        _log_cycle_manager(
-            symbol_key, "QPC_CLOSE",
-            open_positions=len(positions),
-            basket_profit=basket_profit,
-            peak_profit=peak_profit,
-            ticket=ticket,
-            tier=tier_name,
-            age_sec=round(age, 1),
-            profit_closed=profit,
-        )
-        log_trade_exit(
-            ticket=ticket,
-            symbol_key=symbol_key,
-            direction=str(pos.get("direction", "")),
-            open_timestamp=float(pos.get("open_timestamp") or 0),
-            reason=reason,
-            profit=profit,
-            peak_profit=max(profit, peak_profit),
-            age=max(0.0, age),
-        )
-        return {
-            "active": True, "action": "qpc_close", "tier": tier_name,
-            "ticket": ticket, "profit": profit,
-        }
-    else:
-        log(f"[QPC] Échec fermeture #{ticket}: {msg}", "WARNING")
-        return {"active": False, "action": "error"}
-
-
-# ── Opportunity Engine BOOM1000 (Phase 2.3 v5) ─────────────────────────────────
-
-
-def _oe_memory_update(symbol_key: str, memory: dict, spike_stats: dict) -> dict:
-    """Met à jour la Market Memory avec l'amplitude du spike observé."""
-    if not spike_stats.get("is_spike"):
-        return memory
-    amp = float(spike_stats.get("amplitude_pts", 0))
-    if amp <= 0:
-        return memory
-    memory.setdefault("spike_amplitudes", [])
-    memory["spike_amplitudes"].append(amp)
-    if len(memory["spike_amplitudes"]) > 200:
-        memory["spike_amplitudes"] = memory["spike_amplitudes"][-200:]
-    n = len(memory["spike_amplitudes"])
-    memory["n_obs"] = n
-    memory["avg_amplitude"] = sum(memory["spike_amplitudes"]) / n
-    memory["p90_amplitude"] = sorted(memory["spike_amplitudes"])[int(n * 0.90)]
-    return memory
-
-
-def _oe_dynamic_weights(market_state: str, sym_params: dict) -> dict:
-    """Retourne les poids dynamiques (candles, distance, decel) selon l'état de marché."""
-    s = market_state.lower()
-    if s == "trending_down":
-        return {
-            "candles": float(sym_params.get("oe_w_c_trending", 0.25)),
-            "distance": float(sym_params.get("oe_w_d_trending", 0.50)),
-            "decel": float(sym_params.get("oe_w_dec_trending", 0.25)),
-        }
-    if s == "accumulation":
-        return {
-            "candles": float(sym_params.get("oe_w_c_accum", 0.40)),
-            "distance": float(sym_params.get("oe_w_d_accum", 0.35)),
-            "decel": float(sym_params.get("oe_w_dec_accum", 0.25)),
-        }
-    if s == "exhaustion":
-        return {
-            "candles": float(sym_params.get("oe_w_c_exhaust", 0.30)),
-            "distance": float(sym_params.get("oe_w_d_exhaust", 0.30)),
-            "decel": float(sym_params.get("oe_w_dec_exhaust", 0.40)),
-        }
-    if s == "pre_spike":
-        return {
-            "candles": float(sym_params.get("oe_w_c_prespike", 0.30)),
-            "distance": float(sym_params.get("oe_w_d_prespike", 0.35)),
-            "decel": float(sym_params.get("oe_w_dec_prespike", 0.35)),
-        }
-    return {  # post_spike
-        "candles": float(sym_params.get("oe_w_c_post", 0.50)),
-        "distance": float(sym_params.get("oe_w_d_post", 0.30)),
-        "decel": float(sym_params.get("oe_w_dec_post", 0.20)),
-    }
-
-
-def _oe_count_neg_candles(candles: list[dict], limit: int = 40) -> int:
-    """Compte les bougies consécutives négatives (close < open) depuis la plus récente complétée."""
-    completed = candles[:-1] if len(candles) > 1 else candles
-    count = 0
-    for c in reversed(completed[-limit:]):
-        if float(c.get("close", 0)) < float(c.get("open", 0)):
-            count += 1
-        else:
-            break
-    return count
-
-
-def _oe_detect_spike(candles: list[dict], sym_params: dict) -> dict:
-    """Détecte si la dernière bougie complétée est un spike haussier (corps > ratio × range précédent)."""
-    if not candles or not bool(sym_params.get("spike_detector_enabled", False)):
-        return {"is_spike": False, "amplitude_pts": 0.0}
-    if len(candles) < 3:
-        return {"is_spike": False, "amplitude_pts": 0.0}
-    recent = candles[-2]
-    prev = candles[-3]
-    body = float(recent.get("close", 0)) - float(recent.get("open", 0))
-    if body <= 0:
-        return {"is_spike": False, "amplitude_pts": 0.0}
-    prev_range = max(1e-9, float(prev.get("high", 0)) - float(prev.get("low", 0)))
-    ratio = body / prev_range
-    is_spike = ratio >= float(sym_params.get("spike_candle_ratio", 2.5))
-    return {"is_spike": is_spike, "amplitude_pts": round(body, 4), "ratio": round(ratio, 2)}
-
-
-def _oe_extension_index(
-    neg_candles: int,
-    distance_pts: float,
-    decel_score: float,
-    weights: dict,
-    sym_params: dict,
-) -> float:
-    """Extension Index composite 0→100."""
-    ref = max(1, int(sym_params.get("oe_candles_ref", 40)))
-    spike_amp = max(1e-9, float(sym_params.get("oe_spike_amplitude_pts", 150.0)))
-    candles_score = min(1.0, neg_candles / ref)
-    distance_score = min(1.0, distance_pts / spike_amp)
-    ei = (
-        candles_score * weights.get("candles", 0.35)
-        + distance_score * weights.get("distance", 0.40)
-        + decel_score * weights.get("decel", 0.25)
-    ) * 100.0
-    return round(min(100.0, max(0.0, ei)), 1)
-
-
-def _oe_market_state(
-    ei: float,
-    decel_score: float,
-    sym_params: dict,
-    spike_detected: bool,
-    post_spike_until: float,
-) -> str:
-    """Machine à états : TRENDING_DOWN | ACCUMULATION | EXHAUSTION | PRE_SPIKE | POST_SPIKE."""
-    if post_spike_until > time.time() or spike_detected:
-        return "POST_SPIKE"
-    lvl_accum = float(sym_params.get("oe_level_accum", 35))
-    lvl_exhaust = float(sym_params.get("oe_level_exhaust", 55))
-    lvl_prespike = float(sym_params.get("oe_level_prespike", 75))
-    dec_exhaust = float(sym_params.get("oe_decel_exhaust_min", 0.35))
-    dec_prespike = float(sym_params.get("oe_decel_prespike_min", 0.55))
-    if ei >= lvl_prespike and decel_score >= dec_prespike:
-        return "PRE_SPIKE"
-    if ei >= lvl_exhaust and decel_score >= dec_exhaust:
-        return "EXHAUSTION"
-    if ei >= lvl_accum:
-        return "ACCUMULATION"
-    return "TRENDING_DOWN"
-
-
-def _oe_impulse_check(candles: list[dict], sym_params: dict) -> bool:
-    """Vrai si une impulsion haussière est en cours (corps positif > ratio × range précédent)."""
-    if len(candles) < 3:
-        return False
-    recent = candles[-2]
-    prev = candles[-3]
-    body = float(recent.get("close", 0)) - float(recent.get("open", 0))
-    if body <= 0:
-        return False
-    prev_range = max(1e-9, float(prev.get("high", 0)) - float(prev.get("low", 0)))
-    return (body / prev_range) >= float(sym_params.get("oe_impulse_ratio", 1.5))
-
-
-def _oe_buy_lot_ratio(market_state: str, ei: float, sym_params: dict) -> float:
-    """Lot ratio progressif BUY (fraction de lot_max) selon l'état de marché."""
-    if market_state == "POST_SPIKE":
-        return 0.0
-    min_r = float(sym_params.get("oe_lot_ratio_min", 0.10))
-    if market_state == "TRENDING_DOWN":
-        return min_r
-    cap_accum = float(sym_params.get("oe_lot_cap_accumulation", 0.50))
-    cap_exhaust = float(sym_params.get("oe_lot_cap_exhaustion", 0.80))
-    cap_prespike = float(sym_params.get("oe_lot_cap_prespike", 1.00))
-    lvl_accum = float(sym_params.get("oe_level_accum", 35))
-    lvl_exhaust = float(sym_params.get("oe_level_exhaust", 55))
-    lvl_prespike = float(sym_params.get("oe_level_prespike", 75))
-    if market_state == "PRE_SPIKE":
-        return cap_prespike
-    if market_state == "EXHAUSTION":
-        t = min(1.0, max(0.0, (ei - lvl_exhaust) / max(1.0, lvl_prespike - lvl_exhaust)))
-        return round(cap_exhaust + t * (cap_prespike - cap_exhaust), 2)
-    # ACCUMULATION
-    t = min(1.0, max(0.0, (ei - lvl_accum) / max(1.0, lvl_exhaust - lvl_accum)))
-    return round(min_r + t * (cap_accum - min_r), 2)
-
-
-def _oe_buy_ev(market_state: str, lot_ratio: float, memory: dict, sym_params: dict) -> float:
-    """EV BUY en $ espérés = lot_ratio × lot_max × amplitude_spike × pip_value × spike_prob."""
-    if market_state == "POST_SPIKE":
-        return 0.0
-    use_obs = bool(sym_params.get("oe_use_observed_stats", False))
-    min_obs = int(sym_params.get("oe_min_obs_for_stats", 30))
-    n_obs = int(memory.get("n_obs", 0))
-    if use_obs and n_obs >= min_obs:
-        spike_amp = float(memory.get("avg_amplitude", sym_params.get("oe_spike_amplitude_pts", 150.0)))
-    else:
-        spike_amp = float(sym_params.get("oe_spike_amplitude_pts", 150.0))
-    lot_max = float(sym_params.get("lot_max", 0.50))
-    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
-    spike_prob = {
-        "TRENDING_DOWN": 0.05, "ACCUMULATION": 0.20,
-        "EXHAUSTION": 0.50, "PRE_SPIKE": 0.80,
-    }.get(market_state, 0.0)
-    return round(lot_ratio * lot_max * spike_amp * pip_value * spike_prob, 4)
-
-
-def _oe_sell_ev(n_sell_open: int, max_sell_count: int, sym_params: dict) -> float:
-    """EV SELL en $ espérés. Négatif si déjà au-delà du max autorisé."""
-    if n_sell_open >= max_sell_count:
-        return -1.0
-    sell_amp = float(sym_params.get("oe_sell_amplitude_pts", 50.0))
-    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
-    lot_max = float(sym_params.get("lot_max", 0.50))
-    return round(lot_max * sell_amp * pip_value * 0.60, 4)
-
-
-def _oe_log(symbol_key: str, result: dict) -> None:
-    """Journalise l'état OE dans data/oe_log.jsonl pour observation et calibration."""
-    append_jsonl("data/oe_log.jsonl", {"ts": time.time(), "symbol": symbol_key, **result})
-
-
-def _spike_sell_guard_step(
-    symbol_key: str,
-    boom_positions: list[dict],
-    spike_stats: dict,
-    sym_params: dict,
-) -> dict:
-    """Spike SELL Guard — ferme les SELLs déficitaires pendant un spike haussier."""
-    if not bool(sym_params.get("spike_sell_guard_enabled", False)):
-        return {"active": False}
-    if not spike_stats.get("is_spike"):
-        return {"active": False, "reason": "Aucun spike détecté."}
-    sell_positions = [p for p in boom_positions if p.get("direction") == "SELL"]
-    if not sell_positions:
-        return {"active": True, "spike": True, "sells": 0, "action": "none"}
-    loss_thr_per_lot = float(sym_params.get("spike_sell_max_loss_pips_per_lot", 15.0))
-    pip_value = float(sym_params.get("oe_pip_value_per_lot", 0.01))
-    timeout_sec = float(sym_params.get("spike_sell_timeout_sec", 30))
-    max_count = int(sym_params.get("spike_sell_max_count", 2))
-    sell_positions.sort(key=lambda p: float(p.get("profit", 0)))
-    for pos in sell_positions[:max_count]:
-        profit = float(pos.get("profit", 0))
-        lot = max(1e-9, float(pos.get("lot", 0.01)))
-        age = max(0.0, time.time() - float(pos.get("open_timestamp") or time.time()))
-        loss_thr = -abs(loss_thr_per_lot * lot / pip_value)
-        if profit <= loss_thr or age > timeout_sec:
-            ok, _msg = close_bot_position(pos, "SPIKE_SELL_GUARD")
-            if ok:
-                log_trade_exit(
-                    ticket=int(pos.get("ticket", 0)),
-                    symbol_key=symbol_key,
-                    direction="SELL",
-                    open_timestamp=float(pos.get("open_timestamp") or 0),
-                    reason="SPIKE_SELL_GUARD",
-                    profit=profit,
-                    peak_profit=profit,
-                    age=age,
-                )
-                log(f"[SpikeGuard] SELL #{pos.get('ticket')} fermé {profit:.2f}$ (spike)", "INFO")
-                return {
-                    "active": True, "spike": True, "action": "spike_guard_close",
-                    "ticket": int(pos.get("ticket", 0)), "profit": profit,
-                }
-    return {"active": True, "spike": True, "action": "none", "sells": len(sell_positions)}
-
-
-def _oe_step(
-    symbol_key: str,
-    symbol: str,
-    positions: list[dict],
-    sym_params: dict,
-    state_cm: dict,
-    candles: list[dict],
-    spike_stats: dict,
-) -> dict:
-    """Opportunity Engine v5 — orchestrateur. Retourne le dict de décision OE."""
-    global CYCLE_MANAGER_STATE
-    memory = state_cm.get("oe_memory", {})
-    post_spike_until = float(state_cm.get("oe_post_spike_until", 0.0))
-
-    # Fenêtre POST_SPIKE lors d'un spike détecté
-    if spike_stats.get("is_spike"):
-        guard_timeout = float(sym_params.get("spike_sell_timeout_sec", 30)) * 2
-        CYCLE_MANAGER_STATE[symbol_key]["oe_post_spike_until"] = time.time() + guard_timeout
-        post_spike_until = CYCLE_MANAGER_STATE[symbol_key]["oe_post_spike_until"]
-
-    # Market Memory
-    memory = _oe_memory_update(symbol_key, memory, spike_stats)
-    CYCLE_MANAGER_STATE[symbol_key]["oe_memory"] = memory
-
-    # Métriques brutes
-    neg_candles = _oe_count_neg_candles(candles, limit=int(sym_params.get("oe_candles_ref", 40)))
-    impulse = _oe_impulse_check(candles, sym_params)
-
-    # Distance prix actuel vs plus haut des 20 dernières bougies
-    completed = candles[:-1] if len(candles) > 1 else candles
-    price_now = float(completed[-1].get("close", 0)) if completed else 0.0
-    price_high = max((float(c.get("high", 0)) for c in completed[-20:]), default=price_now)
-    distance_pts = max(0.0, price_high - price_now)
-
-    # Deceleration score : amplitude moyenne des 3 dernières bougies vs 3 précédentes
-    if len(completed) >= 6:
-        recent_avg = sum(
-            abs(float(c.get("close", 0)) - float(c.get("open", 0)))
-            for c in completed[-3:]
-        ) / 3
-        early_avg = sum(
-            abs(float(c.get("close", 0)) - float(c.get("open", 0)))
-            for c in completed[-6:-3]
-        ) / 3
-        decel_score = min(1.0, max(0.0, 1.0 - (recent_avg / max(1e-9, early_avg))))
-    else:
-        decel_score = 0.0
-
-    # Extension Index passe 1 (poids neutres) → état provisoire
-    w_neutral = {"candles": 0.33, "distance": 0.33, "decel": 0.34}
-    ei_temp = _oe_extension_index(neg_candles, distance_pts, decel_score, w_neutral, sym_params)
-    market_state_tmp = _oe_market_state(
-        ei_temp, decel_score, sym_params, spike_stats.get("is_spike", False), post_spike_until
-    )
-
-    # Extension Index passe 2 (poids dynamiques selon état)
-    weights = _oe_dynamic_weights(market_state_tmp, sym_params)
-    ei = _oe_extension_index(neg_candles, distance_pts, decel_score, weights, sym_params)
-    market_state = _oe_market_state(
-        ei, decel_score, sym_params, spike_stats.get("is_spike", False), post_spike_until
-    )
-    CYCLE_MANAGER_STATE[symbol_key]["oe_market_state"] = market_state
-
-    # Lot ratio BUY
-    lot_ratio = _oe_buy_lot_ratio(market_state, ei, sym_params)
-
-    # Sell count actuel
-    bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
-    n_sell = sum(
-        1 for p in positions
-        if p.get("symbol_key") == symbol_key
-        and p.get("direction") == "SELL"
-        and p.get("origin", "").upper() in bot_flag
-    )
-    max_sell_count = {
-        "TRENDING_DOWN": 99,
-        "ACCUMULATION": int(sym_params.get("oe_max_sell_count_accum", 3)),
-        "EXHAUSTION": int(sym_params.get("oe_max_sell_count_exhaust", 2)),
-        "PRE_SPIKE": int(sym_params.get("oe_max_sell_count_prespike", 0)),
-        "POST_SPIKE": 0,
-    }.get(market_state, 99)
-
-    # EV BUY vs EV SELL
-    ev_buy = _oe_buy_ev(market_state, lot_ratio, memory, sym_params)
-    ev_sell = _oe_sell_ev(n_sell, max_sell_count, sym_params)
-
-    # ROM validé : BUY autorisé si EV BUY × marge >= EV SELL, état favorable, pas d'impulsion
-    priority_margin = float(sym_params.get("oe_priority_margin", 1.20))
-    rom_validated = (
-        market_state in ("ACCUMULATION", "EXHAUSTION", "PRE_SPIKE")
-        and not impulse
-        and ev_buy * priority_margin >= ev_sell
-    )
-    if market_state in ("TRENDING_DOWN", "POST_SPIKE"):
-        market_priority = "SELL" if market_state == "TRENDING_DOWN" else "NEUTRAL"
-    elif ev_buy * priority_margin >= ev_sell:
-        market_priority = "BUY"
-    else:
-        market_priority = "SELL" if ev_sell > 0 else "NEUTRAL"
-
-    spike_prob_map = {
-        "TRENDING_DOWN": 0.05, "ACCUMULATION": 0.20,
-        "EXHAUSTION": 0.50, "PRE_SPIKE": 0.80, "POST_SPIKE": 0.0,
-    }
-    result = {
-        "extension_index": ei,
-        "spike_probability": spike_prob_map.get(market_state, 0.0),
-        "opportunity_buy": ev_buy,
-        "opportunity_sell": ev_sell,
-        "market_state": market_state,
-        "weights_used": weights,
-        "market_priority": market_priority,
-        "lot_ratio": lot_ratio,
-        "rom_validated": rom_validated,
-        "impulse_active": impulse,
-        "max_sell_count": max_sell_count,
-        "neg_candles": neg_candles,
-        "distance_pts": round(distance_pts, 4),
-        "decel_score": round(decel_score, 3),
-        "memory_n_obs": int(memory.get("n_obs", 0)),
-        "spike_detected": spike_stats.get("is_spike", False),
-    }
-    _oe_log(symbol_key, result)
-    return result
-
-
-def cycle_manager_boom1000_step(
-    symbol_key: str,
-    symbol: str,
-    positions: list[dict],
-    params: dict,
-    allow_real: bool,
-    is_demo: bool,
-    ia_confidence: float = 0.0,
-) -> dict:
-    """Cycle Manager BOOM1000 — Phase 2.3.
-    Étape 3 : BPPL + QPC + OE v5 actifs."""
-    global CYCLE_MANAGER_STATE
-    sym_params = params.get("symbols", {}).get(symbol_key, {})
-    if not sym_params.get("cycle_manager_enabled", False):
-        return {"cycle_manager_active": False, "reason": "Cycle Manager désactivé."}
-
-    CYCLE_MANAGER_STATE.setdefault(symbol_key, {
-        "overlay": None,
-        "bppl_triggered_at": 0.0,
-        "bppl_trigger_source": None,
-        "bppl_profit_at_trigger": 0.0,
-        "bppl_positions_closed": [],
-        "bppl_profit_secured": 0.0,
-        "last_bppl_at": 0.0,
-        "oe_market_state": "TRENDING_DOWN",
-        "oe_memory": {},
-        "oe_post_spike_until": 0.0,
-    })
-
-    # Positions principales BOOM1000 uniquement (exclure rebonds et drift)
-    bot_flag = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
-    rebond_tickets = {int(s.get("ticket") or 0) for s in REBOND_STATES}
-    drift_ticket = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
-    boom_positions = [
-        p for p in positions
-        if p.get("symbol_key") == symbol_key
-        and p.get("origin", "").upper() in bot_flag
-        and int(p.get("ticket", 0)) not in rebond_tickets
-        and int(p.get("ticket", 0)) != drift_ticket
-    ]
-
-    basket_profit = sum(float(p.get("profit", 0)) for p in boom_positions)
-    contexts = position_contexts()
-    peak_profit = max(
-        (
-            float(contexts.get(str(p.get("ticket")), {}).get("max_profit") or float(p.get("profit", 0)))
-            for p in boom_positions
-        ),
-        default=0.0,
-    )
-
-    result: dict = {
-        "cycle_manager_active": True,
-        "overlay": CYCLE_MANAGER_STATE[symbol_key].get("overlay"),
-        "basket_profit": round(basket_profit, 2),
-        "open_positions": len(boom_positions),
-        "peak_profit": round(peak_profit, 2),
-    }
-
-    # ── BPPL ─────────────────────────────────────────────────────────────────
-    if sym_params.get("bppl_enabled", False):
-        result["bppl"] = _bppl_step(
-            symbol_key, boom_positions, basket_profit, peak_profit,
-            sym_params, allow_real, is_demo,
-        )
-        result["overlay"] = CYCLE_MANAGER_STATE[symbol_key].get("overlay")
-
-    # ── QPC ──────────────────────────────────────────────────────────────────
-    # QPC ne tourne que si BPPL n'a pas déjà fermé une position ce tick
-    bppl_closing = result.get("bppl", {}).get("action") in (
-        "priority_close", "peg_close", "timeout_close"
-    )
-    if sym_params.get("qpc_enabled", False) and not bppl_closing:
-        result["qpc"] = _qpc_step(
-            symbol_key, boom_positions, basket_profit, peak_profit, sym_params,
-        )
-
-    # ── Opportunity Engine + Spike SELL Guard ─────────────────────────────────
-    oe_enabled = bool(sym_params.get("oe_enabled", False))
-    sg_enabled = bool(sym_params.get("spike_sell_guard_enabled", False))
-    if oe_enabled or sg_enabled:
-        candles = symbol_candles(symbol, params, limit=50)
-        if not isinstance(candles, list):
-            candles = []
-        spike_stats = _oe_detect_spike(candles, sym_params)
-        if sg_enabled:
-            result["spike_guard"] = _spike_sell_guard_step(
-                symbol_key, boom_positions, spike_stats, sym_params,
-            )
-            if result["spike_guard"].get("action") == "spike_guard_close":
-                return result
-        if oe_enabled:
-            result["oe"] = _oe_step(
-                symbol_key, symbol, positions, sym_params,
-                CYCLE_MANAGER_STATE[symbol_key], candles, spike_stats,
-            )
-
-    return result
-
-
-# ── Fin module Cycle Manager ───────────────────────────────────────────────────
 
 
 def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, positions: list[dict]) -> dict:
@@ -3569,6 +2482,17 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     contexts = position_contexts()
 
+    # Protection portefeuille : perte flottante totale par symbole (max_floating_loss)
+    floating_breach: set[str] = set()
+    floating_by_symbol: dict[str, float] = {}
+    for position in bot_positions:
+        key = str(position.get("symbol_key") or "")
+        floating_by_symbol[key] = floating_by_symbol.get(key, 0.0) + float(position.get("profit") or 0)
+    for key, floating in floating_by_symbol.items():
+        limit = float(params.get("symbols", {}).get(key, {}).get("max_floating_loss", 0) or 0)
+        if limit > 0 and floating <= -abs(limit):
+            floating_breach.add(key)
+
     for position in bot_positions:
         pos_params = params.get("symbols", {}).get(position.get("symbol_key"), {})
         profit = float(position.get("profit") or 0)
@@ -3576,15 +2500,18 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         peak = max(profit, float(context.get("max_profit") or profit))
         age = max(0, time.time() - float(position.get("open_timestamp") or time.time()))
         position_analysis = payload.get("analysis", {}).get(position.get("symbol_key"), {})
-        close_reason = position_exit_reason(
-            position,
-            pos_params,
-            position_analysis,
-            str(protection.get("state") or ""),
-            str(payload.get("session_access", {}).get(position.get("symbol_key"), {}).get("state") or ""),
-            peak,
-            age,
-        )
+        if position.get("symbol_key") in floating_breach:
+            close_reason = "MAX_FLOATING_LOSS"
+        else:
+            close_reason = position_exit_reason(
+                position,
+                pos_params,
+                position_analysis,
+                str(protection.get("state") or ""),
+                str(payload.get("session_access", {}).get(position.get("symbol_key"), {}).get("state") or ""),
+                peak,
+                age,
+            )
         if close_reason:
             ok, message = close_bot_position(position, close_reason)
             if ok:
@@ -3606,60 +2533,10 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             save_trading_state(state)
             return state
 
-    # ── Module Drift Follower BOOM1000 (indépendant du signal eligible) ────────
-    if symbol and active == "BOOM1000":
-        drift_result = auto_drift_follower_step(
-            active,
-            symbol,
-            positions,
-            params,
-            bool(demo or state.get("real_confirmed")),
-            demo,
-        )
-        state["drift_follower"] = drift_result
-        # ── Module Cycle Manager BOOM1000 (Phase 2.3) ────────────────────────
-        _ia_conf_cm = float(
-            (payload.get("analysis") or {}).get(active or "", {}).get("confidence") or 0
-        )
-        cm_result = cycle_manager_boom1000_step(
-            active,
-            symbol,
-            positions,
-            params,
-            bool(demo or state.get("real_confirmed")),
-            demo,
-            ia_confidence=_ia_conf_cm,
-        )
-        state["cycle_manager"] = cm_result
-        # 1 action par tick — retour immédiat si BPPL a fermé une position
-        if cm_result.get("bppl", {}).get("action") in ("priority_close", "peg_close", "timeout_close"):
-            save_trading_state(state)
-            return state
-        # PROFIT_PROTECTION actif — bloquer nouvelles entrées SELL
-        if cm_result.get("bppl", {}).get("blocks_new_entries"):
-            state["reason"] = "BPPL PROFIT_PROTECTION actif — nouvelles entrées bloquées."
-            save_trading_state(state)
-            return state
-        # QPC close → retour immédiat (1 action par tick)
-        if cm_result.get("qpc", {}).get("action") == "qpc_close":
-            save_trading_state(state)
-            return state
-        # Spike Guard close → retour immédiat
-        if cm_result.get("spike_guard", {}).get("action") == "spike_guard_close":
-            save_trading_state(state)
-            return state
-        # OE POST_SPIKE → observation uniquement, aucune nouvelle entrée
-        if cm_result.get("oe", {}).get("market_state") == "POST_SPIKE":
-            state["reason"] = "OE POST_SPIKE — observation uniquement."
-            save_trading_state(state)
-            return state
-        save_trading_state(state)
-    # ── Fin module Drift Follower + Cycle Manager ────────────────────────────
-
     now = time.time()
-    # Exclure les positions secondaires (rebonds + drift) du comptage
+    # Exclure les positions secondaires (rebonds) du comptage
     rebond_tickets = {int(s.get("ticket") or 0) for s in REBOND_STATES}
-    drift_ticket = int(DRIFT_FOLLOWER_STATE.get("ticket") or 0)
+    drift_ticket = 0
     symbol_bot_positions = [
         p for p in bot_positions
         if p.get("symbol_key") == active
@@ -3678,7 +2555,7 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         ),
     )
     # Réserver 1 slot pour le rebond
-    rebond_enabled = bool(params.get("rebond_enabled", True))
+    rebond_enabled = bool(params.get("rebond_enabled", False))
     effective_max = max(1, max_positions - 1) if rebond_enabled and max_positions > 1 else max_positions
     if len(symbol_main_positions) >= effective_max:
         state["reason"] = f"Max {effective_max} positions sur {active} (1 réservé rebond)."
@@ -3686,27 +2563,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         return state
 
     decision = payload.get("simulated_decision", {})
-    # OE SELL limit — BOOM1000 uniquement (SELLs stratégiques, hors Drift + Rebond)
-    if active == "BOOM1000" and str(decision.get("signal")) == "SELL":
-        _oe_sl = state.get("cycle_manager", {}).get("oe", {})
-        if _oe_sl:
-            _max_sl = int(_oe_sl.get("max_sell_count", 99))
-            _bot_flag_sl = {"BOT", "ALPHATRADE", "ALPHAKARIS"}
-            _n_sl = sum(
-                1 for p in positions
-                if p.get("symbol_key") == active
-                and p.get("direction") == "SELL"
-                and p.get("origin", "").upper() in _bot_flag_sl
-                and int(p.get("ticket", 0)) != drift_ticket   # DRIFT_SELL exclu
-                and int(p.get("ticket", 0)) not in rebond_tickets  # REBOND exclu
-            )
-            if _n_sl >= _max_sl:
-                state["reason"] = (
-                    f"OE {_oe_sl.get('market_state', '?')} — "
-                    f"SELL stratégique bloqué ({_n_sl}/{_max_sl}, hors drift/rebond)."
-                )
-                save_trading_state(state)
-                return state
     if not symbol or not decision.get("eligible"):
         reason = str(decision.get("reason") or "Aucun signal eligible.")
         if state.get("reason") != reason:
@@ -3803,65 +2659,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 broker_min = float(lot_info.get("broker_min", 0))
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
-    # ── OE Gate BUY + lot progressif BOOM1000 ────────────────────────────────
-    if active == "BOOM1000" and str(decision.get("signal")) == "BUY":
-        _oe_bv = state.get("cycle_manager", {}).get("oe", {})
-        if _oe_bv:
-            # Règle absolue 1 : impulsion haussière → interdit (achat au sommet)
-            # Règle absolue 2 : spike venant d'être détecté → interdit
-            _impulse = _oe_bv.get("impulse_active", False)
-            _spike_on = _oe_bv.get("spike_detected", False)
-            if _impulse or _spike_on:
-                _reject_reason = "impulse_active" if _impulse else "spike_detected"
-                append_jsonl("data/oe_log.jsonl", {
-                    "event": "BUY_REJECTED_TOP",
-                    "reason": _reject_reason,
-                    "ts": time.time(),
-                    "extension_index": _oe_bv.get("extension_index", 0),
-                    "market_state": _oe_bv.get("market_state", "?"),
-                    "decel_score": _oe_bv.get("decel_score", 0),
-                    "neg_candles": _oe_bv.get("neg_candles", 0),
-                    "distance_pts": _oe_bv.get("distance_pts", 0),
-                })
-                state["reason"] = f"OE — BUY refusé : {_reject_reason}."
-                save_trading_state(state)
-                return state
-            # Règle 3 : ROM non validé (état de marché défavorable ou EV insuffisant)
-            if not _oe_bv.get("rom_validated", True):
-                _ms = _oe_bv.get("market_state", "?")
-                _ei = _oe_bv.get("extension_index", 0)
-                append_jsonl("data/oe_log.jsonl", {
-                    "event": "BUY_REJECTED_TOP",
-                    "reason": f"rom_not_validated_{_ms}",
-                    "ts": time.time(),
-                    "extension_index": _ei,
-                    "market_state": _ms,
-                    "opportunity_buy": _oe_bv.get("opportunity_buy", 0),
-                    "opportunity_sell": _oe_bv.get("opportunity_sell", 0),
-                    "decel_score": _oe_bv.get("decel_score", 0),
-                    "neg_candles": _oe_bv.get("neg_candles", 0),
-                })
-                state["reason"] = (
-                    f"OE {_ms} — BUY refusé "
-                    f"(EI={_ei:.0f}, "
-                    f"OppBUY={_oe_bv.get('opportunity_buy', 0):.2f}$ "
-                    f"vs OppSELL={_oe_bv.get('opportunity_sell', 0):.2f}$)"
-                )
-                save_trading_state(state)
-                return state
-            _oe_ratio = float(_oe_bv.get("lot_ratio", 0))
-            if _oe_ratio > 0:
-                _lot_max_v = float(symbol_params.get("lot_max", 0.50))
-                _broker_min_v = float(lot_info.get("broker_min", 0.01))
-                _oe_lot = round(max(_broker_min_v, _lot_max_v * _oe_ratio), 2)
-                lot_info = {
-                    **lot_info,
-                    "effective_lot": _oe_lot,
-                    "reason": (
-                        f"OE {_oe_bv.get('market_state', '?')} BUY "
-                        f"(EI={_oe_bv.get('extension_index', 0):.0f}, ratio={_oe_ratio:.2f})"
-                    ),
-                }
     approved_by_server, server_reply = server_trade_confirmation(
         params,
         active,
@@ -3908,7 +2705,7 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
     # ── Module Capture Rebond ──────────────────────────────────────────────────
     # Exécuté après la logique principale. Gère les positions contra-tendance
     # sur rebonds sans interférer avec la position principale.
-    if symbol and active and bool(params.get("rebond_enabled", True)):
+    if symbol and active and bool(params.get("rebond_enabled", False)):
         rebond_result = auto_rebond_step(
             params,
             active,

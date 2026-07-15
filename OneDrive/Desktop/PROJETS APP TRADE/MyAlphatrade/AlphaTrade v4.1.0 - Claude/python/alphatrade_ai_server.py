@@ -249,7 +249,7 @@ def models_payload(conn: sqlite3.Connection) -> dict:
     return {
         "server_version": SERVER_VERSION,
         "ml_available": ML_AVAILABLE,
-        "models": {s: active_model(conn, s) for s in ("XAUUSD", "BOOM1000", "CRASH1000")},
+        "models": {s: active_model(conn, s) for s in ("XAUUSD",)},
     }
 
 

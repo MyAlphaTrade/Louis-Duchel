@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Microstructure AlphaTrade Gold v5.0.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:1600px; margin:0 auto; padding:0 20px 90px;}
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto; font-size:0.92rem;}
+
+  .app-shell{max-width:1600px; margin:30px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-icon-btn:hover{color:var(--red);}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .stat-strip{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border);}
+  .stat-strip .s{flex:1; padding:10px 16px; border-right:1px solid var(--border);}
+  .stat-strip .s:last-child{border-right:none;}
+  .stat-strip .s .l{color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.4px;}
+  .stat-strip .s .v{color:#fff; font-weight:700; font-size:16px; margin-top:2px;}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 16px; font-size:12.5px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:18px;}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; overflow:hidden; margin-bottom:14px;}
+  .card .chead{padding:11px 15px; background:var(--card2); border-bottom:1px solid var(--border);
+    color:var(--green); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .card .cbody{padding:14px 15px; resize:vertical; overflow:auto; min-height:64px; max-height:640px;}
+  .card .cbody::-webkit-resizer{
+    background:linear-gradient(135deg, transparent 0 40%, var(--green-dim) 40% 46%, transparent 46% 58%,
+      var(--green-dim) 58% 64%, transparent 64% 76%, var(--green-dim) 76% 82%, transparent 82%);
+  }
+
+  .hero-row{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+  .hero-row h2{margin:2px 0 6px; color:#fff; font-size:1.05rem;}
+  .hero-row p{margin:0; color:var(--muted); font-size:12.5px; max-width:640px;}
+  .mode-badge{background:var(--orange-dim,#4a3417); border:1px solid #5c3f1a; border-radius:20px; padding:6px 16px; text-align:center;}
+  .mode-badge span{display:block; color:var(--dim); font-size:9px; text-transform:uppercase;}
+  .mode-badge b{color:var(--orange); font-size:13px; letter-spacing:1px;}
+
+  .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+  @media (max-width:1000px){.grid4{grid-template-columns:repeat(2,1fr);}}
+  .metric-card{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px;}
+  .metric-card .mt{color:var(--dim); font-size:10px; text-transform:uppercase; margin-bottom:8px;}
+  .metric-card .row{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .metric-card .row span{color:var(--muted); font-size:11.5px;}
+  .metric-card .row b{color:#fff; font-size:15px;}
+  .meter{height:5px; background:var(--card); border-radius:10px; overflow:hidden; margin:6px 0;}
+  .meter i{display:block; height:100%; width:50%; background:linear-gradient(90deg,var(--red),var(--dim),var(--green));}
+  .metric-card small{color:var(--dim); font-size:10.5px;}
+
+  .diag-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:10px;}
+  @media (max-width:820px){.diag-grid{grid-template-columns:repeat(2,1fr);}}
+  .diag-item{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .diag-item label{display:block; color:var(--dim); font-size:10px; text-transform:uppercase; margin-bottom:4px;}
+  .diag-item b{color:var(--text); font-size:14px;}
+
+  .source-row{display:flex; align-items:center; gap:14px; padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;}
+  .source-row:last-of-type{border-bottom:none;}
+  .source-row b{color:var(--text); font-size:12.5px; min-width:170px;}
+  .source-row .state{font-size:11px; padding:2px 10px; border-radius:20px; background:var(--green-dim); color:var(--green-soft);}
+  .source-row .state.off{background:var(--panel2); color:var(--dim);}
+  .source-row small{color:var(--dim); font-size:11px;}
+
+  .info-dot{position:relative; color:var(--blue); font-size:10px; cursor:help; font-weight:700; margin-left:4px;}
+  .info-dot::after{content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%);
+    width:230px; background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px;
+    line-height:1.5; padding:9px 11px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20;}
+  .info-dot:hover::after{opacity:1;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--orange);
+    border-radius:8px; padding:12px 16px; margin:16px 0; font-size:0.88rem;}
+  .callout.info{border-left-color:var(--blue);}
+  .callout b{color:#fff;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — Microstructure — Étape 3/8 — Aucun code touché</div>
+  <h1>Microstructure — AlphaTrade Gold v5.0.0</h1>
+  <p>Contenu et mode "Observation" identiques à aujourd'hui (Phase 6, l'étude d'impact sur XAU/USD, tranchera plus tard si ce module doit réellement influencer les décisions). Seul le style change, et "/ BOOM 1000" disparaît du libellé de source.</p>
+</header>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span>
+      <span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:31:12</b></div>
+      <div class="tb-session">Session <b>Londres</b> 07:26:49</div>
+      <div class="tb-clock">dim. 19h31 12s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn" title="Déconnexion">⏻</div>
+      <div class="tb-icon-btn" title="Thème">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$3557.25</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v">$3479.65</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div>
+    <div class="t">Trades</div>
+    <div class="t">Sessions IA</div>
+    <div class="t active">Microstructure</div>
+    <div class="t">Sessions marché</div>
+    <div class="t">Calendrier</div>
+    <div class="t">Paramètres</div>
+    <div class="t">Journal</div>
+    <div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+
+    <div class="card">
+      <div class="cbody">
+        <div class="hero-row">
+          <div>
+            <div style="color:var(--green); font-weight:700; font-size:11px; text-transform:uppercase; margin-bottom:4px;">Microstructure du marché</div>
+            <h2>Flux normalisés et pression acheteurs / vendeurs</h2>
+            <p>Module d'observation uniquement. Il enregistre et compare les données, mais ne peut ouvrir, fermer ou modifier aucune position.
+              <span class="info-dot" data-tip="Confirmé par audit technique : aucune fonction de décision du moteur (score, entrée, sortie) ne lit ces valeurs aujourd'hui. Phase 6 étudiera si ça doit changer.">ⓘ</span>
+            </p>
+          </div>
+          <div class="mode-badge"><span>Mode</span><b>OBSERVATION</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid4">
+      <div class="metric-card">
+        <div class="mt">Source active</div>
+        <div style="color:#fff; font-size:13px; font-weight:600;">MT5 - XAU/USD - BROKER</div>
+        <small>Dernière mise à jour : 19:31:11</small>
+      </div>
+      <div class="metric-card">
+        <div class="mt">Pression du carnet</div>
+        <div class="row"><span>OBI <span class="info-dot" data-tip="Order Book Imbalance : déséquilibre entre volume acheteur et vendeur sur les 5 premiers niveaux du carnet.">ⓘ</span></span><b>0.000</b></div>
+        <div class="meter"><i style="width:50%"></i></div>
+        <small>Carnet local équilibré</small>
+      </div>
+      <div class="metric-card">
+        <div class="mt">Flux récent</div>
+        <div class="row"><span>OFI <span class="info-dot" data-tip="Order Flow Imbalance : variation signée du flux d'ordres entre deux instants.">ⓘ</span></span><b>-1.000</b></div>
+        <div class="meter"><i style="width:15%"></i></div>
+        <small>Flux récent favorable aux vendeurs</small>
+      </div>
+      <div class="metric-card">
+        <div class="mt">Impact et volume</div>
+        <div class="row"><span>Kyle λ <span class="info-dot" data-tip="Sensibilité du prix au volume échangé — plus λ est élevé, plus un même volume déplace le prix.">ⓘ</span></span><b>0.00e+0</b></div>
+        <div class="row"><span>POC <span class="info-dot" data-tip="Point de contrôle : zone de prix la plus active dans l'échantillon local récent.">ⓘ</span></span><b>14409.86</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Diagnostic de décision</div>
+      <div class="cbody">
+        <div class="diag-grid">
+          <div class="diag-item"><label>Signal détecté</label><b style="color:var(--green);">BUY 69.5%</b></div>
+          <div class="diag-item"><label>État de l'entrée</label><b>Entrée autorisée</b></div>
+          <div class="diag-item"><label>Blocages observés</label><b>60</b></div>
+          <div class="diag-item"><label>Durée du blocage actuel</label><b>-</b></div>
+        </div>
+        <p style="color:var(--muted); font-size:12px; margin:0;">Signal BUY éligible à 69.5%. <span class="info-dot" data-tip="Ce diagnostic provient de la décision locale du moteur (règles EMA/RSI/MACD), pas directement des métriques OBI/OFI/Kyle/POC ci-dessus — elles sont juxtaposées sur cet écran mais restent deux choses séparées aujourd'hui.">ⓘ précision</span></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Sources et séparation des marchés</div>
+      <div class="cbody">
+        <div class="source-row">
+          <b>MT5 · XAU/USD</b>
+          <span class="state">Actif</span>
+          <small>Flux du broker utilisé pour l'actif tradé.</small>
+        </div>
+        <div class="source-row">
+          <b>Hyperliquid · BTC / ETH</b>
+          <span class="state">Actif</span>
+          <small>Laboratoire crypto séparé ; ne remplace pas les données Gold.</small>
+        </div>
+        <p style="color:var(--dim); font-size:11.5px; margin:8px 0 0;">Aucune erreur de collecte.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="wrap" style="margin-top:26px;">
+  <div class="callout">
+    <b>Ce qui change réellement ici :</b> uniquement le style, et le libellé de source "MT5 · XAU/USD / BOOM 1000" devient "MT5 · XAU/USD". Le mode "Observation" et tout le contenu restent identiques — la question de savoir si ce module doit réellement influencer les décisions reste ouverte pour la Phase 6.
+  </div>
+</div>
+
+<footer>Maquette statique — chaque carte est redimensionnable.</footer>
+</body>
+</html>

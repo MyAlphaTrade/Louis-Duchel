@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Sessions IA AlphaTrade Gold v5.0.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:1600px; margin:0 auto; padding:0 20px 90px;}
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto; font-size:0.92rem;}
+
+  .app-shell{max-width:1600px; margin:30px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-icon-btn:hover{color:var(--red);}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .stat-strip{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border);}
+  .stat-strip .s{flex:1; padding:10px 16px; border-right:1px solid var(--border);}
+  .stat-strip .s:last-child{border-right:none;}
+  .stat-strip .s .l{color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.4px;}
+  .stat-strip .s .v{color:#fff; font-weight:700; font-size:16px; margin-top:2px;}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 16px; font-size:12.5px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:18px;}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; overflow:hidden; margin-bottom:14px;}
+  .card .chead{padding:11px 15px; background:var(--card2); border-bottom:1px solid var(--border);
+    color:var(--green); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .card .cbody{padding:14px 15px; resize:vertical; overflow:auto; min-height:64px; max-height:640px;}
+  .card .cbody::-webkit-resizer{
+    background:linear-gradient(135deg, transparent 0 40%, var(--green-dim) 40% 46%, transparent 46% 58%,
+      var(--green-dim) 58% 64%, transparent 64% 76%, var(--green-dim) 76% 82%, transparent 82%);
+  }
+
+  .stat-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:12px;}
+  @media (max-width:820px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+  .stat-box{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .stat-box label{display:block; color:var(--dim); font-size:10px; text-transform:uppercase; margin-bottom:4px;}
+  .stat-box b{color:#fff; font-size:16px;}
+
+  .grid3{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
+  @media (max-width:900px){.grid3{grid-template-columns:repeat(2,1fr);}}
+  .mini-box{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .mini-box label{display:block; color:var(--dim); font-size:10px; text-transform:uppercase; margin-bottom:5px;}
+  .mini-box p{color:var(--text); font-size:12px; margin:0; line-height:1.5;}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media (max-width:820px){.grid2{grid-template-columns:1fr;}}
+  .grid3col{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  @media (max-width:1000px){.grid3col{grid-template-columns:1fr;}}
+
+  .sub-card{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:12px 14px;}
+  .sub-card .sh{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .sub-card .sh strong{color:var(--green); font-size:12.5px;}
+  .sub-card .sh span{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .sub-kv{display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid var(--border);}
+  .sub-kv:last-of-type{border-bottom:none;}
+  .sub-kv span{color:var(--muted);} .sub-kv b{color:var(--text);}
+  .sub-card p.note{color:var(--dim); font-size:11px; margin:8px 0 0;}
+
+  .info-dot{position:relative; color:var(--blue); font-size:10px; cursor:help; font-weight:700; margin-left:4px;}
+  .info-dot::after{content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%);
+    width:220px; background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px;
+    line-height:1.5; padding:9px 11px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20;}
+  .info-dot:hover::after{opacity:1;}
+
+  .guardrail-box{background:var(--red-dim); border:1px solid #5c2028; border-radius:10px; padding:14px 16px; display:flex;
+    justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;}
+  .guardrail-box strong{color:#ffb3ba; display:block; margin-bottom:4px; font-size:12.5px;}
+  .guardrail-box p{color:var(--text); font-size:12px; margin:0; max-width:600px;}
+  .reset-btn{background:var(--red-dim); border:1px solid var(--red); color:#fff; padding:8px 16px; border-radius:7px; font-size:12px; white-space:nowrap;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:12px 16px; margin:16px 0; font-size:0.88rem;}
+  .callout b{color:#fff;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — Sessions IA — Étape 3/8 — Aucun code touché</div>
+  <h1>Sessions IA — AlphaTrade Gold v5.0.0</h1>
+  <p>Même contenu qu'aujourd'hui (bilan d'apprentissage, serveur IA, évaluation par origine, garde-fous) — cartes "Modèle BOOM 1000" et "Modèle CRASH 1000" retirées, une seule carte symbole (XAU/USD) au lieu de trois.</p>
+</header>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span>
+      <span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:30:41</b></div>
+      <div class="tb-session">Session <b>Londres</b> 04:44:15</div>
+      <div class="tb-clock">dim. 19h30 41s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn" title="Déconnexion">⏻</div>
+      <div class="tb-icon-btn" title="Thème">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$4517.44</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v">$4517.44</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div>
+    <div class="t">Trades</div>
+    <div class="t active">Sessions IA</div>
+    <div class="t">Microstructure</div>
+    <div class="t">Sessions marché</div>
+    <div class="t">Calendrier</div>
+    <div class="t">Paramètres</div>
+    <div class="t">Journal</div>
+    <div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+
+    <div class="card">
+      <div class="chead">Sessions IA et apprentissage contrôlé</div>
+      <div class="cbody">
+        <h2 style="margin:0 0 8px; color:#fff; font-size:1.05rem;">Apprendre sans contourner les limites</h2>
+        <p style="color:var(--muted); font-size:12.5px; margin:0 0 4px;">AlphaTrade enregistre chaque décision, le résultat, l'excursion favorable et l'excursion défavorable sur XAU/USD. Les ajustements sont volontairement progressifs.</p>
+        <div class="stat-row">
+          <div class="stat-box"><label>Précision AlphaTrade</label><b>91.4%</b></div>
+          <div class="stat-box"><label>Profit factor <span class="info-dot" data-tip="Somme des gains divisée par la somme des pertes. Au-dessus de 1 = stratégie gagnante sur l'échantillon.">ⓘ</span></label><b>1.13</b></div>
+          <div class="stat-box"><label>Espérance <span class="info-dot" data-tip="Gain moyen attendu par trade, tous résultats confondus.">ⓘ</span></label><b>+$0.49</b></div>
+          <div class="stat-box"><label>État</label><b style="color:var(--green);">Actif</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Bilan d'apprentissage de la session <span style="color:var(--dim); font-weight:400;">188 décisions analysées</span></div>
+      <div class="cbody">
+        <div class="grid3">
+          <div class="mini-box"><label>Ce que le moteur a observé</label><p>Sur XAU/USD, 188 décisions ont été évaluées : 172 gains et 16 pertes (91,5%).</p></div>
+          <div class="mini-box"><label>Ce qu'il a appris</label><p>Le composant le plus renforcé est «macd», le moins renforcé est «edge». Seuil ajusté de -2.20 points.</p></div>
+          <div class="mini-box"><label>Difficultés détectées</label><p>Excursion défavorable moyenne de $7.64, nettement supérieure à l'excursion favorable moyenne de $2.19.</p></div>
+          <div class="mini-box"><label>Amélioration proposée</label><p>Étudier les 16 pertes, renforcer la protection individuelle sans liquider automatiquement les positions ouvertes.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Serveur IA</div>
+      <div class="cbody">
+        <div class="grid2">
+          <div class="sub-card">
+            <div class="sh"><strong>Serveur IA</strong><span>Observation</span></div>
+            <div class="sub-kv"><span>Connexion</span><b style="color:var(--green);">Connecté</b></div>
+            <div class="sub-kv"><span>Adresse</span><b>127.0.0.1:8765</b></div>
+            <div class="sub-kv"><span>Dernière synchronisation</span><b>19:30:37</b></div>
+            <p class="note">Le moteur local reste prioritaire et continue de fonctionner hors ligne.</p>
+          </div>
+          <div class="sub-card">
+            <div class="sh"><strong>Modèle XAU/USD <span class="info-dot" data-tip="Modèle statistique local (RandomForest), entraîné en continu. Purement observationnel — n'influence pas directement la décision de trade du moteur.">ⓘ</span></strong><span>Serveur</span></div>
+            <div class="sub-kv"><span>Version active</span><b>v125</b></div>
+            <div class="sub-kv"><span>Échantillon</span><b>1047</b></div>
+            <div class="sub-kv"><span>Score chronologique</span><b>53.9%</b></div>
+            <div class="sub-kv"><span>Signal observé</span><b style="color:var(--green);">BUY 61.8%</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Évaluation par origine <span style="color:var(--dim); font-weight:400;">toutes vues séparément, aucune n'influence les autres</span></div>
+      <div class="cbody">
+        <div class="grid3col">
+          <div class="sub-card">
+            <div class="sh"><strong>Évaluation AlphaTrade</strong><span>Trades BOT</span></div>
+            <div class="sub-kv"><span>Note indicative</span><b>82%</b></div>
+            <div class="sub-kv"><span>Trades / Gagnés / Perdus</span><b>382 / 349 / 33</b></div>
+            <div class="sub-kv"><span>Profit net</span><b style="color:var(--green);">+$186.25</b></div>
+            <div class="sub-kv"><span>Gain / perte moyens</span><b>+$4.51 / -$42.05</b></div>
+          </div>
+          <div class="sub-card">
+            <div class="sh"><strong>Observation IA externe</strong><span>Autres robots MT5</span></div>
+            <div class="sub-kv"><span>Note indicative</span><b>79%</b></div>
+            <div class="sub-kv"><span>Trades / Gagnés / Perdus</span><b>52 / 38 / 14</b></div>
+            <div class="sub-kv"><span>Profit net</span><b style="color:var(--green);">+$176.15</b></div>
+            <div class="sub-kv"><span>Gain / perte moyens</span><b>+$12.24 / -$20.64</b></div>
+          </div>
+          <div class="sub-card">
+            <div class="sh"><strong>Évaluation manuelle</strong><span>Vos trades MT5</span></div>
+            <div class="sub-kv"><span>Note indicative</span><b>41%</b></div>
+            <div class="sub-kv"><span>Trades / Gagnés / Perdus</span><b>66 / 38 / 26</b></div>
+            <div class="sub-kv"><span>Profit net</span><b style="color:var(--red);">-$4966.44</b></div>
+            <div class="sub-kv"><span>Gain / perte moyens</span><b>+$222.84 / -$516.70</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="chead">XAU/USD <span style="color:var(--dim); font-weight:400;">Marché 24/5</span></div>
+      <div class="cbody">
+        <div class="stat-row">
+          <div class="stat-box"><label>Trades fermés</label><b>382</b></div>
+          <div class="stat-box"><label>Win rate</label><b>91.4%</b></div>
+          <div class="stat-box"><label>Profit net</label><b style="color:var(--green);">$186.25</b></div>
+          <div class="stat-box"><label>Échantillon appris</label><b>188 décisions</b></div>
+        </div>
+        <div class="stat-row" style="margin-top:10px;">
+          <div class="stat-box"><label>Seuil adapté <span class="info-dot" data-tip="Seuil de confiance minimum réellement appliqué, après ajustement automatique par l'apprentissage.">ⓘ</span></label><b>59.8%</b></div>
+          <div class="stat-box"><label>MAE / MFE moyens <span class="info-dot" data-tip="Excursion défavorable / favorable moyenne d'une position avant clôture.">ⓘ</span></label><b>$7.64 / $2.19</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guardrail-box">
+      <div>
+        <strong>Garde-fous</strong>
+        <p>L'IA pourra proposer un seuil ou une cadence. Elle ne pourra pas supprimer la perte maximale, activer le réel, augmenter seule le lot maximum ou lancer une martingale.</p>
+      </div>
+      <div class="reset-btn">Réinitialiser la mémoire IA</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="wrap" style="margin-top:26px;">
+  <div class="callout">
+    <b>Ce qui change réellement ici :</b> retrait des cartes "Modèle BOOM 1000" / "Modèle CRASH 1000" (serveur IA) et passage de 3 cartes symbole à 1 seule (XAU/USD). Le texte d'intro est adapté (plus de mention BOOM/CRASH). Tout le reste — bilan d'apprentissage, évaluation par origine, garde-fous, bouton de réinitialisation — reste identique.
+  </div>
+</div>
+
+<footer>Maquette statique — chaque carte est redimensionnable.</footer>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Proposition Technique — Classification des paramètres XAUUSD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454; --orange-dim:#4a3417;
+    --blue:#5cc8ff; --blue-dim:#123a4a;
+    --purple:#c792ff; --purple-dim:#3a2050;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0; line-height:1.5;}
+  .mono{font-family:"Cascadia Code","Consolas",monospace;}
+  a{color:var(--green-soft);}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 100px;}
+
+  header.hero{padding:44px 22px 30px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px;}
+  header.hero h1{font-size:1.8rem; margin:0 0 8px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:760px; margin:0 auto;}
+
+  nav.toc{position:sticky; top:0; z-index:50; background:rgba(7,10,8,0.95); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); padding:10px 22px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;}
+  nav.toc a{color:var(--muted); text-decoration:none; font-size:12.5px; padding:7px 11px; border-radius:6px; border:1px solid transparent; white-space:nowrap;}
+  nav.toc a:hover{color:var(--green); border-color:var(--border-strong); background:var(--panel);}
+
+  section{padding:44px 0 10px; border-bottom:1px solid var(--border);}
+  section:last-of-type{border-bottom:none;}
+  h2.stitle{font-size:1.3rem; color:#fff; margin:0 0 6px; display:flex; align-items:center; gap:10px;}
+  h2.stitle .num{width:30px; height:30px; border-radius:8px; background:var(--panel2); border:1px solid var(--border-strong);
+    color:var(--green); display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;}
+  p.ssub{color:var(--muted); margin:0 0 22px; max-width:800px;}
+
+  .legend{display:flex; gap:10px; flex-wrap:wrap; margin:16px 0 24px;}
+  .leg-item{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:8px; padding:8px 12px; font-size:12.5px;}
+  .dot{width:10px; height:10px; border-radius:50%;}
+  .dot.a{background:var(--green);} .dot.b{background:var(--red);} .dot.c{background:var(--orange);}
+  .dot.d{background:var(--blue);} .dot.e{background:var(--purple);}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0 28px; font-size:0.85rem; background:var(--panel);
+    border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  thead th{background:var(--panel2); color:var(--muted); text-align:left; padding:9px 11px; font-size:0.7rem;
+    text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border-strong);}
+  tbody td{padding:8px 11px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(57,255,136,0.03);}
+
+  .badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:0.7rem; font-weight:700; white-space:nowrap;}
+  .b-a{background:var(--green-dim); color:var(--green-soft);}
+  .b-b{background:var(--red-dim); color:var(--red);}
+  .b-c{background:var(--orange-dim); color:var(--orange);}
+  .b-d{background:var(--blue-dim); color:var(--blue);}
+  .b-e{background:var(--purple-dim); color:var(--purple);}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:14px 18px; margin:16px 0; font-size:0.92rem;}
+  .callout.warn{border-left-color:var(--orange);} .callout.info{border-left-color:var(--blue);}
+  .callout b{color:#fff;}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:16px 18px; margin:14px 0;}
+  .card h4{margin:0 0 10px; color:var(--green);}
+  .kv{display:grid; grid-template-columns:150px 1fr; gap:4px 12px; font-size:13px;}
+  .kv .k{color:var(--dim);}
+  .kv .v{color:var(--text);}
+
+  .grid-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:20px 0;}
+  .stat{background:var(--panel); border:1px solid var(--border-strong); border-radius:10px; padding:14px;}
+  .stat .n{font-size:1.4rem; font-weight:700; color:#fff;}
+  .stat .l{font-size:0.75rem; color:var(--muted); margin-top:2px;}
+
+  footer{padding:44px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Proposition technique — Étape 2/8 du cycle (avant maquette et code)</div>
+  <h1>Classification finale des paramètres — AlphaTrade Gold</h1>
+  <p>Reprend l'audit déjà livré et propose, pour chaque paramètre XAUUSD survivant au retrait de BOOM1000/CRASH1000, une décision précise selon les 5 catégories que tu as définies. À valider avant de produire le code.</p>
+</header>
+
+<nav class="toc">
+  <a href="#legende">Légende</a>
+  <a href="#connexion">Connexion/Serveur IA</a>
+  <a href="#risque">Risque &amp; Session</a>
+  <a href="#xau">Paramètres XAU/USD</a>
+  <a href="#exposer">À exposer (Catégorie C)</a>
+  <a href="#trace">Fiche de traçabilité</a>
+  <a href="#synthese">Synthèse</a>
+</nav>
+
+<div class="wrap">
+
+<section id="legende">
+  <h2 class="stitle"><span class="num">i</span>Légende des 5 catégories</h2>
+  <div class="legend">
+    <div class="leg-item"><span class="dot a"></span><b>A</b> — Actif et utile → garder tel quel</div>
+    <div class="leg-item"><span class="dot b"></span><b>B</b> — Affiché mais inutilisé → supprimer</div>
+    <div class="leg-item"><span class="dot c"></span><b>C</b> — Hardcodé dans le moteur → rendre paramétrable (reconnecter au champ UI existant)</div>
+    <div class="leg-item"><span class="dot d"></span><b>D</b> — Moteur actif mais invisible → exposer un nouveau champ UI</div>
+    <div class="leg-item"><span class="dot e"></span><b>E</b> — Contradictoire/doublon → fusionner</div>
+  </div>
+  <div class="grid-stats">
+    <div class="stat"><div class="n">~52</div><div class="l">Catégorie A — garder</div></div>
+    <div class="stat"><div class="n">~11</div><div class="l">Catégorie B — supprimer</div></div>
+    <div class="stat"><div class="n">6</div><div class="l">Catégorie C — reconnecter</div></div>
+    <div class="stat"><div class="n">7</div><div class="l">Catégorie D — exposer (nouveau)</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">Catégorie E — fusionner</div></div>
+  </div>
+  <div class="callout">Tous les paramètres liés exclusivement à BOOM1000 (Cycle Manager, BPPL, QPC, Opportunity Engine v5, Drift Follower — une trentaine de champs) ne sont <b>pas listés ici</b> : ils partent en bloc avec le symbole, aucune décision au cas par cas nécessaire.</div>
+</section>
+
+<section id="connexion">
+  <h2 class="stitle"><span class="num">1</span>Connexion / Serveur IA / Microstructure</h2>
+  <table>
+    <thead><tr><th>Paramètre</th><th>Catégorie</th><th>Décision proposée</th></tr></thead>
+    <tbody>
+      <tr><td><code>mt5_path</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>anti_top_bottom</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>lookback_candles</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>edge_zone_pct</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>min_score_gap</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>min_profit</code></td><td><span class="badge b-b">B</span></td><td>Supprimer — jamais lu par le moteur</td></tr>
+      <tr><td><code>reinforcement_enabled</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>ai_server_enabled</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>openai_api_key</code></td><td><span class="badge b-a">A*</span></td><td>Garder en Phase 1 — sera retiré en Phase 7 si bascule 100% Anthropic validée séparément</td></tr>
+      <tr><td><code>anthropic_api_key</code>, <code>ai_server_url</code>, <code>ai_server_token</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>ai_sync_interval_sec</code>, <code>ai_retrain_interval_min</code>, <code>ai_server_trade_confirmation</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>ai_observation_mode</code> (case désactivée, morte)</td><td><span class="badge b-b">B</span></td><td>Supprimer — jamais lu, jamais collecté (input <code>disabled</code>)</td></tr>
+      <tr><td><code>microstructure_enabled</code>, <code>microstructure_interval_sec</code></td><td><span class="badge b-a">A</span></td><td>Garder — l'utilité réelle du module se décide en Phase 6, le paramètre lui-même reste fonctionnel</td></tr>
+      <tr><td><code>hyperliquid_observer_enabled</code></td><td><span class="badge b-e">E</span></td><td>Hors périmètre Or (laboratoire crypto BTC/ETH séparé) — proposer de le déplacer hors de la page Paramètres XAUUSD plutôt que le supprimer. À confirmer.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="risque">
+  <h2 class="stitle"><span class="num">2</span>Risque &amp; Session</h2>
+  <table>
+    <thead><tr><th>Paramètre</th><th>Catégorie</th><th>Décision proposée</th></tr></thead>
+    <tbody>
+      <tr><td><code>risk_pct</code>, <code>session_target</code>, <code>daily_target</code>, <code>session_max_loss</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>real_lot_cap</code>, <code>demo_lot_cap</code></td><td><span class="badge b-c">C</span></td><td>Garder le champ, mais <b>corriger le comportement</b> : <code>HARD_REAL_LOT_CAP=0.10</code> ne plafonne rien en pratique (real_lot_cap actuel = 0.8). Proposer que le champ devienne le vrai plafond dur, sans filet caché trompeur.</td></tr>
+      <tr><td><code>auto_max_positions</code>, <code>giveback</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>reinforcement_min_confidence_margin</code>, <code>reinforcement_min_score_gap</code>, <code>reinforcement_cooldown_sec</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>rebond_enabled</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>rebond_min_signal_pct</code></td><td><span class="badge b-c">C</span></td><td>Reconnecter — remplace la constante hardcodée <code>contra_score &lt; 55</code> du module Capture Rebond XAUUSD</td></tr>
+      <tr><td><code>rebond_cooldown_sec</code></td><td><span class="badge b-a">A</span></td><td>Garder (déjà fonctionnel)</td></tr>
+      <tr><td><code>profit_protection_enabled</code>, <code>profit_drawdown_pct</code>, <code>profit_drawdown_min</code>, <code>profit_warning_ratio</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>profit_protection_start</code></td><td><span class="badge b-e">E</span></td><td>Fusionner/supprimer — <code>daily_target</code> pilote déjà seul l'activation, ce champ est un doublon mort</td></tr>
+      <tr><td><code>profit_ai_grace_sec</code></td><td><span class="badge b-b">B</span></td><td>Supprimer — écrit mais jamais relu (sauf si tu veux qu'on l'implémente comme vraie fonctionnalité, à confirmer)</td></tr>
+      <tr><td>Bloc "Machine à états — Renfort/Rebond (global)" (6 champs dupliqués)</td><td><span class="badge b-b">B</span></td><td>Supprimer le bloc global entier — doublon mort, les versions par-symbole ci-dessous sont traitées individuellement</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="xau">
+  <h2 class="stitle"><span class="num">3</span>Paramètres spécifiques XAU/USD</h2>
+  <table>
+    <thead><tr><th>Paramètre</th><th>Catégorie</th><th>Décision proposée</th></tr></thead>
+    <tbody>
+      <tr><td><code>lot</code>, <code>lot_min</code>, <code>lot_max</code>, <code>max_positions</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>tp_pips</code></td><td><span class="badge b-b">B</span></td><td>Supprimer — le TP réel est calculé via <code>profit_target</code> (en $), le champ pips n'a jamais d'effet</td></tr>
+      <tr><td><code>max_position_loss</code></td><td><span class="badge b-c">C</span></td><td>Reconnecter — implémenter une vraie garde de perte max par position (trou de sécurité actuel : aucun SL broker n'est jamais posé, seule <code>emergency_loss_limit</code> protège globalement)</td></tr>
+      <tr><td><code>max_floating_loss</code></td><td><span class="badge b-c">C</span></td><td>Reconnecter — même logique, vraie protection de portefeuille flottant à implémenter</td></tr>
+      <tr><td><code>timeframe</code>, <code>confidence_min</code>, <code>cadence_sec</code>, <code>max_trades_hour</code>, <code>max_hold_sec</code>, <code>position_review_sec</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>profit_target</code>, <code>profit_lock_trigger</code>, <code>profit_lock_drawdown</code>, <code>emergency_loss_limit</code>, <code>min_positive_exit</code>, <code>cooldown_after_loss_sec</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>session_filter_enabled</code>, <code>session_start_utc</code>, <code>session_end_utc</code>, <code>stop_before_end_min</code></td><td><span class="badge b-a">A</span></td><td>Garder</td></tr>
+      <tr><td><code>seuil_perte_alerte</code></td><td><span class="badge b-b">B</span></td><td>Supprimer — doublon mort de <code>emergency_loss_limit</code>, hardcodé -1.0$ dans un module (Drift Follower) qui disparaît avec BOOM1000</td></tr>
+      <tr><td><code>lot_multiplicateur_rebond</code></td><td><span class="badge b-c">C</span></td><td>Reconnecter pour XAUUSD — le module Capture Rebond calcule actuellement le lot via des paliers hardcodés (80/65), à rendre paramétrable via ce champ existant</td></tr>
+      <tr><td><code>max_renforts_per_basket</code></td><td><span class="badge b-b">B</span></td><td>Supprimer — jamais lu, aucun équivalent moteur XAUUSD identifié</td></tr>
+      <tr><td><code>renfort_min_interval</code></td><td><span class="badge b-e">E</span></td><td>Fusionner/supprimer — doublon mort de <code>reinforcement_cooldown_sec</code> qui lui est fonctionnel</td></tr>
+      <tr><td><code>rebond_cooldown</code> (variante)</td><td><span class="badge b-e">E</span></td><td>Fusionner/supprimer — doublon mort de <code>rebond_cooldown_sec</code></td></tr>
+      <tr><td><code>max_rebound_attempts</code></td><td><span class="badge b-c">C</span></td><td>Reconnecter — fusionner avec le paramètre moteur <code>rebond_max_active</code> (actuellement invisible, catégorie D ci-dessous) plutôt que de garder deux champs séparés</td></tr>
+      <tr><td><code>daily_max_loss</code></td><td><span class="badge b-e">E</span></td><td>Fusionner/supprimer — doublon de <code>session_max_loss</code>, déjà fonctionnel</td></tr>
+      <tr><td>Trailing 4 paliers (<code>trail_l1-l4_above/pct</code>) + <code>momentum_exit_score</code></td><td><span class="badge b-a">A</span></td><td>Garder — déjà pleinement fonctionnels</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="exposer">
+  <h2 class="stitle"><span class="num">4</span>Catégorie D — paramètres moteur XAUUSD à exposer (nouveaux champs UI)</h2>
+  <p class="ssub">Ces leviers pilotent réellement le comportement du moteur sur l'or aujourd'hui, mais sont invisibles dans l'application — seulement modifiables en éditant le code ou <code>params.json</code> à la main. Contraire à la règle "aucune valeur cachée qui casse la logique".</p>
+  <table>
+    <thead><tr><th>Paramètre</th><th>Rôle réel</th><th>Défaut actuel</th></tr></thead>
+    <tbody>
+      <tr><td><code>signal_reversal_margin</code></td><td>Marge de retournement de signal — condition de sortie anticipée</td><td>99</td></tr>
+      <tr><td><code>lot_multiplicateur_renfort</code></td><td>Multiplicateur de lot lors d'un renfort de position</td><td>1.0</td></tr>
+      <tr><td><code>renfort_high_confidence_min</code></td><td>Seuil de confiance minimum pour autoriser un renfort</td><td>seuil confiance + 15</td></tr>
+      <tr><td><code>rebond_min_zone_strength</code></td><td>Force minimale de la zone offre/demande pour déclencher un rebond</td><td>28</td></tr>
+      <tr><td><code>rebond_max_active</code></td><td>Nombre max de rebonds actifs simultanément (à fusionner avec <code>max_rebound_attempts</code>)</td><td>3</td></tr>
+      <tr><td><code>rebond_max_hold_sec</code></td><td>Durée max de maintien d'une position de rebond</td><td>90</td></tr>
+      <tr><td><code>rebond_stop_pips</code></td><td>Distance de protection du rebond en pips</td><td>2.00</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="trace">
+  <h2 class="stitle"><span class="num">5</span>Exemple de fiche de traçabilité</h2>
+  <p class="ssub">Format que chaque paramètre gardé/ajouté devra avoir en documentation, selon ta règle. Deux exemples ci-dessous.</p>
+  <div class="card">
+    <h4>confidence_min</h4>
+    <div class="kv">
+      <div class="k">Utilisé dans</div><div class="v">alphatrade_engine.py — symbol_analysis(), auto_trade_step()</div>
+      <div class="k">Lecture</div><div class="v">params.json → symbols.XAUUSD.confidence_min</div>
+      <div class="k">Impact</div><div class="v">Bloque toute entrée dont le score BUY/SELL est sous ce seuil (ajusté dynamiquement par l'apprentissage)</div>
+      <div class="k">Visible UI</div><div class="v">Oui — carte XAU/USD</div>
+      <div class="k">Info-bulle</div><div class="v">Oui</div>
+      <div class="k">Valeur par défaut</div><div class="v">60%</div>
+      <div class="k">Codé en dur</div><div class="v">NON</div>
+    </div>
+  </div>
+  <div class="card">
+    <h4>rebond_min_signal_pct <span class="badge b-c">reconnecté en Phase 1</span></h4>
+    <div class="kv">
+      <div class="k">Utilisé dans</div><div class="v">alphatrade_engine.py — module Capture Rebond XAUUSD</div>
+      <div class="k">Lecture</div><div class="v">params.json → symbols.XAUUSD.rebond_min_signal_pct</div>
+      <div class="k">Impact</div><div class="v">Seuil de score contraire minimal pour autoriser l'ouverture d'un rebond (remplace la constante 55 auparavant figée dans le code)</div>
+      <div class="k">Visible UI</div><div class="v">Oui — bloc Rebond, carte XAU/USD</div>
+      <div class="k">Info-bulle</div><div class="v">Oui</div>
+      <div class="k">Valeur par défaut</div><div class="v">55</div>
+      <div class="k">Codé en dur</div><div class="v">NON (était OUI avant Phase 1)</div>
+    </div>
+  </div>
+</section>
+
+<section id="synthese">
+  <h2 class="stitle"><span class="num">✓</span>À valider avant la maquette finale</h2>
+  <ol>
+    <li>Le comportement de <code>real_lot_cap</code>/<code>demo_lot_cap</code> (Catégorie C) — d'accord pour en faire un vrai plafond dur ?</li>
+    <li><code>max_position_loss</code>/<code>max_floating_loss</code> (Catégorie C) — d'accord pour implémenter une vraie protection derrière ces deux champs plutôt que de les supprimer ?</li>
+    <li><code>profit_ai_grace_sec</code> — supprimer, ou construire la fonctionnalité de grâce IA après perte ?</li>
+    <li><code>hyperliquid_observer_enabled</code> — le sortir de la page Paramètres XAUUSD (module crypto séparé), ou le garder ici pour simplicité ?</li>
+    <li>Les fusions de doublons (Catégorie E) — es-tu d'accord avec les 3 fusions proposées (<code>profit_protection_start</code>→<code>daily_target</code>, <code>renfort_min_interval</code>→<code>reinforcement_cooldown_sec</code>, <code>rebond_cooldown</code>→<code>rebond_cooldown_sec</code>, <code>daily_max_loss</code>→<code>session_max_loss</code>) ?</li>
+  </ol>
+  <div class="callout info">Une fois ces points tranchés, je produis la maquette redesignée finale de la page Paramètres (mise en page compacte + info-bulles) avec la liste exacte et définitive des champs.</div>
+</section>
+
+</div>
+<footer>Proposition technique — aucun code touché. Étape suivante : maquette visuelle, après tes réponses ci-dessus.</footer>
+</body>
+</html>

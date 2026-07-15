@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Tableau de bord AlphaTrade Gold v5.0.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:1600px; margin:0 auto; padding:0 20px 90px;}
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto; font-size:0.92rem;}
+
+  .app-shell{max-width:1600px; margin:30px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-icon-btn:hover{color:var(--red);}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .stat-strip{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border);}
+  .stat-strip .s{flex:1; padding:10px 16px; border-right:1px solid var(--border);}
+  .stat-strip .s:last-child{border-right:none;}
+  .stat-strip .s .l{color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.4px;}
+  .stat-strip .s .v{color:#fff; font-weight:700; font-size:16px; margin-top:2px;}
+  .stat-strip .s .v.pos{color:var(--green);} .stat-strip .s .v.neg{color:var(--red);}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 16px; font-size:12.5px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:18px;}
+
+  .dash-grid{display:grid; grid-template-columns:280px 1fr 300px; gap:14px; align-items:start;}
+  @media (max-width:1100px){.dash-grid{grid-template-columns:1fr;}}
+  .col{display:flex; flex-direction:column; gap:14px;}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;}
+  .card .chead{padding:11px 15px; background:var(--card2); border-bottom:1px solid var(--border);
+    color:var(--green); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:space-between;}
+  .card .cbody{
+    padding:14px 15px; resize:vertical; overflow:auto; min-height:64px; max-height:640px;
+  }
+  /* Poignée de redimensionnement native du navigateur (3 traits diagonaux, coin inférieur droit) */
+  .card .cbody::-webkit-resizer{
+    background:linear-gradient(135deg, transparent 0 40%, var(--green-dim) 40% 46%, transparent 46% 58%,
+      var(--green-dim) 58% 64%, transparent 64% 76%, var(--green-dim) 76% 82%, transparent 82%);
+  }
+  .resize-hint{position:absolute; bottom:3px; right:14px; font-size:9px; color:var(--dim); pointer-events:none;}
+
+  .btn-row{display:flex; gap:8px; margin-bottom:12px;}
+  .btn{flex:1; padding:9px; border-radius:7px; text-align:center; font-size:12.5px; font-weight:700; border:1px solid;}
+  .btn.start{background:var(--green-dim); color:#eafff2; border-color:var(--green-dim);}
+  .btn.stop{background:var(--red-dim); color:#ffe1e4; border-color:var(--red-dim);}
+
+  .state-pill{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--dim); margin-bottom:10px;}
+  .state-pill i{width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block;}
+  .state-pill.online i{background:var(--green); box-shadow:0 0 6px var(--green);} .state-pill.online{color:var(--green-soft);}
+
+  .decision-box{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:10px;}
+  .decision-box strong{display:block; color:var(--muted); font-size:10px; text-transform:uppercase; margin-bottom:4px;}
+  .decision-box .d{color:#fff; font-weight:700; font-size:14px;}
+  .decision-box small{display:block; color:var(--dim); font-size:11px; margin-top:3px;}
+
+  .notice{color:var(--dim); font-size:11px; line-height:1.5; margin:0;}
+
+  .kv-list .kv{display:flex; justify-content:space-between; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--border);}
+  .kv-list .kv:last-child{border-bottom:none;}
+  .kv-list .kv span{color:var(--muted);}
+  .kv-list .kv b{color:var(--text);}
+  .protection-badge{margin-top:8px; text-align:center; padding:6px; border-radius:6px; font-size:11px; font-weight:700;
+    background:var(--panel2); color:var(--dim); border:1px solid var(--border);}
+  .bar-track{height:5px; background:var(--panel2); border-radius:10px; margin-top:8px; overflow:hidden;}
+  .bar-track i{display:block; height:100%; width:0%; background:var(--green);}
+
+  .chart-placeholder{height:220px; background:repeating-linear-gradient(180deg, var(--panel2) 0 1px, transparent 1px 22px),
+    var(--panel); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:12px;}
+
+  table.mini{width:100%; border-collapse:collapse; font-size:11.5px;}
+  table.mini th{text-align:left; color:var(--dim); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border); font-size:10px; text-transform:uppercase;}
+  table.mini td{padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text);}
+  table.mini tr:last-child td{border-bottom:none;}
+  .tag-sell{color:var(--red); border:1px solid var(--red-dim); border-radius:4px; padding:1px 6px; font-size:10px;}
+  .tag-buy{color:var(--green); border:1px solid var(--green-dim); border-radius:4px; padding:1px 6px; font-size:10px;}
+
+  .signal-banner{text-align:center; padding:12px; border-radius:8px; background:var(--panel2); border:1px solid var(--border);
+    color:var(--dim); font-weight:700; letter-spacing:2px; margin-bottom:10px;}
+  .score-row{display:flex; align-items:center; gap:8px; font-size:11.5px; margin-bottom:6px;}
+  .score-row span{width:34px; color:var(--muted);}
+  .score-row .track{flex:1; height:6px; background:var(--panel2); border-radius:6px; overflow:hidden;}
+  .score-row .track i{display:block; height:100%; background:var(--green);}
+  .score-row.sell .track i{background:var(--red);}
+  .score-row b{width:36px; text-align:right; color:var(--text);}
+
+  .info-dot{position:relative; color:var(--blue); font-size:10px; cursor:help; font-weight:700; margin-left:4px;}
+  .info-dot::after{content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%);
+    width:210px; background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px;
+    line-height:1.5; padding:9px 11px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20;}
+  .info-dot:hover::after{opacity:1;}
+
+  .analysis-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; margin:10px 0; font-size:11.5px;}
+  .analysis-grid span{color:var(--muted); display:flex; justify-content:space-between;}
+  .analysis-grid b{color:var(--text);}
+
+  .micro-card{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-top:10px;}
+  .micro-card .mh{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:6px;}
+  .micro-card .mh b{color:var(--orange);}
+  .micro-grid{display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-size:11px;}
+  .micro-grid span{color:var(--dim); display:flex; justify-content:space-between;}
+  .micro-grid b{color:var(--text);}
+
+  .quality-item{display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px solid var(--border);}
+  .quality-item:last-child{border-bottom:none;}
+  .quality-item span{color:var(--muted);} .quality-item b{color:var(--text);}
+
+  .pos-empty{color:var(--dim); font-size:12px; text-align:center; padding:14px 0;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:12px 16px; margin:16px 0; font-size:0.88rem;}
+  .callout b{color:#fff;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — Tableau de bord — Étape 3/8 — Aucun code touché</div>
+  <h1>Tableau de bord — AlphaTrade Gold v5.0.0</h1>
+  <p>Même structure fonctionnelle qu'aujourd'hui (Contrôle, Protection de session, Graphique, Trades récents, Analyse temps réel, Qualité du compte, Positions) — langage visuel harmonisé avec la nouvelle page Paramètres : cartes compactes, info-bulles sur les indicateurs techniques.</p>
+</header>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span>
+      <span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:30:41</b></div>
+      <div class="tb-session">Session <b>Sydney</b> 07:29:19</div>
+      <div class="tb-clock">dim. 19h 30min 41s</div>
+      <div class="tb-server"><i></i> Serveur connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn" title="Déconnexion">⏻</div>
+      <div class="tb-icon-btn" title="Thème">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$3557.25</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v neg">$3480.33</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t active">Tableau de bord</div>
+    <div class="t">Trades</div>
+    <div class="t">Sessions IA</div>
+    <div class="t">Microstructure</div>
+    <div class="t">Sessions marché</div>
+    <div class="t">Calendrier</div>
+    <div class="t">Paramètres</div>
+    <div class="t">Journal</div>
+    <div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+    <div class="dash-grid">
+
+      <!-- LEFT COLUMN -->
+      <div class="col">
+        <div class="card">
+          <div class="chead">Contrôle</div>
+          <div class="cbody">
+            <div class="btn-row">
+              <div class="btn start">Démarrer</div>
+              <div class="btn stop">Arrêter</div>
+            </div>
+            <div class="state-pill"><i></i> Déconnecté</div>
+            <div class="decision-box">
+              <strong>Décision IA</strong>
+              <div class="d">En attente</div>
+              <small>Connexion à MT5 en cours.</small>
+            </div>
+            <p class="notice">L'application se connecte à MT5 en lecture au démarrage. Démarrer autorise l'IA à analyser et prendre de nouvelles positions. Arrêter bloque les nouvelles entrées sans fermer les positions déjà ouvertes.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chead">Protection de session</div>
+          <div class="cbody kv-list">
+            <div class="kv"><span>Réalisé</span><b>$0.00</b></div>
+            <div class="kv"><span>Session courante</span><b>$0.00</b></div>
+            <div class="kv"><span>Flottant</span><b>$0.00</b></div>
+            <div class="kv"><span>Objectif</span><b>$50.00</b></div>
+            <div class="kv"><span>Pic</span><b>$0.00</b></div>
+            <div class="kv"><span>Plancher</span><b>-</b></div>
+            <div class="protection-badge">Inactive</div>
+            <div class="bar-track"><i style="width:0%"></i></div>
+            <div class="btn" style="margin-top:10px; background:var(--panel2); color:var(--muted); border-color:var(--border-strong);">Nouvelle session</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER COLUMN -->
+      <div class="col">
+        <div class="card">
+          <div class="chead">Graphique — XAU/USD</div>
+          <div class="cbody"><div class="chart-placeholder">Graphique TradingView (inchangé)</div></div>
+        </div>
+
+        <div class="card">
+          <div class="chead">Trades récents <span style="color:var(--dim); font-weight:400;">toutes origines · max 12</span></div>
+          <div class="cbody" style="padding:0;">
+            <table class="mini">
+              <thead><tr><th>Type</th><th>Origine</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Profit</th></tr></thead>
+              <tbody>
+                <tr><td><span class="tag-sell">SELL</span></td><td>ALPHATRADE</td><td>0.03</td><td>2359.10</td><td>2358.40</td><td style="color:var(--green);">+$2.10</td></tr>
+                <tr><td><span class="tag-buy">BUY</span></td><td>KB1000</td><td>0.20</td><td>14359.90</td><td>14349.88</td><td style="color:var(--red);">-$1.02</td></tr>
+                <tr><td colspan="6" class="pos-empty">Aucun autre trade synchronisé</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="col">
+        <div class="card">
+          <div class="chead">Analyse en temps réel</div>
+          <div class="cbody">
+            <div class="signal-banner">WAIT</div>
+            <div class="analysis-grid" style="margin-top:0; margin-bottom:10px;">
+              <span>Consensus quantitatif <span class="info-dot" data-tip="Combine plusieurs conditions de risque (écart de score, conflit multi-timeframe, sur-accélération) pour bloquer un signal jugé trop instable.">ⓘ</span> <b>WAIT</b></span>
+            </div>
+            <div class="score-row"><span>BUY</span><div class="track"><i style="width:38%"></i></div><b>38%</b></div>
+            <div class="score-row sell"><span>SELL</span><div class="track"><i style="width:22%"></i></div><b>22%</b></div>
+            <div class="analysis-grid">
+              <span>RSI <b>-</b></span>
+              <span>Tendance <b>-</b></span>
+              <span>EMA 9 <b>-</b></span>
+              <span>EMA 21 <b>-</b></span>
+              <span>MACD <b>-</b></span>
+              <span>Zone <b>-</b></span>
+              <span>Risque régime <span class="info-dot" data-tip="Score 0-100 du gouverneur de risque. Au-delà de 85, l'entrée est bloquée même si le score BUY/SELL est favorable.">ⓘ</span> <b>-</b></span>
+            </div>
+            <div class="micro-card">
+              <div class="mh"><span>Microstructure <span class="info-dot" data-tip="Observation uniquement pour l'instant — impact réel sur la décision à l'étude (Phase 6). Ne peut envoyer aucun ordre.">ⓘ</span></span><b>OBSERVATION</b></div>
+              <div class="micro-grid">
+                <span>OBI <b>-</b></span><span>OFI <b>-</b></span>
+                <span>Kyle λ <b>-</b></span><span>POC <b>-</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chead">Qualité du compte MT5</div>
+          <div class="cbody">
+            <div class="quality-item"><span>Profit factor</span><b>0.00</b></div>
+            <div class="quality-item"><span>Gain moyen</span><b>$0.00</b></div>
+            <div class="quality-item"><span>Perte moyenne</span><b>$0.00</b></div>
+            <div class="quality-item"><span>Gagnés / Perdus</span><b>0 / 0</b></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chead">Positions ouvertes <span style="color:var(--dim); font-weight:400;">0</span></div>
+          <div class="cbody"><div class="pos-empty">Aucune position ouverte</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="wrap" style="margin-top:26px;">
+  <div class="callout">
+    <b>Ce qui change réellement ici :</b> uniquement le style visuel (cartes, espacements, info-bulles sur les indicateurs techniques) et le retrait des mentions BOOM1000/CRASH1000 dans le tableau des trades récents. La disposition en 3 colonnes et toutes les fonctionnalités (Démarrer/Arrêter, protection de session, graphique, positions) restent identiques à aujourd'hui.
+  </div>
+</div>
+
+<footer>Maquette statique — reprend fidèlement la structure réelle du Tableau de bord actuel (index.html).</footer>
+</body>
+</html>

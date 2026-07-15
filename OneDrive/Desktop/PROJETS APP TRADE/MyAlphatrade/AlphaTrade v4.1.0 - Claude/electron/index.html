@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="titlebar">
-    <div class="brand"><img class="brand-logo" src="assets/icon.ico" alt="Logo AlphaTrade"><strong>AlphaTrade</strong><small id="appVersionNavbar">v4.0.2</small></div>
+    <div class="brand"><img class="brand-logo" src="assets/icon.ico" alt="Logo AlphaTrade"><strong>AlphaTrade</strong><small id="appVersionNavbar">v5.0.0</small></div>
     <div class="account">
       <span id="demoBadge" class="badge">DEMO</span>
       <span id="realBadge" class="badge">RÉEL</span>
@@ -144,8 +144,8 @@
           <div class="panel-title">Trades MT5 récents <small>toutes origines · max 12</small></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Type</th><th>Origine</th><th>Symbole</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
-              <tbody id="recentTrades"><tr><td colspan="8" class="empty">Aucun trade MT5 synchronisé</td></tr></tbody>
+              <thead><tr><th>Type</th><th>Origine</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
+              <tbody id="recentTrades"><tr><td colspan="7" class="empty">Aucun trade MT5 synchronisé</td></tr></tbody>
             </table>
           </div>
         </article>
@@ -157,7 +157,7 @@
           <p class="mini-help">Signal du marché calculé avec RSI, EMA, MACD et la zone récente. Il ne représente pas le volume réel des acheteurs et vendeurs.</p>
           <div id="signalBanner" class="signal wait">WAIT</div>
           <div class="quant-consensus">
-            <span>Consensus quantitatif</span>
+            <span>Consensus quantitatif <span class="info-dot" data-tip="Combine plusieurs conditions de risque (écart de score, conflit multi-timeframe, sur-accélération) pour bloquer un signal jugé trop instable.">ⓘ</span></span>
             <b id="quantSignal">WAIT</b>
             <small id="quantReason">Collecte des données</small>
           </div>
@@ -170,10 +170,10 @@
             <span>EMA 21 <b id="ema21">-</b></span>
             <span>MACD <b id="macd">-</b></span>
             <span>Zone <b id="edge">-</b></span>
-            <span>Risque régime <b id="quantRisk">-</b></span>
+            <span>Risque régime <span class="info-dot" data-tip="Score 0-100 du gouverneur de risque. Au-delà de 85, l'entrée est bloquée même si le score BUY/SELL est favorable.">ⓘ</span> <b id="quantRisk">-</b></span>
           </div>
           <div class="microstructure-card">
-            <div><span>Microstructure</span><b id="microMode">OBSERVATION</b></div>
+            <div><span>Microstructure <span class="info-dot" data-tip="Observation uniquement pour l'instant — impact réel sur la décision à l'étude (Phase 6). Ne peut envoyer aucun ordre.">ⓘ</span></span><b id="microMode">OBSERVATION</b></div>
             <small id="microSource">En attente du flux MT5</small>
             <div class="microstructure-grid">
               <span>OBI <b id="microObi">-</b></span>
@@ -245,14 +245,14 @@
           <div class="trade-filters origin-filters">
             <button class="active" data-origin-filter="all" type="button">Toutes origines</button>
             <button data-origin-filter="BOT" type="button">AlphaTrade</button>
-            <button data-origin-filter="EXTERNAL_AI" type="button">IA externe</button>
+            <button data-origin-filter="EXTERNAL_AI" type="button">IA externe <span class="info-dot" data-tip="Libellé encore générique pour l'instant — le retrait du nom fixe « AVA » et l'identification du vrai robot externe sont prévus en Phase 8.">ⓘ</span></button>
             <button data-origin-filter="MANUAL" type="button">Manuel</button>
           </div>
         </div>
         <div class="table-wrap tall">
           <table>
-            <thead><tr><th>Heure</th><th>Type</th><th>Origine</th><th>Symbole</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
-            <tbody id="allTrades"><tr><td colspan="9" class="empty">Aucun trade fermé</td></tr></tbody>
+            <thead><tr><th>Heure</th><th>Type</th><th>Origine</th><th>Lot</th><th>Ouverture</th><th>Fermeture</th><th>Mouvement</th><th>Profit</th></tr></thead>
+            <tbody id="allTrades"><tr><td colspan="8" class="empty">Aucun trade fermé</td></tr></tbody>
           </table>
         </div>
         <p class="mini-help" style="margin-top:6px">Clic = détails · Shift+clic = sélection plage</p>
@@ -269,11 +269,11 @@
       <article class="panel">
         <div class="panel-title">Sessions IA et apprentissage contrôlé</div>
         <h2>Apprendre sans contourner les limites</h2>
-        <p>AlphaTrade enregistre chaque décision, le résultat, l'excursion favorable et l'excursion défavorable. Les mémoires XAU/USD, BOOM 1000 et CRASH 1000 restent séparées et les ajustements sont volontairement progressifs.</p>
+        <p>AlphaTrade enregistre chaque décision, le résultat, l'excursion favorable et l'excursion défavorable sur XAU/USD. Les ajustements sont volontairement progressifs.</p>
         <div class="analysis-cards">
           <div><label>Précision AlphaTrade</label><b id="iaWinrate">0.0%</b></div>
-          <div><label>Profit factor</label><b id="iaProfitFactor">0.00</b></div>
-          <div><label>Espérance</label><b id="iaExpectancy">$0.000</b></div>
+          <div><label>Profit factor <span class="info-dot" data-tip="Somme des gains divisée par la somme des pertes. Au-dessus de 1 = stratégie gagnante sur l'échantillon.">ⓘ</span></label><b id="iaProfitFactor">0.00</b></div>
+          <div><label>Espérance <span class="info-dot" data-tip="Gain moyen attendu par trade, tous résultats confondus.">ⓘ</span></label><b id="iaExpectancy">$0.000</b></div>
           <div><label>État</label><b id="learningState">Actif</b></div>
         </div>
         <div class="learning-report">
@@ -310,25 +310,11 @@
             <p id="aiServerMessage">Le moteur local reste prioritaire et continue de fonctionner hors ligne.</p>
           </article>
           <article>
-            <header><strong>Modèle XAU/USD</strong><span>Serveur</span></header>
+            <header><strong>Modèle XAU/USD <span class="info-dot" data-tip="Modèle statistique local (RandomForest), entraîné en continu. Purement observationnel — n'influence pas directement la décision de trade du moteur.">ⓘ</span></strong><span>Serveur</span></header>
             <div><label>Version active</label><b id="serverXauVersion">-</b></div>
             <div><label>Échantillon</label><b id="serverXauSamples">0</b></div>
             <div><label>Score chronologique</label><b id="serverXauScore">-</b></div>
             <div><label>Signal observé</label><b id="serverXauSignal">WAIT</b></div>
-          </article>
-          <article>
-            <header><strong>Modèle BOOM 1000</strong><span>Serveur</span></header>
-            <div><label>Version active</label><b id="serverVixVersion">-</b></div>
-            <div><label>Échantillon</label><b id="serverVixSamples">0</b></div>
-            <div><label>Score chronologique</label><b id="serverVixScore">-</b></div>
-            <div><label>Signal observé</label><b id="serverVixSignal">WAIT</b></div>
-          </article>
-          <article>
-            <header><strong>Modèle CRASH 1000</strong><span>Serveur</span></header>
-            <div><label>Version active</label><b id="serverCrashVersion">-</b></div>
-            <div><label>Échantillon</label><b id="serverCrashSamples">0</b></div>
-            <div><label>Score chronologique</label><b id="serverCrashScore">-</b></div>
-            <div><label>Signal observé</label><b id="serverCrashSignal">WAIT</b></div>
           </article>
         </div>
         <div class="origin-learning">
@@ -364,26 +350,8 @@
             <div><label>Win rate</label><b id="iaXauWinrate">0.0%</b></div>
             <div><label>Profit net</label><b id="iaXauProfit">$0.00</b></div>
             <div><label>Échantillon appris</label><b id="iaXauQuality">0 décision</b></div>
-            <div><label>Seuil adapté</label><b id="iaXauThreshold">62.0%</b></div>
-            <div><label>MAE / MFE moyens</label><b id="iaXauExcursions">$0.00 / $0.00</b></div>
-          </article>
-          <article>
-            <header><strong>BOOM 1000</strong><span>Deriv 24/7</span></header>
-            <div><label>Trades fermés</label><b id="iaVixTrades">0</b></div>
-            <div><label>Win rate</label><b id="iaVixWinrate">0.0%</b></div>
-            <div><label>Profit net</label><b id="iaVixProfit">$0.00</b></div>
-            <div><label>Échantillon appris</label><b id="iaVixQuality">0 décision</b></div>
-            <div><label>Seuil adapté</label><b id="iaVixThreshold">62.0%</b></div>
-            <div><label>MAE / MFE moyens</label><b id="iaVixExcursions">$0.00 / $0.00</b></div>
-          </article>
-          <article>
-            <header><strong>CRASH 1000</strong><span>Deriv 24/7</span></header>
-            <div><label>Trades fermés</label><b id="iaCrashTrades">0</b></div>
-            <div><label>Win rate</label><b id="iaCrashWinrate">0.0%</b></div>
-            <div><label>Profit net</label><b id="iaCrashProfit">$0.00</b></div>
-            <div><label>Échantillon appris</label><b id="iaCrashQuality">0 décision</b></div>
-            <div><label>Seuil adapté</label><b id="iaCrashThreshold">62.0%</b></div>
-            <div><label>MAE / MFE moyens</label><b id="iaCrashExcursions">$0.00 / $0.00</b></div>
+            <div><label>Seuil adapté <span class="info-dot" data-tip="Seuil de confiance minimum réellement appliqué, après ajustement automatique par l'apprentissage.">ⓘ</span></label><b id="iaXauThreshold">62.0%</b></div>
+            <div><label>MAE / MFE moyens <span class="info-dot" data-tip="Excursion défavorable / favorable moyenne d'une position avant clôture.">ⓘ</span></label><b id="iaXauExcursions">$0.00 / $0.00</b></div>
           </article>
         </div>
         <div class="guardrail">
@@ -399,7 +367,7 @@
         <div>
           <div class="panel-title">Microstructure du marché</div>
           <h2>Flux normalisés et pression acheteurs / vendeurs</h2>
-          <p>Module d'observation uniquement. Il enregistre et compare les données, mais ne peut ouvrir, fermer ou modifier aucune position.</p>
+          <p>Module d'observation uniquement. Il enregistre et compare les données, mais ne peut ouvrir, fermer ou modifier aucune position. <span class="info-dot" data-tip="Confirmé par audit technique : aucune fonction de décision du moteur (score, entrée, sortie) ne lit ces valeurs aujourd'hui. Phase 6 étudiera si ça doit changer.">ⓘ</span></p>
         </div>
         <div class="micro-mode-badge">
           <span>Mode</span>
@@ -414,20 +382,20 @@
         </article>
         <article class="panel">
           <div class="panel-title">Pression du carnet</div>
-          <div class="micro-metric"><span>OBI</span><b id="microPageObi">-</b></div>
+          <div class="micro-metric"><span>OBI <span class="info-dot" data-tip="Order Book Imbalance : déséquilibre entre volume acheteur et vendeur sur les 5 premiers niveaux du carnet.">ⓘ</span></span><b id="microPageObi">-</b></div>
           <div class="micro-meter"><i id="microObiMeter"></i></div>
           <small id="microObiMeaning">Équilibre indéterminé</small>
         </article>
         <article class="panel">
           <div class="panel-title">Flux récent</div>
-          <div class="micro-metric"><span>OFI</span><b id="microPageOfi">-</b></div>
+          <div class="micro-metric"><span>OFI <span class="info-dot" data-tip="Order Flow Imbalance : variation signée du flux d'ordres entre deux instants.">ⓘ</span></span><b id="microPageOfi">-</b></div>
           <div class="micro-meter"><i id="microOfiMeter"></i></div>
           <small id="microOfiMeaning">Variation indéterminée</small>
         </article>
         <article class="panel">
           <div class="panel-title">Impact et volume</div>
-          <div class="micro-metric"><span>Kyle λ</span><b id="microPageKyle">-</b></div>
-          <div class="micro-metric"><span>POC</span><b id="microPagePoc">-</b></div>
+          <div class="micro-metric"><span>Kyle λ <span class="info-dot" data-tip="Sensibilité du prix au volume échangé — plus λ est élevé, plus un même volume déplace le prix.">ⓘ</span></span><b id="microPageKyle">-</b></div>
+          <div class="micro-metric"><span>POC <span class="info-dot" data-tip="Point de contrôle : zone de prix la plus active dans l'échantillon local récent.">ⓘ</span></span><b id="microPagePoc">-</b></div>
           <small>Le POC est la zone de prix la plus active dans l'échantillon local.</small>
         </article>
       </div>
@@ -440,10 +408,11 @@
           <div><label>Durée du blocage actuel</label><b id="microBlockedDuration">-</b></div>
         </div>
         <p id="microDecisionReason">Aucune décision disponible.</p>
+        <p class="mini-help"><span class="info-dot" data-tip="Ce diagnostic provient de la décision locale du moteur (règles EMA/RSI/MACD), pas directement des métriques OBI/OFI/Kyle/POC ci-dessus — elles sont juxtaposées sur cet écran mais restent deux choses séparées aujourd'hui.">ⓘ</span> Ce diagnostic vient de la décision locale du moteur, pas directement des métriques microstructure ci-dessus.</p>
       </article>
       <article class="panel micro-sources">
         <div class="panel-title">Sources et séparation des marchés</div>
-        <div class="source-row"><b>MT5 · XAU/USD / BOOM 1000</b><span id="microMt5State">En attente</span><small>Flux du broker utilisé pour les actifs tradés.</small></div>
+        <div class="source-row"><b>MT5 · XAU/USD</b><span id="microMt5State">En attente</span><small>Flux du broker utilisé pour l'actif tradé.</small></div>
         <div class="source-row"><b>Hyperliquid · BTC / ETH</b><span id="microHyperState">Désactivé</span><small>Laboratoire crypto séparé; ne remplace pas les données Gold.</small></div>
         <p id="microError" class="notice">Aucune erreur de collecte.</p>
       </article>
@@ -493,104 +462,112 @@
     <section id="settings" class="page">
       <form id="settingsForm" class="settings-grid">
         <div class="settings-scroll">
+        <div class="settings-header-row">
+          <p class="mini-help settings-header-note">Chaque champ visible est lu par le moteur et modifie réellement son comportement.</p>
+          <button id="paramsDocBtn" type="button" class="params-doc-btn">ⓘ Documentation paramètres</button>
+        </div>
         <div class="settings-toolbar">
-          <span>Réglages essentiels affichés</span>
+          <span id="essentialsLabel">Réglages essentiels affichés</span>
           <label class="strategy-toolbar-control">Mode stratégie
             <select id="strategyModeToolbar">
               <option value="scalping_fast">Scalping rapide</option>
               <option value="scalping_safe">Scalping prudent</option>
               <option value="long_analysis">Analyse longue</option>
               <option value="combined">Mode combiné</option>
-              <option value="synthetic_scalp">Scalping synthétiques</option>
             </select>
           </label>
           <span id="strategyAppliedState" class="strategy-applied-state">Profil actif</span>
           <button id="advancedSettingsToggle" type="button">Afficher les réglages avancés</button>
         </div>
-        <article class="panel">
-          <div class="panel-title">Connexion et profil actif</div>
-          <label>Terminal MT5<input name="mt5_path" type="text"></label>
-          <label>Symbole actif<select name="active_symbol">
+
+        <!-- 🟦 Connexion & IA (avancé) -->
+        <article class="panel settings-full-width advanced-setting">
+          <div class="panel-title">🟦 Connexion &amp; IA</div>
+          <label>Terminal MT5 <span class="info-dot" data-tip="Chemin vers le terminal MetaTrader 5 utilisé pour la connexion.">ⓘ</span><input name="mt5_path" type="text"></label>
+          <label>Actif principal <span class="info-dot" data-tip="Actif unique de l'application. Réservé pour l'ajout futur d'autres actifs allant dans le sens de l'or.">ⓘ</span><select name="active_symbol">
             <option value="XAUUSD">XAU/USD — Or</option>
-            <option value="BOOM1000">BOOM 1000 Index</option>
-            <option value="CRASH1000" disabled>CRASH 1000 (bientôt)</option>
           </select></label>
-          <p class="mini-help">Les paramètres de cadence et de signal sont maintenant propres à chaque actif. Les profils avancés seront réservés aux forfaits Custom et Elite dans la version commerciale.</p>
+          <label class="check"><input name="ai_server_enabled" type="checkbox"> Activer le serveur d'apprentissage <span class="info-dot" data-tip="Active la synchronisation avec le serveur IA local (127.0.0.1:8765).">ⓘ</span></label>
+          <label>Adresse du serveur <span class="info-dot" data-tip="Adresse du serveur IA local.">ⓘ</span><input name="ai_server_url" type="text"></label>
+          <label>Clé privée du serveur <span class="info-dot" data-tip="Clé privée du serveur IA local.">ⓘ</span><input name="ai_server_token" type="password" autocomplete="off"></label>
+          <label>Synchronisation (s) <span class="info-dot" data-tip="Fréquence d'envoi des données au serveur IA.">ⓘ</span><input name="ai_sync_interval_sec" type="number" min="2" max="300"></label>
+          <label>Réentraînement (min) <span class="info-dot" data-tip="Fréquence de réentraînement du modèle local.">ⓘ</span><input name="ai_retrain_interval_min" type="number" min="30" max="10080"></label>
+          <label class="check"><input name="ai_server_trade_confirmation" type="checkbox"> Valider les entrées avec AlphaTrade IA serveur <span class="info-dot" data-tip="Si activé, un trade peut être bloqué si le serveur IA (Claude/OpenAI) le désapprouve.">ⓘ</span></label>
+          <label>Clé API Anthropic <span class="info-dot" data-tip="Clé Claude (Anthropic) — prioritaire pour le chat et la validation de trades.">ⓘ</span><input name="anthropic_api_key" type="password" autocomplete="off" placeholder="sk-ant-..."></label>
+          <label>Clé API OpenAI <span class="info-dot" data-tip="Clé de secours si Anthropic échoue.">ⓘ</span><input name="openai_api_key" type="password" autocomplete="off" placeholder="sk-..."></label>
+          <label class="check"><input name="microstructure_enabled" type="checkbox"> Activer l'observation microstructure <span class="info-dot" data-tip="Active la collecte OBI/OFI/Kyle λ/POC. Observation uniquement pour l'instant.">ⓘ</span></label>
+          <label>Intervalle microstructure (s) <span class="info-dot" data-tip="Fréquence de calcul des indicateurs de microstructure.">ⓘ</span><input name="microstructure_interval_sec" type="number" min="1" max="60"></label>
+          <p class="mini-help">L'observation Hyperliquid (BTC/ETH) est un laboratoire crypto séparé, hors périmètre Or — retirée de cette page pour l'instant.</p>
         </article>
-        <article class="panel advanced-setting">
-          <div class="panel-title">Filtre de marché</div>
-          <label class="check"><input name="anti_top_bottom" type="checkbox"> Éviter achat au sommet / vente au creux</label>
-          <label>Bougies analysées<input name="lookback_candles" type="number" min="5" max="500"></label>
-          <label>Zone de bord %<input name="edge_zone_pct" type="number" min="5" max="45"></label>
-          <label>Écart BUY/SELL minimum<input name="min_score_gap" type="number" min="5" max="40"></label>
-          <label>Profit minimum $<input name="min_profit" type="number" min="0" step="0.01"></label>
-          <label class="check"><input name="reinforcement_enabled" type="checkbox"> Apprentissage adaptatif actif</label>
-        </article>
-        <article class="panel settings-full-width advanced-setting">
-          <div class="panel-title">Serveur IA - validation</div>
-          <label class="check"><input name="ai_server_enabled" type="checkbox"> Activer le serveur d'apprentissage</label>
-          <label>Clé API OpenAI<input name="openai_api_key" type="password" autocomplete="off" placeholder="sk-..."></label>
-          <label>Clé API Anthropic<input name="anthropic_api_key" type="password" autocomplete="off" placeholder="sk-ant-..."></label>
-          <label>Adresse du serveur<input name="ai_server_url" type="text"></label>
-          <label>Clé privée du serveur<input name="ai_server_token" type="password" autocomplete="off"></label>
-          <label>Synchronisation (s)<input name="ai_sync_interval_sec" type="number" min="2" max="300"></label>
-          <label>Réentraînement (min)<input name="ai_retrain_interval_min" type="number" min="30" max="10080"></label>
-          <label class="check"><input name="ai_server_trade_confirmation" type="checkbox"> Valider les entrées avec AlphaTrade IA serveur</label>
-          <label class="check"><input name="ai_observation_mode" type="checkbox" disabled checked> Le moteur local garde la sécurité finale</label>
-          <p class="mini-help">Le serveur peut confirmer ou bloquer une entrée candidate. Il ne peut jamais ouvrir, fermer ou modifier une position sans validation du moteur local.</p>
-        </article>
-        <article class="panel settings-full-width advanced-setting">
-          <div class="panel-title">Flux et microstructure</div>
-          <label class="check"><input name="microstructure_enabled" type="checkbox"> Activer l'observation microstructure</label>
-          <label>Intervalle d'analyse (s)<input name="microstructure_interval_sec" type="number" min="1" max="60"></label>
-          <label class="check"><input name="hyperliquid_observer_enabled" type="checkbox"> Observer Hyperliquid (données publiques gratuites)</label>
-          <p class="mini-help">OBI, OFI, impact de Kyle et profil de volume sont enregistrés séparément. Hyperliquid observe BTC/ETH et n'améliore pas directement le flux XAU/USD. Aucun identifiant ni droit de trading n'est utilisé.</p>
-        </article>
+
+        <!-- 🟦 Risque & Session -->
         <article class="panel settings-full-width risk-session-panel">
-          <div class="panel-title">Risque et session</div>
-          <label>Risque / trade %<input name="risk_pct" type="number" min="0.01" max="0.5" step="0.01"></label>
-          <label>Objectif session $<input name="session_target" type="number" min="1" step="1"></label>
-          <label>Objectif journalier $<input name="daily_target" type="number" min="1" step="1"></label>
-          <label>Perte max session $<input name="session_max_loss" type="number" max="-1" step="1"></label>
-          <label>Lot max compte réel<input name="real_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
-          <label>Lot max compte démo<input name="demo_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
-          <label>Positions auto max<input name="auto_max_positions" type="number" min="1" max="8" step="1"></label>
-          <label>Giveback $<input name="giveback" type="number" min="1" step="1"></label>
-          <p class="mini-help">La valeur par défaut reste 2. Vous pouvez l’augmenter jusqu’à 8 ; les renforts restent soumis à une confirmation forte et concordante.</p>
-          <label>Écart confiance renfort %<input name="reinforcement_min_confidence_margin" type="number" min="4" max="30" step="1"></label>
-          <label>Écart score renfort<input name="reinforcement_min_score_gap" type="number" min="12" max="50" step="1"></label>
-          <label>Pause entre renforts (s)<input name="reinforcement_cooldown_sec" type="number" min="10" max="300" step="5"></label>
-          <label class="check"><input name="rebond_enabled" type="checkbox"> Capture Rebond activé</label>
-          <label>Signal minimum rebond %<input name="rebond_min_signal_pct" type="number" min="50" max="95" step="1"></label>
-          <label>Cooldown rebond (s)<input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
-          <label class="check"><input name="profit_protection_enabled" type="checkbox"> Protection du profit active</label>
-          <label>Activation protection $<input name="profit_protection_start" type="number" min="0" step="1"></label>
-          <label>Recul depuis pic %<input name="profit_drawdown_pct" type="number" min="1" max="90" step="1"></label>
-          <label>Recul minimum $<input name="profit_drawdown_min" type="number" min="0" step="1"></label>
-          <label>Zone avertissement %<input name="profit_warning_ratio" type="number" min="0.1" max="0.95" step="0.05"></label>
-          <label>Délai IA max (s)<input name="profit_ai_grace_sec" type="number" min="0" max="300" step="5"></label>
-          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer.</p>
-        </article>
-        <article class="panel symbol-settings asset-card" data-asset-card="XAUUSD">
-          <div class="panel-title">XAU/USD - Or</div>
-          <p class="mini-help">Réglages XAU/USD uniquement. Marché 24/5 avec sa propre volatilité.</p>
-          <label>Lot fixe<input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
+          <div class="panel-title">🟦 Risque &amp; Session</div>
+          <label>Risque / trade % <span class="info-dot" data-tip="Pourcentage du capital risqué par trade, plafonné à 0.50% en dur (garde-fou absolu).">ⓘ</span><input name="risk_pct" type="number" min="0.01" max="0.5" step="0.01"></label>
+          <label>Lot max compte réel <span class="info-dot" data-tip="Plafond réel et unique du lot en compte réel — aucune limite cachée.">ⓘ</span><input name="real_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
+          <label>Lot max compte démo <span class="info-dot" data-tip="Plafond réel et unique du lot en compte démo.">ⓘ</span><input name="demo_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
+          <label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base utilisée par défaut.">ⓘ</span><input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
           <label>Lot minimum<input data-sym="XAUUSD" name="lot_min" type="number" step="0.001"></label>
           <label>Lot maximum<input data-sym="XAUUSD" name="lot_max" type="number" step="0.001"></label>
-          <label>TP pips<input data-sym="XAUUSD" name="tp_pips" type="number"></label>
-          <label>Positions max<input data-sym="XAUUSD" name="max_positions" type="number" min="1" max="8"></label>
-          <label>Perte max / position $<input data-sym="XAUUSD" name="max_position_loss" type="number" step="0.1"></label>
-          <label>Flottant max $<input data-sym="XAUUSD" name="max_floating_loss" type="number" step="0.1"></label>
-          <label>Timeframe<select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
-          <label>Seuil confiance %<input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
-          <label>Cadence min (s)<input data-sym="XAUUSD" name="cadence_sec" type="number" min="1" max="600"></label>
+          <label>Positions auto max <span class="info-dot" data-tip="Plafonné en dur à 8 quoi qu'il arrive (garde-fou).">ⓘ</span><input name="auto_max_positions" type="number" min="1" max="8" step="1"></label>
+          <label>Positions max (symbole)<input data-sym="XAUUSD" name="max_positions" type="number" min="1" max="8"></label>
+          <label>Perte max session $<input name="session_max_loss" type="number" max="-1" step="1"></label>
+          <label>Objectif session $<input name="session_target" type="number" min="1" step="1"></label>
+          <label>Objectif journalier $ <span class="info-dot" data-tip="Déclenche seul l'activation de la protection de bénéfice.">ⓘ</span><input name="daily_target" type="number" min="1" step="1"></label>
+          <label>Giveback $<input name="giveback" type="number" min="1" step="1"></label>
+          <label class="check"><input data-sym="XAUUSD" name="session_filter_enabled" type="checkbox"> Trader uniquement pendant une plage horaire</label>
+          <label>Ouverture UTC<input data-sym="XAUUSD" name="session_start_utc" type="number" min="0" max="23"></label>
+          <label>Fermeture UTC<input data-sym="XAUUSD" name="session_end_utc" type="number" min="1" max="24"></label>
+          <label>Stop avant fin (min)<input data-sym="XAUUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
+          <label class="check"><input name="reinforcement_enabled" type="checkbox"> Apprentissage adaptatif actif</label>
+          <label>Écart confiance renfort %<input name="reinforcement_min_confidence_margin" type="number" min="4" max="30" step="1"></label>
+          <label>Écart score renfort<input name="reinforcement_min_score_gap" type="number" min="12" max="50" step="1"></label>
+          <label>Pause entre renforts (s) <span class="info-dot" data-tip="Délai minimum entre deux renforts de position.">ⓘ</span><input name="reinforcement_cooldown_sec" type="number" min="10" max="300" step="5"></label>
+          <label>Multiplicateur lot renfort <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_renfort" type="number" step="0.1" min="1" max="5"></label>
+          <label>Confiance min. renfort % <span class="info-dot" data-tip="Auparavant invisible — seuil de confiance minimum pour autoriser un renfort.">ⓘ</span><input data-sym="XAUUSD" name="renfort_high_confidence_min" type="number" min="50" max="100"></label>
+          <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
+        </article>
+
+        <!-- 🟦 Stratégie Or -->
+        <article class="panel settings-full-width risk-session-panel">
+          <div class="panel-title">🟦 Stratégie Or</div>
+          <label>Seuil de confiance min % <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span><input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
+          <label>Timeframe d'analyse<select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
+          <label>Cadence d'analyse (s)<input data-sym="XAUUSD" name="cadence_sec" type="number" min="1" max="600"></label>
           <label>Max trades / heure<input data-sym="XAUUSD" name="max_trades_hour" type="number" min="1" max="500"></label>
           <label>Max hold (s)<input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
           <label>Délai de réanalyse (s)<input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
           <label>Cible profit $<input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
+          <label class="check"><input name="anti_top_bottom" type="checkbox"> Éviter achat au sommet / vente au creux <span class="info-dot" data-tip="Évite d'entrer juste après un sommet/plancher récent.">ⓘ</span></label>
+          <label>Bougies analysées<input name="lookback_candles" type="number" min="5" max="500"></label>
+          <label>Zone de bord %<input name="edge_zone_pct" type="number" min="5" max="45"></label>
+          <label>Écart BUY/SELL minimum<input name="min_score_gap" type="number" min="5" max="40"></label>
+          <label>Marge retournement signal <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span><input data-sym="XAUUSD" name="signal_reversal_margin" type="number" min="5" max="100"></label>
+        </article>
+
+        <!-- 🟦 Gestion Rebond XAUUSD (avancé, isolée) -->
+        <article class="panel settings-full-width advanced-setting rebond-panel">
+          <div class="panel-title">🟦 Gestion Rebond XAUUSD <span class="rebond-toggle-hint">module optionnel, désactivé par défaut</span></div>
+          <label class="check"><input name="rebond_enabled" type="checkbox"> Activer la stratégie Rebond</label>
+          <label>Seuil signal contraire min % <span class="info-dot" data-tip="Remplace l'ancienne constante fixe 55 codée en dur dans le moteur.">ⓘ</span><input name="rebond_min_signal_pct" type="number" min="50" max="95" step="1"></label>
+          <label>Force min de zone <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 28).">ⓘ</span><input name="rebond_min_zone_strength" type="number" min="10" max="90" step="1"></label>
+          <label>Distance stop rebond (pips) <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 2.00 pips).">ⓘ</span><input name="rebond_stop_pips" type="number" min="0.5" max="20" step="0.1"></label>
+          <label>Durée max maintien (s) <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 90s).">ⓘ</span><input name="rebond_max_hold_sec" type="number" min="30" max="600" step="10"></label>
+          <label>Cooldown rebond (s)<input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
+          <label>Multiplicateur lot rebond <span class="info-dot" data-tip="Remplace les paliers fixes 80/65 codés en dur dans le calcul du lot de rebond.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
+          <label>Rebonds actifs max <span class="info-dot" data-tip="Fusion de l'ancien champ 'max_rebound_attempts' et du paramètre moteur 'rebond_max_active'.">ⓘ</span><input name="rebond_max_active" type="number" min="1" max="10"></label>
+        </article>
+
+        <!-- 🟦 Trailing & Protection -->
+        <article class="panel settings-full-width risk-session-panel">
+          <div class="panel-title">🟦 Trailing &amp; Protection</div>
+          <label>Protection catastrophe $<input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
+          <label>Perte max / position $ <span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection individuelle par position.">ⓘ</span><input data-sym="XAUUSD" name="max_position_loss" type="number" step="0.1"></label>
+          <label>Flottant max portefeuille $ <span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection sur la perte flottante totale.">ⓘ</span><input data-sym="XAUUSD" name="max_floating_loss" type="number" step="0.1"></label>
+          <label>Profit min. sortie $<input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Verrou profit dès $<input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
-          <label>Recul max profit<input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01" title="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic"></label>
-          <p class="mini-help">Trail dynamique Phase 2.1 — 4 paliers (seuil en $ / recul en fraction)</p>
+          <label>Recul max profit <span class="info-dot" data-tip="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic">ⓘ</span><input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01"></label>
+          <p class="mini-help">Trail dynamique — 4 paliers (seuil en $ / recul en fraction)</p>
           <label>Palier 1 — seuil $<input data-sym="XAUUSD" name="trail_l1_above" type="number" min="0.10" step="0.05"></label>
           <label>Palier 1 — recul<input data-sym="XAUUSD" name="trail_l1_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
           <label>Palier 2 — seuil $<input data-sym="XAUUSD" name="trail_l2_above" type="number" min="0.50" step="0.50"></label>
@@ -600,84 +577,11 @@
           <label>Palier 4 — seuil $<input data-sym="XAUUSD" name="trail_l4_above" type="number" min="5.00" step="1.00"></label>
           <label>Palier 4 — recul<input data-sym="XAUUSD" name="trail_l4_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
           <label>Score momentum sortie<input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
-          <label>Protection catastrophe $<input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
-          <label>Profit min. sortie $<input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
-          <label>Pause après perte (s)<input data-sym="XAUUSD" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
-          <label class="check"><input data-sym="XAUUSD" name="session_filter_enabled" type="checkbox"> Trader uniquement pendant la session de Londres</label>
-          <label>Ouverture UTC<input data-sym="XAUUSD" name="session_start_utc" type="number" min="0" max="23"></label>
-          <label>Fermeture UTC<input data-sym="XAUUSD" name="session_end_utc" type="number" min="1" max="24"></label>
-          <label>Stop avant fin (min)<input data-sym="XAUUSD" name="stop_before_end_min" type="number" min="0" max="180"></label>
-          <!-- Machine à états XAUUSD -->
-          <label>Seuil perte alerte $<input data-sym="XAUUSD" name="seuil_perte_alerte" type="number" step="1"></label>
-          <label>Mult. lot rebond<input data-sym="XAUUSD" name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
-          <label>Renforts max / basket<input data-sym="XAUUSD" name="max_renforts_per_basket" type="number" min="0" max="10"></label>
-          <label>Intervalle renfort min (s)<input data-sym="XAUUSD" name="renfort_min_interval" type="number" min="60" max="1800"></label>
-          <label>Cooldown rebond (s)<input data-sym="XAUUSD" name="rebond_cooldown" type="number" min="60" max="3600"></label>
-          <label>Tentatives rebond max<input data-sym="XAUUSD" name="max_rebound_attempts" type="number" min="1" max="10"></label>
-          <label>Perte journalière max $<input data-sym="XAUUSD" name="daily_max_loss" type="number" min="50" step="50"></label>
-        </article>
-        <article class="panel symbol-settings asset-card" data-asset-card="BOOM1000">
-          <div class="panel-title">BOOM 1000 Index</div>
-          <p class="mini-help">Réglages BOOM 1000 uniquement. Indice synthétique Deriv — pip = 1.0, pas de SL fixe.</p>
-          <label>Lot fixe<input data-sym="BOOM1000" name="lot" type="number" step="0.01"></label>
-          <label>Lot minimum<input data-sym="BOOM1000" name="lot_min" type="number" step="0.01"></label>
-          <label>Lot maximum<input data-sym="BOOM1000" name="lot_max" type="number" step="0.01"></label>
-          <label>TP pips<input data-sym="BOOM1000" name="tp_pips" type="number"></label>
-          <label>Positions max<input data-sym="BOOM1000" name="max_positions" type="number" min="1" max="8"></label>
-          <label>Perte max / position $<input data-sym="BOOM1000" name="max_position_loss" type="number" step="0.1"></label>
-          <label>Flottant max $<input data-sym="BOOM1000" name="max_floating_loss" type="number" step="0.1"></label>
-          <label>Timeframe<select data-sym="BOOM1000" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
-          <label>Seuil confiance %<input data-sym="BOOM1000" name="confidence_min" type="number" min="50" max="95"></label>
-          <label>Cadence min (s)<input data-sym="BOOM1000" name="cadence_sec" type="number" min="1" max="600"></label>
-          <label>Max trades / heure<input data-sym="BOOM1000" name="max_trades_hour" type="number" min="1" max="500"></label>
-          <label>Max hold (s)<input data-sym="BOOM1000" name="max_hold_sec" type="number" min="5" max="3600"></label>
-          <label>Délai de réanalyse (s)<input data-sym="BOOM1000" name="position_review_sec" type="number" min="30" max="900"></label>
-          <label>Cible profit $<input data-sym="BOOM1000" name="profit_target" type="number" min="0.05" step="0.05"></label>
-          <label>Verrou profit dès $<input data-sym="BOOM1000" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
-          <label>Recul max profit<input data-sym="BOOM1000" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01" title="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic"></label>
-          <label>Protection catastrophe $<input data-sym="BOOM1000" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
-          <label>Profit min. sortie $<input data-sym="BOOM1000" name="min_positive_exit" type="number" min="0" step="0.01"></label>
-          <label>Pause après perte (s)<input data-sym="BOOM1000" name="cooldown_after_loss_sec" type="number" min="0" max="900"></label>
-          <label class="check"><input data-sym="BOOM1000" name="session_filter_enabled" type="checkbox"> Filtrer par session horaire</label>
-          <label>Ouverture UTC<input data-sym="BOOM1000" name="session_start_utc" type="number" min="0" max="23"></label>
-          <label>Fermeture UTC<input data-sym="BOOM1000" name="session_end_utc" type="number" min="1" max="24"></label>
-          <label>Stop avant fin (min)<input data-sym="BOOM1000" name="stop_before_end_min" type="number" min="0" max="180"></label>
-          <!-- Machine à états BOOM1000 -->
-          <label>Seuil perte alerte $<input data-sym="BOOM1000" name="seuil_perte_alerte" type="number" step="1"></label>
-          <label>Mult. lot rebond<input data-sym="BOOM1000" name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
-          <label>Renforts max / basket<input data-sym="BOOM1000" name="max_renforts_per_basket" type="number" min="0" max="10"></label>
-          <label>Intervalle renfort min (s)<input data-sym="BOOM1000" name="renfort_min_interval" type="number" min="60" max="1800"></label>
-          <label>Cooldown rebond (s)<input data-sym="BOOM1000" name="rebond_cooldown" type="number" min="60" max="3600"></label>
-          <label>Tentatives rebond max<input data-sym="BOOM1000" name="max_rebound_attempts" type="number" min="1" max="10"></label>
-          <label>Perte journalière max $<input data-sym="BOOM1000" name="daily_max_loss" type="number" min="50" step="50"></label>
-          <!-- ── Cycle Manager Phase 2.3 ──────────────────────────────────────── -->
-          <!-- Valeurs provisoires observation — calibration après collecte données -->
-          <label class="check"><input data-sym="BOOM1000" name="cycle_manager_enabled" type="checkbox"> Cycle Manager Phase 2.3 (BOOM1000)</label>
-          <!-- BPPL — Basket Profit Priority Layer -->
-          <label class="check"><input data-sym="BOOM1000" name="bppl_enabled" type="checkbox"> BPPL — protection profit panier</label>
-          <label>BPPL seuil profit $ (absolu)<input data-sym="BOOM1000" name="bppl_trigger_profit" type="number" step="0.5" min="0.5" title="Déclenche si profit panier ≥ ce montant en $"></label>
-          <label>BPPL seuil profit % exposition<input data-sym="BOOM1000" name="bppl_trigger_profit_pct" type="number" step="0.5" min="0.5" max="20" title="Déclenche si profit ≥ X% de l'exposition totale — OU logique avec seuil $"></label>
-          <label>BPPL positions à fermer<input data-sym="BOOM1000" name="bppl_close_n_first" type="number" min="1" max="5" title="Nb de positions fermées en priorité (tri : profit > âge > risque retournement)"></label>
-          <label>BPPL QPC override (pips)<input data-sym="BOOM1000" name="bppl_qpc_override_pips" type="number" min="1" max="30" title="TP réduit appliqué aux positions restantes pendant la protection"></label>
-          <label>BPPL PEG override (fraction)<input data-sym="BOOM1000" name="bppl_peg_override_pct" type="number" step="0.05" min="0.05" max="0.50" title="Recul max depuis le pic avant fermeture totale (ex : 0.20 = 20%)"></label>
-          <label>BPPL durée max protection (s)<input data-sym="BOOM1000" name="bppl_max_hold_sec" type="number" min="30" max="600"></label>
-          <!-- QPC — Quick Profit Capture -->
-          <label class="check"><input data-sym="BOOM1000" name="qpc_enabled" type="checkbox"> QPC — capture rapide des gains</label>
-          <label>QPC palier 1 — âge max (s)<input data-sym="BOOM1000" name="qpc_tier1_age_sec" type="number" min="5" max="120"></label>
-          <label>QPC palier 1 — TP (pips)<input data-sym="BOOM1000" name="qpc_tier1_pips" type="number" min="1" max="20"></label>
-          <label>QPC palier 2 — âge max (s)<input data-sym="BOOM1000" name="qpc_tier2_age_sec" type="number" min="20" max="300"></label>
-          <label>QPC palier 2 — TP (pips)<input data-sym="BOOM1000" name="qpc_tier2_pips" type="number" min="1" max="15"></label>
-        </article>
-
-        <article class="panel settings-full-width">
-          <div class="panel-title">Machine à états — Renfort / Rebond (global)</div>
-          <p class="mini-help">Ces valeurs s'appliquent si le symbole actif n'a pas ses propres réglages. NORMAL → ALERTE (seuil perte) → REBOND (signal fort ≥ 85%).</p>
-          <label>Seuil perte alerte $ (XAUUSD)<input name="seuil_perte_alerte" type="number" step="1"></label>
-          <label>Multiplicateur lot rebond<input name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
-          <label>Renforts max par basket<input name="max_renforts_per_basket" type="number" min="0" max="10"></label>
-          <label>Intervalle min entre renforts (s)<input name="renfort_min_interval" type="number" min="60" max="1800"></label>
-          <label>Cooldown rebond (s)<input name="rebond_cooldown" type="number" min="60" max="3600"></label>
-          <label>Tentatives rebond maximum<input name="max_rebound_attempts" type="number" min="1" max="10"></label>
+          <label class="check"><input name="profit_protection_enabled" type="checkbox"> Protection du profit active</label>
+          <label>Recul depuis pic %<input name="profit_drawdown_pct" type="number" min="1" max="90" step="1"></label>
+          <label>Recul minimum $<input name="profit_drawdown_min" type="number" min="0" step="1"></label>
+          <label>Zone avertissement %<input name="profit_warning_ratio" type="number" min="0.1" max="0.95" step="0.05"></label>
+          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Emplacement réservé pour le futur Break-Even automatique (Phase 9, calibré par broker).</p>
         </article>
         </div>
         <div class="settings-actions">
@@ -687,6 +591,41 @@
         </div>
       </form>
     </section>
+
+    <div id="paramsDocModal" class="params-doc-modal">
+      <div class="params-doc-card">
+        <span class="params-doc-close" onclick="document.getElementById('paramsDocModal').classList.remove('open')">×</span>
+        <h3>Documentation des paramètres</h3>
+        <p class="mini-help">Fiche de traçabilité — survolez un champ dans la page pour voir son explication rapide. Détail des paramètres clés ci-dessous.</p>
+        <div class="params-doc-entry">
+          <h4>confidence_min</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>AI Brain / moteur de score (alphatrade_engine.py)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Bloque les entrées sous le seuil</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>60%</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>real_lot_cap</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>Risk manager, juste avant l'envoi à MT5</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Plafond réel et unique du lot en compte réel</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>0.10</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (corrigé en Phase 1)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>rebond_min_signal_pct</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>Module Gestion Rebond XAUUSD (si activé)</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Seuil de score contraire minimal pour autoriser un rebond</b></div>
+          <div class="params-doc-kv"><span>Valeur par défaut</span><b>55</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (reconnecté en Phase 1)</b></div>
+        </div>
+        <div class="params-doc-entry">
+          <h4>max_position_loss</h4>
+          <div class="params-doc-kv"><span>Utilisation</span><b>position_exit_reason() — protection par position</b></div>
+          <div class="params-doc-kv"><span>Impact</span><b>Ferme la position si sa perte dépasse ce seuil</b></div>
+          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (activé en Phase 1)</b></div>
+        </div>
+      </div>
+    </div>
 
     <section id="journal" class="page">
       <article class="panel full journal-panel">
@@ -717,7 +656,7 @@
           <input id="assistantQuestion" type="text" placeholder="Exemple : Pourquoi tu ne prends pas de position ?" autocomplete="off">
           <button type="submit">Demander</button>
         </form>
-        <p class="mini-help">Reconnaissance vocale réelle et voix serveur prévues dans une prochaine version. Cette base prépare déjà la section dédiée.</p>
+        <p class="mini-help">Reconnaissance vocale activée — cliquez sur « Voix » pour dicter votre question. Les réponses sont lues à voix haute automatiquement.</p>
       </article>
     </section>
 
@@ -777,7 +716,7 @@
           <div class="panel-title">Informations du compte</div>
           <div class="account-info-row"><span>Plan actif</span><b id="acInfoPlan" style="color:var(--green)">—</b></div>
           <div class="account-info-row"><span>Date d'expiration</span><b id="acInfoExpires">—</b></div>
-          <div class="account-info-row"><span>Version app</span><b id="appVersionInfo">v4.0.2</b></div>
+          <div class="account-info-row"><span>Version app</span><b id="appVersionInfo">v5.0.0</b></div>
           <p class="mini-help" style="margin-top:10px">Pour changer de plan, contactez le support à <strong>alphatrade.com</strong></p>
         </article>
 
@@ -834,7 +773,7 @@
     <div class="login-logo">
       <img src="assets/icon.ico" alt="" onerror="this.style.display='none'">
       <span>AlphaTrade</span>
-      <small id="appVersionLogin">v4.0.2</small>
+      <small id="appVersionLogin">v5.0.0</small>
     </div>
     <h2>Connexion</h2>
     <p class="login-sub">Connectez-vous avec votre compte AlphaTrade</p>

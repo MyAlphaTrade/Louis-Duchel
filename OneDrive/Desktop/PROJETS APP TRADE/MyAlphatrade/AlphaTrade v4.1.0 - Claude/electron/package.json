@@ -1,7 +1,7 @@
 {
   "name": "alphatrade",
-  "version": "4.1.0",
-  "description": "AlphaTrade v4.1.0 - Trading IA MetaTrader 5",
+  "version": "5.0.0",
+  "description": "AlphaTrade Gold v5.0.0 - Trading IA MetaTrader 5 (XAU/USD)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -10,8 +10,8 @@
     "build:mac": "electron-builder --mac --publish never"
   },
   "build": {
-    "appId": "com.myalphatrade.app.410",
-    "productName": "AlphaTrade 4.1.0",
+    "appId": "com.myalphatrade.app.500",
+    "productName": "AlphaTrade 5.0.0",
     "asar": true,
     "compression": "maximum",
     "directories": {
@@ -31,14 +31,14 @@
       "category": "public.app-category.finance"
     },
     "dmg": {
-      "title": "AlphaTrade 4.1.0"
+      "title": "AlphaTrade 5.0.0"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AlphaTrade 4.1.0"
+      "shortcutName": "AlphaTrade 5.0.0"
     },
     "publish": {
       "provider": "github",

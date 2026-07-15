@@ -40,12 +40,9 @@ const defaults = {
   session_max_loss: -200,
   giveback: 100,
   profit_protection_enabled: true,
-  profit_protection_start: 50,
   profit_drawdown_pct: 30,
   profit_drawdown_min: 10,
   profit_warning_ratio: .75,
-  profit_ai_grace_sec: 30,
-  min_profit: 0.2,
   risk_pct: 0.35,
   real_lot_cap: 0.20,
   demo_lot_cap: 0.20,
@@ -62,21 +59,18 @@ const defaults = {
   reinforcement_min_confidence_margin: 5,
   reinforcement_min_score_gap: 8,
   reinforcement_cooldown_sec: 30,
-  rebond_enabled: true,
+  rebond_enabled: false,
   rebond_cooldown_sec: 60,
-  // Machine à états — Renfort / Rebond (Claude v4)
-  seuil_perte_alerte: -15,
-  lot_multiplicateur_rebond: 2.0,
-  max_renforts_per_basket: 3,
-  renfort_min_interval: 300,
-  rebond_cooldown: 900,
-  max_rebound_attempts: 1,
+  rebond_min_signal_pct: 55,
+  rebond_min_zone_strength: 28,
+  rebond_stop_pips: 2.00,
+  rebond_max_hold_sec: 90,
+  rebond_max_active: 3,
   ai_server_enabled: true,
   ai_server_url: 'http://127.0.0.1:8765',
   ai_server_token: '',
   openai_api_key: '',
   anthropic_api_key: '',
-  ai_observation_mode: true,
   ai_server_trade_confirmation: false,
   ai_sync_interval_sec: 5,
   ai_retrain_interval_min: 360,
@@ -86,7 +80,7 @@ const defaults = {
   hyperliquid_symbols: ['BTC', 'ETH'],
   symbols: {
     XAUUSD: {
-      lot: .03, lot_min: .01, lot_max: .20, tp_pips: 50, max_positions: 6,
+      lot: .03, lot_min: .01, lot_max: .20, max_positions: 6,
       max_position_loss: 15, max_floating_loss: 50, timeframe: 'M1',
       confidence_min: 70, cadence_sec: 30, max_trades_hour: 120,
       max_hold_sec: 120, position_review_sec: 120,
@@ -99,62 +93,8 @@ const defaults = {
       emergency_loss_limit: 15, min_positive_exit: .05,
       signal_reversal_margin: 7, cooldown_after_loss_sec: 60,
       session_filter_enabled: false, session_start_utc: 8, session_end_utc: 17, stop_before_end_min: 30,
-      // Machine à états Claude v4
-      seuil_perte_alerte: -15, lot_multiplicateur_rebond: 2.0,
-      max_renforts_per_basket: 3, renfort_min_interval: 300,
-      rebond_cooldown: 900, max_rebound_attempts: 1, daily_max_loss: 200
-    },
-    BOOM1000: {
-      lot: .20, lot_min: .01, lot_max: .20, tp_pips: 15, max_positions: 3,
-      max_position_loss: 150, max_floating_loss: 300, timeframe: 'M1',
-      confidence_min: 70, cadence_sec: 30, max_trades_hour: 40,
-      max_hold_sec: 60, position_review_sec: 120,
-      profit_target: 5.0, profit_lock_trigger: 3.0, profit_lock_drawdown: 0.20,
-      emergency_loss_limit: 150, min_positive_exit: .05,
-      signal_reversal_margin: 9, cooldown_after_loss_sec: 120,
-      session_filter_enabled: false, session_start_utc: 7, session_end_utc: 20, stop_before_end_min: 30,
-      // Machine à états Claude v4
-      seuil_perte_alerte: -150, lot_multiplicateur_rebond: 1.0,
-      max_renforts_per_basket: 2, renfort_min_interval: 300,
-      rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500,
-      // Cycle Manager Phase 2.3 — valeurs provisoires observation
-      // Calibration après collecte données. Tous modules désactivés.
-      cycle_manager_enabled: false,
-      // BPPL — Basket Profit Priority Layer
-      bppl_enabled: false,
-      bppl_trigger_profit: 5.0,
-      bppl_trigger_profit_pct: 3.0,
-      bppl_profit_reference_mode: 'fixed',
-      bppl_close_n_first: 2,
-      bppl_tie_threshold_pct: 10,
-      bppl_use_reversal_risk: true,
-      bppl_risk_weight_extension: 50,
-      bppl_risk_weight_distance: 30,
-      bppl_risk_weight_spike_timing: 20,
-      bppl_qpc_override_pips: 5,
-      bppl_peg_override_pct: 0.20,
-      bppl_max_hold_sec: 180,
-      bppl_resume_min_profit: 0.50,
-      // QPC — Quick Profit Capture
-      qpc_enabled: false,
-      qpc_tier1_age_sec: 20,
-      qpc_tier1_pips: 8,
-      qpc_tier2_age_sec: 45,
-      qpc_tier2_pips: 5,
-      qpc_extended_reduction_pct: 30,
-    },
-    CRASH1000: {
-      lot: .20, lot_min: .01, lot_max: .20, tp_pips: 15, max_positions: 3,
-      max_position_loss: 150, max_floating_loss: 300, timeframe: 'M1',
-      confidence_min: 70, cadence_sec: 30, max_trades_hour: 40,
-      max_hold_sec: 60, position_review_sec: 120,
-      profit_target: 5.0, profit_lock_trigger: 3.0, profit_lock_drawdown: 0.20,
-      emergency_loss_limit: 150, min_positive_exit: .05,
-      signal_reversal_margin: 9, cooldown_after_loss_sec: 120,
-      session_filter_enabled: false, session_start_utc: 7, session_end_utc: 20, stop_before_end_min: 30,
-      seuil_perte_alerte: -150, lot_multiplicateur_rebond: 1.0,
-      max_renforts_per_basket: 2, renfort_min_interval: 300,
-      rebond_cooldown: 600, max_rebound_attempts: 1, daily_max_loss: 500
+      lot_multiplicateur_renfort: 1.0, renfort_high_confidence_min: 75,
+      lot_multiplicateur_rebond: 3.0
     }
   }
 };
@@ -175,10 +115,6 @@ const strategyProfiles = {
   combined: {
     labelFr: 'Mode combiné', labelEn: 'Combined mode',
     values: { risk_pct: .25, auto_max_positions: 2, max_trades_hour: 35, cadence_sec: 30, max_hold_sec: 300, confidence_min: 70, session_target: 15 }
-  },
-  synthetic_scalp: {
-    labelFr: 'Scalping synthétiques', labelEn: 'Synthetic scalping',
-    values: { risk_pct: .30, auto_max_positions: 3, max_trades_hour: 60, cadence_sec: 10, max_hold_sec: 90, confidence_min: 60, session_target: 25 }
   }
 };
 
@@ -218,16 +154,6 @@ function renderTradingView(force = false) {
   }
   if (container.dataset.loaded === 'true') return;
   container.dataset.loaded = 'true';
-  const isSynthetic = activeSymbol === 'BOOM1000' || activeSymbol === 'CRASH1000';
-  if (isSynthetic) {
-    container.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;color:var(--muted);font-size:13px;text-align:center;padding:24px">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/></svg>
-      <div style="font-weight:600;color:var(--text)">${activeSymbol}</div>
-      <div>Graphique non disponible sur TradingView.<br>Les indices synthétiques Deriv ne sont pas listés sur cette plateforme.</div>
-      <div style="font-size:11px;opacity:.6">L'analyse IA et le trading fonctionnent normalement via MT5.</div>
-    </div>`;
-    return;
-  }
   const symbol = encodeURIComponent('OANDA:XAUUSD');
   const locale = currentLanguage === 'en' ? 'en' : 'fr';
   container.innerHTML = `<iframe title="TradingView" allowtransparency="true" scrolling="no"
@@ -691,9 +617,58 @@ $('assistantForm')?.addEventListener('submit', event => {
   });
 });
 
+// ── Reconnaissance vocale (Web Speech API, native Chromium/Electron) ──────────
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceRecognition = null;
+let voiceListening = false;
+
+function initVoiceRecognition() {
+  if (!SpeechRecognitionCtor || voiceRecognition) return voiceRecognition;
+  voiceRecognition = new SpeechRecognitionCtor();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.maxAlternatives = 1;
+  voiceRecognition.onresult = event => {
+    const transcript = event.results?.[0]?.[0]?.transcript || '';
+    const input = $('assistantQuestion');
+    if (input && transcript) input.value = transcript;
+  };
+  voiceRecognition.onerror = () => {
+    assistantLine(currentLanguage === 'en'
+      ? 'Voice recognition error — please try again or type your question.'
+      : 'Erreur de reconnaissance vocale — réessayez ou écrivez votre question.', 'bot');
+  };
+  voiceRecognition.onend = () => {
+    voiceListening = false;
+    $('voiceOrb')?.classList.remove('listening');
+    $('voiceButton')?.classList.remove('listening');
+  };
+  return voiceRecognition;
+}
+
 $('voiceButton')?.addEventListener('click', () => {
-  $('voiceOrb')?.classList.toggle('listening');
-  assistantLine('Mode vocal préparé. La reconnaissance vocale réelle sera branchée dans une prochaine étape; vous pouvez déjà écrire votre question ici.', 'bot');
+  const recognition = initVoiceRecognition();
+  if (!recognition) {
+    assistantLine(currentLanguage === 'en'
+      ? 'Voice recognition is not available in this environment.'
+      : "La reconnaissance vocale n'est pas disponible dans cet environnement.", 'bot');
+    return;
+  }
+  if (voiceListening) {
+    recognition.stop();
+    return;
+  }
+  recognition.lang = currentLanguage === 'en' ? 'en-US' : 'fr-FR';
+  voiceListening = true;
+  $('voiceOrb')?.classList.add('listening');
+  $('voiceButton')?.classList.add('listening');
+  try {
+    recognition.start();
+  } catch (_) {
+    voiceListening = false;
+    $('voiceOrb')?.classList.remove('listening');
+    $('voiceButton')?.classList.remove('listening');
+  }
 });
 
 function renderStatus(s) {
@@ -1030,30 +1005,19 @@ function sampleQuality(st) {
 
 function renderLearning() {
   const xau = symbolStats('XAUUSD');
-  const vix = symbolStats('BOOM1000');
   const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
   set('iaXauTrades', xau.trades);
   set('iaXauWinrate', `${xau.winrate.toFixed(1)}%`);
   set('iaXauProfit', money(xau.total));
   const learnedXau = currentStatus?.learning?.symbols?.XAUUSD || {};
-  const learnedVix = currentStatus?.learning?.symbols?.BOOM1000 || {};
   const analysisXau = currentStatus?.analysis?.XAUUSD || {};
-  const analysisVix = currentStatus?.analysis?.BOOM1000 || {};
   set('learningState', params?.reinforcement_enabled === false ? (currentLanguage === 'en' ? 'Paused' : 'En pause') : (currentLanguage === 'en' ? 'Active' : 'Actif'));
   set('iaXauQuality', `${learnedXau.samples || 0} ${currentLanguage === 'en' ? 'decisions' : 'décisions'}`);
   set('iaXauThreshold', `${Number(analysisXau.learned_threshold || params?.symbols?.XAUUSD?.confidence_min || 62).toFixed(1)}%`);
   set('iaXauExcursions', `-$${Number(learnedXau.avg_mae || 0).toFixed(2)} / +$${Number(learnedXau.avg_mfe || 0).toFixed(2)}`);
-  set('iaVixTrades', vix.trades);
-  set('iaVixWinrate', `${vix.winrate.toFixed(1)}%`);
-  set('iaVixProfit', money(vix.total));
-  set('iaVixQuality', `${learnedVix.samples || 0} ${currentLanguage === 'en' ? 'decisions' : 'décisions'}`);
-  set('iaVixThreshold', `${Number(analysisVix.learned_threshold || params?.symbols?.BOOM1000?.confidence_min || 70).toFixed(1)}%`);
-  set('iaVixExcursions', `-$${Number(learnedVix.avg_mae || 0).toFixed(2)} / +$${Number(learnedVix.avg_mfe || 0).toFixed(2)}`);
   renderLearningReport(learnedXau, analysisXau, xau);
-  ['iaXauProfit', 'iaVixProfit'].forEach(id => {
-    const el = $(id);
-    if (el) tone(el, id === 'iaXauProfit' ? xau.total : vix.total);
-  });
+  const elProfit = $('iaXauProfit');
+  if (elProfit) tone(elProfit, xau.total);
   renderOriginEvaluation('bot', currentStatus?.origin_stats?.ALPHATRADE || {});
   renderOriginEvaluation('external', currentStatus?.origin_stats?.EXTERNAL_AI || {});
   renderOriginEvaluation('manual', currentStatus?.origin_stats?.MANUAL || {});
@@ -1111,7 +1075,7 @@ function renderServerLearning() {
     : (server.error || (currentLanguage === 'en'
       ? 'The local engine continues to work without the AI server.'
       : 'Le moteur local continue de fonctionner sans le serveur IA.')));
-  [['XAUUSD', 'serverXau'], ['BOOM1000', 'serverVix'], ['CRASH1000', 'serverCrash']].forEach(([symbol, prefix]) => {
+  [['XAUUSD', 'serverXau']].forEach(([symbol, prefix]) => {
     const model = models[symbol] || predictions[symbol]?.model || {};
     const prediction = predictions[symbol] || {};
     set(`${prefix}Version`, model.version ? `v${model.version}` : '-');
@@ -1517,7 +1481,6 @@ function tradeRow(t, withTime = false, idx = null) {
     ${withTime ? `<td>${time || '-'}</td>` : ''}
     <td><span class="pill ${String(t.direction).toLowerCase()}">${t.direction}</span></td>
     <td>${originLabel(t.origin)}</td>
-    <td>${t.symbol_key || t.symbol}</td>
     <td>${Number(t.lot || 0).toFixed(2)}</td>
     <td>${Number(t.open_price || 0).toFixed(2)}</td>
     <td>${Number(t.close_price || 0).toFixed(2)}</td>
@@ -1556,7 +1519,7 @@ function renderFilteredTrades() {
   const trades = filteredTrades();
   $('allTrades').innerHTML = trades.length
     ? trades.map((t, i) => tradeRow(t, true, i)).join('')
-    : '<tr><td colspan="9" class="empty">Aucun trade sur cette période</td></tr>';
+    : '<tr><td colspan="8" class="empty">Aucun trade sur cette période</td></tr>';
   const wins = trades.filter(t => Number(t.profit) > 0).length;
   const losses = trades.filter(t => Number(t.profit) < 0).length;
   const total = trades.reduce((sum, t) => sum + Number(t.profit || 0), 0);
@@ -1683,7 +1646,7 @@ document.querySelectorAll('[data-origin-filter]').forEach(button => button.addEv
 
 function renderTrades(trades) {
   allTrades = trades || [];
-  const body = allTrades.length ? allTrades.slice(0, 12).map(t => tradeRow(t)).join('') : '<tr><td colspan="8" class="empty">Aucun trade MT5 synchronisé</td></tr>';
+  const body = allTrades.length ? allTrades.slice(0, 12).map(t => tradeRow(t)).join('') : '<tr><td colspan="7" class="empty">Aucun trade MT5 synchronisé</td></tr>';
   $('recentTrades').innerHTML = body;
   renderFilteredTrades();
   renderLearning();
@@ -1717,9 +1680,7 @@ function fillSettings(values) {
     ...JSON.parse(JSON.stringify(defaults)),
     ...JSON.parse(JSON.stringify(source)),
     symbols: {
-      XAUUSD: { ...defaults.symbols.XAUUSD, ...(source.symbols?.XAUUSD || {}) },
-      BOOM1000: { ...defaults.symbols.BOOM1000, ...(source.symbols?.BOOM1000 || {}) },
-      CRASH1000: { ...defaults.symbols.CRASH1000, ...(source.symbols?.CRASH1000 || {}) }
+      XAUUSD: { ...defaults.symbols.XAUUSD, ...(source.symbols?.XAUUSD || {}) }
     }
   };
   const form = $('settingsForm');
@@ -1817,6 +1778,19 @@ $('advancedSettingsToggle')?.addEventListener('click', event => {
   event.currentTarget.textContent = visible
     ? (currentLanguage === 'en' ? 'Hide advanced settings' : 'Masquer les réglages avancés')
     : (currentLanguage === 'en' ? 'Show advanced settings' : 'Afficher les réglages avancés');
+  const label = $('essentialsLabel');
+  if (label) {
+    label.textContent = visible
+      ? (currentLanguage === 'en' ? 'Advanced settings shown' : 'Réglages avancés affichés')
+      : (currentLanguage === 'en' ? 'Essential settings shown' : 'Réglages essentiels affichés');
+  }
+});
+
+$('paramsDocBtn')?.addEventListener('click', () => {
+  $('paramsDocModal')?.classList.add('open');
+});
+$('paramsDocModal')?.addEventListener('click', event => {
+  if (event.target.id === 'paramsDocModal') event.target.classList.remove('open');
 });
 
 $('settingsForm').addEventListener('submit', async event => {
@@ -2021,11 +1995,11 @@ async function doLogin() {
 }
 
 const PLAN_LIMITS = {
-  starter:  { capital_min: '$350',   lot_max: '0.03', max_positions: '2',  gain_session: '$10', gain_daily: '$50',  rebond: 'Non', boom1000: false },
-  standard: { capital_min: '$1 000', lot_max: '0.05', max_positions: '4',  gain_session: '$25', gain_daily: '$100', rebond: 'Oui', boom1000: false },
-  pro:      { capital_min: '$1 000', lot_max: '0.05', max_positions: '4',  gain_session: '$25', gain_daily: '$100', rebond: 'Oui', boom1000: false },
-  premium:  { capital_min: '$2 500', lot_max: '0.10', max_positions: '6',  gain_session: '$40', gain_daily: '$250', rebond: 'Oui', boom1000: true  },
-  elite:    { capital_min: '$5 000', lot_max: '0.20', max_positions: '8',  gain_session: '$50', gain_daily: '$500', rebond: 'Oui', boom1000: true  },
+  starter:  { capital_min: '$350',   lot_max: '0.03', max_positions: '2',  gain_session: '$10', gain_daily: '$50',  rebond: 'Non' },
+  standard: { capital_min: '$1 000', lot_max: '0.05', max_positions: '4',  gain_session: '$25', gain_daily: '$100', rebond: 'Oui' },
+  pro:      { capital_min: '$1 000', lot_max: '0.05', max_positions: '4',  gain_session: '$25', gain_daily: '$100', rebond: 'Oui' },
+  premium:  { capital_min: '$2 500', lot_max: '0.10', max_positions: '6',  gain_session: '$40', gain_daily: '$250', rebond: 'Oui' },
+  elite:    { capital_min: '$5 000', lot_max: '0.20', max_positions: '8',  gain_session: '$50', gain_daily: '$500', rebond: 'Oui' },
 };
 
 function showPlanBadge(user, plan) {
@@ -2069,9 +2043,6 @@ function showPlanBadge(user, plan) {
     const isTopPlan = isAdmin || planKey === 'elite';
     upgradeBtn.style.display = isTopPlan ? 'none' : 'flex';
   }
-
-  // Filtrer les actifs selon le plan
-  updateAssetAccess(limits);
 
   if (el('acInfoEmail')) el('acInfoEmail').textContent = user.email;
   if (el('acInfoPlan')) el('acInfoPlan').textContent = planName;
@@ -2217,42 +2188,6 @@ window.startUpdateDownload = function() {
 window.installUpdate = function() {
   if (typeof alpha.installUpdate === 'function') alpha.installUpdate();
 };
-
-// ── Accès aux actifs par plan ─────────────────────────────────────────────────
-function updateAssetAccess(limits) {
-  const hasBoom = Boolean(limits && limits.boom1000);
-  // Sélecteur d'actif dans les paramètres
-  const symbolSelect = document.querySelector('select[name="active_symbol"]');
-  if (symbolSelect) {
-    const boomOption = symbolSelect.querySelector('option[value="BOOM1000"]');
-    if (boomOption) {
-      boomOption.disabled = !hasBoom;
-      boomOption.textContent = hasBoom ? 'BOOM 1000 Index' : 'BOOM 1000 Index (Premium+)';
-    }
-    // Si l'actif actif est BOOM1000 mais pas autorisé, revenir à XAUUSD
-    if (!hasBoom && symbolSelect.value === 'BOOM1000') {
-      symbolSelect.value = 'XAUUSD';
-    }
-  }
-  // Carte d'asset BOOM1000 dans les paramètres
-  const boomCard = document.querySelector('[data-asset-card="BOOM1000"]');
-  if (boomCard) {
-    boomCard.style.opacity = hasBoom ? '1' : '0.4';
-    boomCard.style.pointerEvents = hasBoom ? '' : 'none';
-    let lockLabel = boomCard.querySelector('.boom-lock-label');
-    if (!hasBoom) {
-      if (!lockLabel) {
-        lockLabel = document.createElement('div');
-        lockLabel.className = 'boom-lock-label';
-        lockLabel.style.cssText = 'font-size:10px;color:var(--orange);padding:4px 0;text-align:center;';
-        lockLabel.textContent = 'Disponible à partir du plan Premium';
-        boomCard.prepend(lockLabel);
-      }
-    } else if (lockLabel) {
-      lockLabel.remove();
-    }
-  }
-}
 
 async function initAuth() {
   const token = sessionStorage.getItem('at_token');

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette finale — Paramètres AlphaTrade Gold</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454;
+    --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .mono{font-family:"Cascadia Code","Consolas",monospace;}
+  .wrap{max-width:1200px; margin:0 auto; padding:0 20px 90px;}
+
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto; font-size:0.92rem;}
+
+  /* ---- App chrome replica ---- */
+  .app-shell{max-width:1600px; margin:30px auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-icon-btn:hover{color:var(--red);}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 16px; font-size:12.5px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:22px;}
+
+  /* ---- Params page ---- */
+  .settings-toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:var(--panel2);
+    border:1px solid var(--border-strong); border-radius:10px; padding:10px 16px; margin-bottom:16px; font-size:12.5px;}
+  .settings-toolbar > span:first-child{color:var(--dim);}
+  .strategy-toolbar-control{display:flex; align-items:center; gap:8px; color:var(--muted);}
+  .strategy-toolbar-control select{background:var(--card); color:var(--text); border:1px solid var(--border-strong);
+    border-radius:6px; padding:5px 9px; font-size:12px;}
+  .strategy-applied-state{background:var(--green-dim); color:var(--green-soft); padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;}
+  .advanced-toggle{margin-left:auto; background:var(--blue-dim); border:1px solid #1c5a78; color:var(--blue);
+    padding:7px 13px; border-radius:7px; font-size:12px; cursor:pointer;}
+  .advanced-toggle:hover{background:#154a63;}
+  .adv-badge{font-size:9px; background:var(--blue-dim); color:var(--blue); padding:1px 7px; border-radius:10px;
+    margin-left:8px; text-transform:none; letter-spacing:0.3px; font-weight:700;}
+  .psection.advanced-setting{display:none;}
+  .psection.advanced-setting.show{display:block;}
+  .params-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
+  .params-header h2{margin:0; color:#fff; font-size:1.15rem;}
+  .params-header .sub{color:var(--dim); font-size:12px; margin-top:2px;}
+  .doc-btn{background:var(--blue-dim); border:1px solid #1c5a78; color:var(--blue); padding:8px 14px; border-radius:7px;
+    font-size:12.5px; cursor:pointer; display:flex; align-items:center; gap:6px;}
+  .doc-btn:hover{background:#154a63;}
+
+  .psection{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; margin-bottom:16px; overflow:hidden;}
+  .psection .phead{display:flex; align-items:center; justify-content:space-between; padding:13px 18px; background:var(--card2);
+    border-bottom:1px solid var(--border); }
+  .psection .phead .title{color:var(--green); font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px;}
+  .psection .phead .count{color:var(--dim); font-size:11px;}
+  .pbody{
+    padding:16px 18px; resize:vertical; overflow:auto; min-height:70px; max-height:640px;
+  }
+  .pbody::-webkit-resizer{
+    background:linear-gradient(135deg, transparent 0 40%, var(--green-dim) 40% 46%, transparent 46% 58%,
+      var(--green-dim) 58% 64%, transparent 64% 76%, var(--green-dim) 76% 82%, transparent 82%);
+  }
+
+  .field-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 14px;}
+  @media (max-width:820px){.field-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:520px){.field-grid{grid-template-columns:1fr;}}
+  .field{background:var(--panel2); border:1px solid var(--border); border-radius:7px; padding:8px 10px;}
+  .field label{display:flex; align-items:center; gap:5px; color:var(--dim); font-size:10px; text-transform:uppercase;
+    letter-spacing:0.3px; margin-bottom:5px;}
+  .field .fval{color:var(--text); font-size:13px; background:transparent; border:none; width:100%; padding:0;}
+  .field.new{border-color:var(--blue-dim); box-shadow:0 0 0 1px rgba(92,200,255,0.15) inset;}
+  .field.new label{color:var(--blue);}
+  .field.fixed{border-color:var(--green-dim);}
+  .tag-mini{font-size:8.5px; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:middle;}
+  .tag-mini.new{background:var(--blue-dim); color:var(--blue);}
+  .tag-mini.fix{background:var(--green-dim); color:var(--green-soft);}
+
+  .info-dot{position:relative; color:var(--blue); font-size:10.5px; cursor:help; font-weight:700;}
+  .info-dot::after{
+    content:attr(data-tip); position:absolute; bottom:150%; left:50%; transform:translateX(-50%);
+    width:230px; background:#0f1a13; border:1px solid var(--border-strong); color:var(--text); font-size:11px;
+    line-height:1.5; padding:9px 11px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .15s;
+    box-shadow:0 8px 24px rgba(0,0,0,0.6); z-index:20; text-transform:none; letter-spacing:normal;
+  }
+  .info-dot:hover::after{opacity:1;}
+
+  .toggle-row{display:flex; align-items:center; gap:10px;}
+  .switch{width:38px; height:20px; border-radius:20px; background:var(--border-strong); position:relative; cursor:pointer; flex-shrink:0;}
+  .switch::after{content:""; position:absolute; width:16px; height:16px; border-radius:50%; background:var(--muted); top:2px; left:2px; transition:.2s;}
+  .switch.on{background:var(--green-dim);}
+  .switch.on::after{background:var(--green); left:20px;}
+
+  .rebond-body{transition:opacity .2s;}
+  .rebond-body.disabled{opacity:0.35; pointer-events:none;}
+  .rebond-off-note{display:none; color:var(--dim); font-size:12px; padding:6px 0 0; font-style:italic;}
+  .rebond-body.disabled + .rebond-off-note{display:block;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:12px 16px; margin:14px 0; font-size:0.88rem;}
+  .callout b{color:#fff;}
+
+  /* ---- Modal doc ---- */
+  .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; z-index:100; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; max-width:640px; width:100%;
+    max-height:80vh; overflow-y:auto; padding:22px;}
+  .modal h3{margin:0 0 4px; color:#fff;}
+  .modal .msub{color:var(--dim); font-size:12px; margin-bottom:16px;}
+  .modal .close{float:right; cursor:pointer; color:var(--muted); font-size:20px; line-height:1;}
+  .doc-card{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:10px;}
+  .doc-card h4{margin:0 0 8px; color:var(--green); font-size:13px;}
+  .doc-kv{display:grid; grid-template-columns:100px 1fr; gap:3px 10px; font-size:12px;}
+  .doc-kv .k{color:var(--dim);} .doc-kv .v{color:var(--text);}
+
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette visuelle finale — Étape 3/8 — Aucun code touché</div>
+  <h1>Page Paramètres — AlphaTrade Gold</h1>
+  <p>Reconstruction complète validée : 5 sections compactes, module Rebond isolé avec interrupteur (défaut OFF), info-bulles sur chaque champ, bouton Documentation. BOOM1000/CRASH1000 ont disparu.</p>
+</header>
+
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span>
+      <span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:30:41</b></div>
+      <div class="tb-session">Session <b>Londres</b> 04:44:15</div>
+      <div class="tb-clock">dim. 19h30 41s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn" title="Déconnexion">⏻</div>
+      <div class="tb-icon-btn" title="Thème">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div>
+    <div class="t">Trades</div>
+    <div class="t">Sessions IA</div>
+    <div class="t">Sessions marché</div>
+    <div class="t">Calendrier</div>
+    <div class="t active">Paramètres</div>
+    <div class="t">Journal</div>
+    <div class="t">Assistant IA</div>
+  </div>
+
+  <div class="app-body">
+    <div class="params-header">
+      <div>
+        <h2>Paramètres — XAU/USD (actif unique)</h2>
+        <div class="sub">Chaque champ visible est lu par le moteur et modifie réellement son comportement.</div>
+      </div>
+      <div class="doc-btn" onclick="document.getElementById('docModal').classList.add('open')">ⓘ Documentation paramètres</div>
+    </div>
+
+    <div class="settings-toolbar">
+      <span id="essentialsLabel">Réglages essentiels affichés</span>
+      <label class="strategy-toolbar-control">Mode stratégie
+        <select disabled>
+          <option>Scalping rapide</option>
+          <option>Scalping prudent</option>
+          <option>Analyse longue</option>
+          <option>Mode combiné</option>
+        </select>
+      </label>
+      <span class="strategy-applied-state">Profil actif : Scalping rapide</span>
+      <div class="advanced-toggle" id="advToggleBtn" onclick="toggleAdvanced()">Afficher les réglages avancés</div>
+    </div>
+
+    <!-- SECTION 1 — AVANCÉ -->
+    <div class="psection advanced-setting" id="advSection1">
+      <div class="phead"><div class="title">🟦 Connexion &amp; IA <span class="adv-badge">AVANCÉ</span></div><div class="count">10 champs</div></div>
+      <div class="pbody">
+        <div class="field-grid">
+          <div class="field"><label>Chemin MT5 <span class="info-dot" data-tip="Chemin vers le terminal MetaTrader 5 utilisé pour la connexion.">ⓘ</span></label><div class="fval">C:\...\terminal64.exe</div></div>
+          <div class="field"><label>Serveur IA actif <span class="info-dot" data-tip="Active la synchronisation avec le serveur IA local (127.0.0.1:8765).">ⓘ</span></label><div class="fval">Oui</div></div>
+          <div class="field"><label>URL serveur IA <span class="info-dot" data-tip="Adresse du serveur IA local.">ⓘ</span></label><div class="fval">http://127.0.0.1:8765</div></div>
+          <div class="field"><label>Confirmation IA serveur <span class="info-dot" data-tip="Si activé, un trade peut être bloqué si le serveur IA (Claude/OpenAI) le désapprouve.">ⓘ</span></label><div class="fval">Non</div></div>
+          <div class="field"><label>Intervalle sync IA (s) <span class="info-dot" data-tip="Fréquence d'envoi des données au serveur IA.">ⓘ</span></label><div class="fval">5</div></div>
+          <div class="field"><label>Réentraînement IA (min) <span class="info-dot" data-tip="Fréquence de réentraînement du modèle local.">ⓘ</span></label><div class="fval">60</div></div>
+          <div class="field"><label>Clé API Anthropic <span class="info-dot" data-tip="Clé Claude — prioritaire pour le chat et la validation de trades.">ⓘ</span></label><div class="fval">••••••••••</div></div>
+          <div class="field"><label>Clé API OpenAI <span class="info-dot" data-tip="Clé de secours si Anthropic échoue. Retirée si bascule 100% Anthropic (Phase 7) validée.">ⓘ</span></label><div class="fval">••••••••••</div></div>
+          <div class="field"><label>Microstructure active <span class="info-dot" data-tip="Active la collecte OBI/OFI/Kyle λ/POC. Impact réel sur la décision en cours d'étude (Phase 6).">ⓘ</span></label><div class="fval">Oui</div></div>
+          <div class="field"><label>Intervalle microstructure (s) <span class="info-dot" data-tip="Fréquence de calcul des indicateurs de microstructure.">ⓘ</span></label><div class="fval">2</div></div>
+        </div>
+        <div class="callout">Observateur crypto (Hyperliquid BTC/ETH) déplacé hors de cette page → futur onglet séparé <b>"Laboratoire marché"</b>, hors scope Phase 1.</div>
+      </div>
+    </div>
+
+    <!-- SECTION 2 -->
+    <div class="psection">
+      <div class="phead"><div class="title">🟦 Risque &amp; Session</div><div class="count">15 champs</div></div>
+      <div class="pbody">
+        <div class="field-grid">
+          <div class="field fixed"><label>Risk % par trade <span class="info-dot" data-tip="Pourcentage du capital risqué par trade, plafonné à 0.50% en dur (garde-fou absolu, non contournable).">ⓘ</span></label><div class="fval">1.0%</div></div>
+          <div class="field fixed"><label>Plafond lot réel <span class="tag-mini fix">vraie limite</span><span class="info-dot" data-tip="Nouvelle logique : ce champ EST la limite réelle envoyée à MT5, plus aucune constante cachée ne peut la contredire.">ⓘ</span></label><div class="fval">0.80</div></div>
+          <div class="field fixed"><label>Plafond lot démo <span class="info-dot" data-tip="Même logique que le plafond réel, appliqué en compte démo.">ⓘ</span></label><div class="fval">0.80</div></div>
+          <div class="field"><label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base utilisée par défaut.">ⓘ</span></label><div class="fval">0.03</div></div>
+          <div class="field"><label>Lot min / max <span class="info-dot" data-tip="Bornes absolues du lot, quel que soit le calcul du risk manager.">ⓘ</span></label><div class="fval">0.01 / 0.20</div></div>
+          <div class="field"><label>Positions max simultanées <span class="info-dot" data-tip="Plafonné en dur à 8 quoi qu'il arrive (garde-fou).">ⓘ</span></label><div class="fval">6</div></div>
+          <div class="field"><label>Perte max session <span class="tag-mini fix">fusionné</span><span class="info-dot" data-tip="Absorbe l'ancien champ en doublon 'daily_max_loss'. Une seule protection de perte de session.">ⓘ</span></label><div class="fval">-30$</div></div>
+          <div class="field"><label>Objectif session <span class="info-dot" data-tip="Objectif de gain de la session en cours.">ⓘ</span></label><div class="fval">50$</div></div>
+          <div class="field"><label>Objectif journalier <span class="tag-mini fix">fusionné</span><span class="info-dot" data-tip="Déclenche seul l'activation de la protection de bénéfice (absorbe l'ancien 'profit_protection_start').">ⓘ</span></label><div class="fval">50$</div></div>
+          <div class="field"><label>Giveback max <span class="info-dot" data-tip="Part du gain de session qu'on accepte de rendre avant clôture forcée.">ⓘ</span></label><div class="fval">40%</div></div>
+          <div class="field"><label>Filtre session horaire <span class="info-dot" data-tip="N'autorise le trading que pendant une plage horaire définie.">ⓘ</span></label><div class="fval">Non</div></div>
+          <div class="field"><label>Plage horaire UTC <span class="info-dot" data-tip="Début / fin de la session de trading autorisée.">ⓘ</span></label><div class="fval">08:00 → 17:00</div></div>
+          <div class="field"><label>Apprentissage adaptatif <span class="info-dot" data-tip="Active l'ajustement automatique des poids de score selon les résultats passés.">ⓘ</span></label><div class="fval">Oui</div></div>
+          <div class="field"><label>Cooldown renfort <span class="tag-mini fix">fusionné</span><span class="info-dot" data-tip="Délai minimum entre deux renforts de position. Absorbe l'ancien doublon 'renfort_min_interval'.">ⓘ</span></label><div class="fval">120s</div></div>
+          <div class="field new"><label>Multiplicateur lot renfort <span class="tag-mini new">nouveau</span><span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable.">ⓘ</span></label><div class="fval">1.0</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3 -->
+    <div class="psection">
+      <div class="phead"><div class="title">🟦 Stratégie Or</div><div class="count">10 champs</div></div>
+      <div class="pbody">
+        <div class="field-grid">
+          <div class="field"><label>Seuil de confiance min <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span></label><div class="fval">60%</div></div>
+          <div class="field"><label>Timeframe d'analyse <span class="info-dot" data-tip="Menu déroulant, inchangé : M1 / M5 / M15 / M30 / H1.">ⓘ</span></label><div class="fval" style="display:flex; justify-content:space-between; align-items:center;">M15 <span style="color:var(--dim); font-size:10px;">▾ menu déroulant</span></div></div>
+          <div class="field"><label>Cadence d'analyse (s) <span class="info-dot" data-tip="Fréquence de ré-analyse du marché.">ⓘ</span></label><div class="fval">30</div></div>
+          <div class="field"><label>Bougies analysées <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour le calcul des indicateurs.">ⓘ</span></label><div class="fval">120</div></div>
+          <div class="field"><label>Zone extrême (edge) % <span class="info-dot" data-tip="Définit la zone haute/basse considérée comme extrême dans le range récent.">ⓘ</span></label><div class="fval">15%</div></div>
+          <div class="field"><label>Écart score min BUY/SELL <span class="info-dot" data-tip="Écart minimum entre le score BUY et SELL pour autoriser une entrée (évite les signaux ambigus).">ⓘ</span></label><div class="fval">8</div></div>
+          <div class="field"><label>Anti sommet/plancher <span class="info-dot" data-tip="Évite d'entrer juste après un sommet/plancher récent.">ⓘ</span></label><div class="fval">Oui</div></div>
+          <div class="field new"><label>Marge retournement signal <span class="tag-mini new">nouveau</span><span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span></label><div class="fval">99</div></div>
+          <div class="field"><label>Durée max position (s) <span class="info-dot" data-tip="Ferme automatiquement une position tenue trop longtemps.">ⓘ</span></label><div class="fval">120</div></div>
+          <div class="field"><label>Fréquence de révision (s) <span class="info-dot" data-tip="Intervalle entre deux vérifications de sortie sur une position ouverte.">ⓘ</span></label><div class="fval">15</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 4 — REBOND ISOLÉ — AVANCÉ -->
+    <div class="psection advanced-setting" id="advSection2">
+      <div class="phead">
+        <div class="title">🟦 Gestion Rebond XAUUSD <span class="adv-badge">AVANCÉ</span> <span class="info-dot" data-tip="Module optionnel de repositionnement sur zones offre/demande. Désactivé par défaut pour ne pas entrer en conflit avec la stratégie principale (AI Brain + Break-Even + paliers).">ⓘ</span></div>
+        <div class="toggle-row">
+          <span style="font-size:11px; color:var(--dim);">OFF</span>
+          <div class="switch" id="rebondSwitch" onclick="toggleRebond()"></div>
+          <span style="font-size:11px; color:var(--dim);">ON</span>
+        </div>
+      </div>
+      <div class="pbody">
+        <div class="rebond-body disabled" id="rebondBody">
+          <div class="field-grid">
+            <div class="field"><label>Seuil signal contraire min <span class="tag-mini fix">reconnecté</span><span class="info-dot" data-tip="Remplace l'ancienne constante fixe 55 codée en dur dans le moteur.">ⓘ</span></label><div class="fval">55</div></div>
+            <div class="field new"><label>Force min de zone <span class="tag-mini new">nouveau</span><span class="info-dot" data-tip="Auparavant invisible (valeur fixe 28) — force minimale de la zone offre/demande.">ⓘ</span></label><div class="fval">28</div></div>
+            <div class="field new"><label>Distance stop rebond (pips) <span class="tag-mini new">nouveau</span><span class="info-dot" data-tip="Auparavant invisible (valeur fixe 2.00 pips).">ⓘ</span></label><div class="fval">2.00</div></div>
+            <div class="field new"><label>Durée max maintien (s) <span class="tag-mini new">nouveau</span><span class="info-dot" data-tip="Auparavant invisible (valeur fixe 90s).">ⓘ</span></label><div class="fval">90</div></div>
+            <div class="field"><label>Cooldown rebond (s) <span class="tag-mini fix">fusionné</span><span class="info-dot" data-tip="Absorbe l'ancien doublon mort 'rebond_cooldown'.">ⓘ</span></label><div class="fval">60</div></div>
+            <div class="field"><label>Multiplicateur lot rebond <span class="tag-mini fix">reconnecté</span><span class="info-dot" data-tip="Remplace les paliers fixes 80/65 codés en dur dans le calcul du lot de rebond.">ⓘ</span></label><div class="fval">3.0</div></div>
+            <div class="field new"><label>Rebonds actifs max <span class="tag-mini new">fusionné+nouveau</span><span class="info-dot" data-tip="Fusion de l'ancien champ mort 'max_rebound_attempts' et du paramètre moteur invisible 'rebond_max_active'.">ⓘ</span></label><div class="fval">3</div></div>
+          </div>
+        </div>
+        <div class="rebond-off-note">Module désactivé — le moteur ignore totalement rebond, renfort de rebond, multiplicateur et zones. Activez l'interrupteur pour révéler et utiliser ces réglages.</div>
+      </div>
+    </div>
+
+    <!-- SECTION 5 -->
+    <div class="psection">
+      <div class="phead"><div class="title">🟦 Trailing &amp; Protection</div><div class="count">14 champs</div></div>
+      <div class="pbody">
+        <div class="field-grid">
+          <div class="field"><label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil.">ⓘ</span></label><div class="fval">-15$</div></div>
+          <div class="field new"><label>Perte max / position $ <span class="tag-mini new">activé</span><span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection individuelle par position.">ⓘ</span></label><div class="fval">-50$</div></div>
+          <div class="field new"><label>Flottant max portefeuille $ <span class="tag-mini new">activé</span><span class="info-dot" data-tip="Auparavant affiché mais sans effet — désormais une vraie protection sur la perte flottante totale.">ⓘ</span></label><div class="fval">-150$</div></div>
+          <div class="field"><label>Sortie positive min $ <span class="info-dot" data-tip="Profit minimum requis pour autoriser une sortie sur signal inversé.">ⓘ</span></label><div class="fval">0.09$</div></div>
+          <div class="field"><label>Trail palier 1 (dès $ / %) <span class="info-dot" data-tip="Premier palier de trailing stop dynamique.">ⓘ</span></label><div class="fval">0.50$ / 20%</div></div>
+          <div class="field"><label>Trail palier 2 (dès $ / %) <span class="info-dot" data-tip="Deuxième palier, retracement toléré plus faible.">ⓘ</span></label><div class="fval">5$ / 15%</div></div>
+          <div class="field"><label>Trail palier 3 (dès $ / %) <span class="info-dot" data-tip="Troisième palier.">ⓘ</span></label><div class="fval">10$ / 10%</div></div>
+          <div class="field"><label>Trail palier 4 (dès $ / %) <span class="info-dot" data-tip="Dernier palier, profits élevés très protégés.">ⓘ</span></label><div class="fval">25$ / 7%</div></div>
+          <div class="field"><label>Score sortie momentum <span class="info-dot" data-tip="Sort la position si le score du sens opposé dépasse ce seuil.">ⓘ</span></label><div class="fval">55</div></div>
+          <div class="field"><label>Verrou profit dès $ <span class="info-dot" data-tip="Active le verrouillage de profit une fois ce seuil atteint.">ⓘ</span></label><div class="fval">1$</div></div>
+          <div class="field"><label>Drawdown protection % <span class="info-dot" data-tip="Pourcentage de retracement toléré avant clôture de protection de bénéfice.">ⓘ</span></label><div class="fval">30%</div></div>
+          <div class="field"><label>Drawdown min $ <span class="info-dot" data-tip="Montant minimum de retracement avant déclenchement.">ⓘ</span></label><div class="fval">5$</div></div>
+          <div class="field"><label>Ratio alerte profit <span class="info-dot" data-tip="Seuil d'alerte avant protection de bénéfice complète.">ⓘ</span></label><div class="fval">0.6</div></div>
+          <div class="field"><label>Protection bénéfice active <span class="info-dot" data-tip="Active/désactive tout le module de protection de bénéfice.">ⓘ</span></label><div class="fval">Oui</div></div>
+        </div>
+        <div class="callout">Emplacement réservé pour les futurs champs <b>Break-Even automatique</b> (calibré par broker : spread, tick_value, tick_size, lot — jamais un nombre de pips fixe) une fois la stratégie KB1000 portée en Phase 9.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="wrap" style="margin-top:34px;">
+  <div class="callout">
+    <b>Ce qui a disparu par rapport à aujourd'hui :</b> carte BOOM1000 entière, sélecteur CRASH1000, <code>tp_pips</code>, <code>min_profit</code>, <code>ai_observation_mode</code>, <code>max_renforts_per_basket</code>, <code>seuil_perte_alerte</code>, <code>profit_ai_grace_sec</code>, bloc "Machine à états global" dupliqué, et 4 doublons fusionnés. Total : page passée d'environ 110 champs répartis sur 2 cartes à ~62 champs répartis en 5 sections claires (dont le module Rebond replié par défaut).
+  </div>
+</div>
+
+<div class="modal-overlay" id="docModal">
+  <div class="modal">
+    <span class="close" onclick="document.getElementById('docModal').classList.remove('open')">×</span>
+    <h3>Documentation des paramètres</h3>
+    <div class="msub">Fiche de traçabilité — exemples (la version finale couvrira les ~62 champs conservés)</div>
+
+    <div class="doc-card">
+      <h4>confidence_min</h4>
+      <div class="doc-kv">
+        <div class="k">Utilisation</div><div class="v">AI Brain / moteur de score</div>
+        <div class="k">Impact</div><div class="v">Bloque les entrées sous le seuil</div>
+        <div class="k">Valeur</div><div class="v">60%</div>
+        <div class="k">Source</div><div class="v">params.json</div>
+        <div class="k">Codé en dur</div><div class="v" style="color:var(--green-soft);">NON</div>
+      </div>
+    </div>
+    <div class="doc-card">
+      <h4>real_lot_cap</h4>
+      <div class="doc-kv">
+        <div class="k">Utilisation</div><div class="v">Risk manager, juste avant l'envoi à MT5</div>
+        <div class="k">Impact</div><div class="v">Plafond réel et unique du lot en compte réel</div>
+        <div class="k">Valeur</div><div class="v">0.80</div>
+        <div class="k">Source</div><div class="v">params.json</div>
+        <div class="k">Codé en dur</div><div class="v" style="color:var(--green-soft);">NON (corrigé en Phase 1)</div>
+      </div>
+    </div>
+    <div class="doc-card">
+      <h4>rebond_min_signal_pct</h4>
+      <div class="doc-kv">
+        <div class="k">Utilisation</div><div class="v">Module Gestion Rebond XAUUSD (si activé)</div>
+        <div class="k">Impact</div><div class="v">Seuil de score contraire minimal pour autoriser un rebond</div>
+        <div class="k">Valeur</div><div class="v">55</div>
+        <div class="k">Source</div><div class="v">params.json</div>
+        <div class="k">Codé en dur</div><div class="v" style="color:var(--green-soft);">NON (reconnecté en Phase 1)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Maquette statique et interactive (interrupteur Rebond + bouton Documentation fonctionnels) — aucune valeur réelle n'est modifiée.</footer>
+
+<script>
+  function toggleAdvanced(){
+    const s1 = document.getElementById('advSection1');
+    const s2 = document.getElementById('advSection2');
+    const btn = document.getElementById('advToggleBtn');
+    const label = document.getElementById('essentialsLabel');
+    const shown = s1.classList.toggle('show');
+    s2.classList.toggle('show', shown);
+    btn.textContent = shown ? 'Masquer les réglages avancés' : 'Afficher les réglages avancés';
+    label.textContent = shown ? 'Réglages avancés affichés' : 'Réglages essentiels affichés';
+  }
+  function toggleRebond(){
+    const sw = document.getElementById('rebondSwitch');
+    const body = document.getElementById('rebondBody');
+    sw.classList.toggle('on');
+    body.classList.toggle('disabled');
+  }
+  document.getElementById('docModal').addEventListener('click', function(e){
+    if(e.target === this) this.classList.remove('open');
+  });
+</script>
+
+</body>
+</html>

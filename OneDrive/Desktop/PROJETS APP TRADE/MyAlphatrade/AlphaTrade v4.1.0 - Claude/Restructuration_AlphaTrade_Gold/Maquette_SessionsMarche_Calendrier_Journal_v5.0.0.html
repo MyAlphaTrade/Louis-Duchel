@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Sessions marché / Calendrier / Journal — AlphaTrade Gold v5.0.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff5c6c; --red-dim:#4a1c22;
+    --orange:#ffb454; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .wrap{max-width:1600px; margin:0 auto; padding:0 20px 20px;}
+  header.hero{padding:36px 20px 24px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header.hero h1{font-size:1.6rem; margin:0 0 6px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto; font-size:0.92rem;}
+
+  nav.toc{position:sticky; top:0; z-index:50; background:rgba(7,10,8,0.95); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); padding:10px 22px; display:flex; gap:8px; justify-content:center;}
+  nav.toc a{color:var(--muted); text-decoration:none; font-size:13px; padding:7px 12px; border-radius:6px; border:1px solid transparent;}
+  nav.toc a:hover{color:var(--green); border-color:var(--border-strong); background:var(--panel);}
+
+  .screen-label{max-width:1600px; margin:36px auto 8px; padding:0 20px; color:var(--green-soft); font-size:12px;
+    text-transform:uppercase; letter-spacing:1px; font-weight:700;}
+
+  .app-shell{max-width:1600px; margin:0 auto 0; border:1px solid var(--border-strong); border-radius:12px; overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .app-topbar{background:var(--panel2); padding:7px 12px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); font-size:11px; flex-wrap:nowrap; gap:6px; overflow-x:auto;}
+  .app-topbar .brand{display:flex; align-items:center; gap:8px; color:#fff; font-weight:700;}
+  .app-topbar .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green);}
+  .tb-left{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-right{display:flex; align-items:center; gap:7px; flex-wrap:nowrap; flex-shrink:0;}
+  .tb-badge{border:1px solid var(--border-strong); border-radius:5px; padding:2px 6px; font-size:9.5px; font-weight:700; white-space:nowrap;}
+  .tb-badge.demo{color:var(--orange); border-color:#5c3f1a;}
+  .tb-badge.real{color:var(--dim);}
+  .tb-acct{color:var(--muted); font-size:10.5px; white-space:nowrap;}
+  .tb-gmt{text-align:center; font-size:9px; color:var(--dim); line-height:1.2; white-space:nowrap;}
+  .tb-gmt b{display:block; color:var(--text); font-size:11px;}
+  .tb-session{font-size:10px; color:var(--muted); white-space:nowrap;}
+  .tb-session b{color:var(--orange);}
+  .tb-clock{color:var(--muted); font-size:10.5px; font-family:monospace; white-space:nowrap;}
+  .tb-server{display:flex; align-items:center; gap:4px; font-size:9.5px; color:var(--dim); white-space:nowrap;}
+  .tb-server i{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); display:inline-block;}
+  .tb-account-card{display:flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--border-strong);
+    border-radius:20px; padding:3px 10px 3px 3px; font-size:11px; color:var(--text); cursor:pointer;}
+  .tb-avatar{width:20px; height:20px; border-radius:50%; background:var(--green-dim); color:var(--green-soft); font-weight:700;
+    font-size:10px; display:flex; align-items:center; justify-content:center;}
+  .tb-icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel);
+    color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .tb-lang{display:flex; gap:3px;}
+  .tb-lang button{border:1px solid var(--border-strong); background:var(--panel); color:var(--dim); font-size:10px;
+    padding:3px 7px; border-radius:4px;}
+  .tb-lang button.active{color:var(--green); border-color:var(--green-dim);}
+  .tb-win{display:flex; gap:3px; margin-left:6px;}
+  .tb-win button{width:22px; height:22px; border:none; background:transparent; color:var(--dim); font-size:11px;}
+  .tb-win button.close:hover{color:var(--red);}
+  .stat-strip{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border);}
+  .stat-strip .s{flex:1; padding:10px 16px; border-right:1px solid var(--border);}
+  .stat-strip .s:last-child{border-right:none;}
+  .stat-strip .s .l{color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.4px;}
+  .stat-strip .s .v{color:#fff; font-weight:700; font-size:16px; margin-top:2px;}
+  .app-tabs{display:flex; gap:0; background:var(--panel); border-bottom:1px solid var(--border); padding:0 14px; overflow-x:auto;}
+  .app-tabs .t{padding:12px 16px; font-size:12.5px; color:var(--muted); white-space:nowrap; border-bottom:2px solid transparent;}
+  .app-tabs .t.active{color:var(--green); border-bottom-color:var(--green);}
+  .app-body{background:var(--bg); padding:18px;}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; overflow:hidden; margin-bottom:14px;}
+  .card .chead{padding:11px 15px; background:var(--card2); border-bottom:1px solid var(--border);
+    color:var(--green); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+  .card .cbody{padding:14px 15px; resize:vertical; overflow:auto; min-height:64px; max-height:640px;}
+  .card .cbody::-webkit-resizer{
+    background:linear-gradient(135deg, transparent 0 40%, var(--green-dim) 40% 46%, transparent 46% 58%,
+      var(--green-dim) 58% 64%, transparent 64% 76%, var(--green-dim) 76% 82%, transparent 82%);
+  }
+
+  /* Sessions marché */
+  .period-row{display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:12px;}
+  .period-row label{color:var(--muted); display:flex; align-items:center; gap:6px;}
+  .period-row input{background:var(--panel2); border:1px solid var(--border-strong); color:var(--text); border-radius:5px; padding:5px 8px; font-size:11.5px;}
+  .period-row .rbtn{background:var(--panel2); border:1px solid var(--border-strong); color:var(--muted); border-radius:6px; padding:6px 12px; font-size:11.5px;}
+  .sess-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:12px;}
+  @media (max-width:900px){.sess-grid{grid-template-columns:repeat(2,1fr);}}
+  .sess-card{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:14px; text-align:center;}
+  .sess-card.open{border-color:var(--green-dim); background:rgba(57,255,136,0.05);}
+  .sess-card h3{margin:0 0 4px; color:#fff; font-size:14px;}
+  .sess-card p{margin:0 0 8px; color:var(--dim); font-size:10.5px;}
+  .sess-card .state{display:inline-block; font-size:10px; padding:2px 10px; border-radius:20px; background:var(--panel); color:var(--dim); margin-bottom:8px;}
+  .sess-card.open .state{background:var(--green-dim); color:var(--green-soft);}
+  .sess-card .countdown{display:block; font-size:18px; font-weight:700; color:var(--text); font-family:monospace;}
+  .sess-card .under{color:var(--dim); font-size:10.5px; margin-top:4px;}
+  .perf-row{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:4px;}
+  @media (max-width:820px){.perf-row{grid-template-columns:repeat(2,1fr);}}
+  .perf-box{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 12px;}
+  .perf-box label{display:block; color:var(--dim); font-size:10px; text-transform:uppercase; margin-bottom:4px;}
+  .perf-box b{color:var(--text); font-size:15px;}
+
+  /* Calendrier */
+  .cal-shell{display:flex; gap:14px; align-items:flex-start;}
+  @media (max-width:1000px){.cal-shell{flex-direction:column;}}
+  .cal-nav{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .cal-nav h2{margin:0; color:#fff; font-size:1rem;}
+  .cal-nav .btns{display:flex; gap:6px;}
+  .cal-nav button{background:var(--panel2); border:1px solid var(--border-strong); color:var(--muted); border-radius:6px; padding:5px 10px; font-size:11.5px;}
+  .cal-week{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px;}
+  .cal-week span{text-align:center; color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .cal-day{aspect-ratio:1; background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:4px 6px;
+    font-size:10.5px; color:var(--dim); position:relative;}
+  .cal-day.today{border-color:var(--green-dim); color:var(--green-soft);}
+  .cal-day.win{background:rgba(57,255,136,0.08); border-color:var(--green-dim);}
+  .cal-day.loss{background:rgba(255,92,110,0.08); border-color:var(--red-dim);}
+  .cal-day .n{font-weight:700; color:var(--text);}
+  .cal-day .p{position:absolute; bottom:4px; right:5px; font-size:9px; font-weight:700;}
+  .cal-day.win .p{color:var(--green);} .cal-day.loss .p{color:var(--red);}
+  .cal-empty{color:var(--dim); font-size:12px; text-align:center; padding:30px 10px;}
+
+  /* Journal */
+  .journal-pre{background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px 14px;
+    font-family:"Cascadia Code",Consolas,monospace; font-size:11.5px; color:var(--green-soft); white-space:pre-wrap; margin:0; line-height:1.6;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:12px 16px; margin:16px 0; font-size:0.88rem;}
+  .callout b{color:#fff;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette — 3 écrans — Étape 3/8 — Aucun code touché</div>
+  <h1>Sessions marché · Calendrier · Journal — AlphaTrade Gold v5.0.0</h1>
+  <p>Trois écrans simples, contenu identique à aujourd'hui, uniquement restylés.</p>
+</header>
+
+<nav class="toc">
+  <a href="#s1">1. Sessions marché</a>
+  <a href="#s2">2. Calendrier</a>
+  <a href="#s3">3. Journal</a>
+</nav>
+
+<div id="s1"></div>
+<div class="screen-label">Écran 1/3 — Sessions marché</div>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span><span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:31:12</b></div>
+      <div class="tb-session">Session <b>Londres</b> 07:26:49</div>
+      <div class="tb-clock">dim. 19h31 12s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn">⏻</div><div class="tb-icon-btn">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$3557.25</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v">$3479.65</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div><div class="t">Trades</div><div class="t">Sessions IA</div>
+    <div class="t">Microstructure</div><div class="t active">Sessions marché</div><div class="t">Calendrier</div>
+    <div class="t">Paramètres</div><div class="t">Journal</div><div class="t">Assistant IA</div>
+  </div>
+  <div class="app-body">
+    <div class="card">
+      <div class="chead">Période analysée</div>
+      <div class="cbody">
+        <div class="period-row">
+          <label>Du <input type="date" value="2026-07-01"></label>
+          <label>Au <input type="date" value="2026-07-12"></label>
+          <div class="rbtn">Toute la période</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="chead">Sessions horaires</div>
+      <div class="cbody">
+        <div class="sess-grid">
+          <div class="sess-card"><h3>Sydney</h3><p>22:00–07:00 GMT</p><span class="state">Fermée</span><span class="countdown">06:12:40</span><div class="under">avant ouverture</div></div>
+          <div class="sess-card"><h3>Tokyo</h3><p>00:00–09:00 GMT</p><span class="state">Fermée</span><span class="countdown">04:12:40</span><div class="under">avant ouverture</div></div>
+          <div class="sess-card open"><h3>Londres</h3><p>08:00–17:00 GMT</p><span class="state">Ouverte</span><span class="countdown">07:26:49</span><div class="under">avant fermeture</div></div>
+          <div class="sess-card"><h3>New York</h3><p>13:00–22:00 GMT</p><span class="state">Fermée</span><span class="countdown">02:33:11</span><div class="under">avant ouverture</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="chead">Performance cumulée par session GMT</div>
+      <div class="cbody">
+        <div class="perf-row">
+          <div class="perf-box"><label>Sydney</label><b>$0.00</b></div>
+          <div class="perf-box"><label>Tokyo</label><b>$0.00</b></div>
+          <div class="perf-box"><label>Londres</label><b style="color:var(--green);">$186.25</b></div>
+          <div class="perf-box"><label>New York</label><b>$0.00</b></div>
+        </div>
+        <p style="color:var(--dim); font-size:11px; margin:10px 0 0;">Une opération chevauchant deux sessions est classée selon son heure d'ouverture GMT.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="s2"></div>
+<div class="screen-label">Écran 2/3 — Calendrier</div>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span><span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:31:12</b></div>
+      <div class="tb-session">Session <b>Londres</b> 07:26:49</div>
+      <div class="tb-clock">dim. 19h31 12s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn">⏻</div><div class="tb-icon-btn">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$3557.25</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v">$3479.65</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div><div class="t">Trades</div><div class="t">Sessions IA</div>
+    <div class="t">Microstructure</div><div class="t">Sessions marché</div><div class="t active">Calendrier</div>
+    <div class="t">Paramètres</div><div class="t">Journal</div><div class="t">Assistant IA</div>
+  </div>
+  <div class="app-body">
+    <div class="cal-shell">
+      <div class="card" style="flex:1;">
+        <div class="chead">
+          <span>Juillet 2026</span>
+          <div style="display:flex; gap:6px;"><div class="rbtn" style="padding:4px 10px; border-radius:5px; background:var(--panel2); border:1px solid var(--border-strong); color:var(--muted); font-size:11px;">←</div><div class="rbtn" style="padding:4px 10px; border-radius:5px; background:var(--panel2); border:1px solid var(--border-strong); color:var(--muted); font-size:11px;">Aujourd'hui</div><div class="rbtn" style="padding:4px 10px; border-radius:5px; background:var(--panel2); border:1px solid var(--border-strong); color:var(--muted); font-size:11px;">→</div></div>
+        </div>
+        <div class="cbody">
+          <div class="cal-week"><span>Dim</span><span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span></div>
+          <div class="cal-grid">
+            <div class="cal-day"></div><div class="cal-day"></div><div class="cal-day"></div>
+            <div class="cal-day win"><span class="n">1</span><span class="p">+12</span></div>
+            <div class="cal-day loss"><span class="n">2</span><span class="p">-4</span></div>
+            <div class="cal-day win"><span class="n">3</span><span class="p">+8</span></div>
+            <div class="cal-day"><span class="n">4</span></div>
+            <div class="cal-day win"><span class="n">5</span><span class="p">+3</span></div>
+            <div class="cal-day win"><span class="n">6</span><span class="p">+15</span></div>
+            <div class="cal-day"><span class="n">7</span></div>
+            <div class="cal-day loss"><span class="n">8</span><span class="p">-2</span></div>
+            <div class="cal-day win"><span class="n">9</span><span class="p">+6</span></div>
+            <div class="cal-day win"><span class="n">10</span><span class="p">+9</span></div>
+            <div class="cal-day"><span class="n">11</span></div>
+            <div class="cal-day today win"><span class="n">12</span><span class="p">+2</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="width:300px; flex-shrink:0;">
+        <div class="chead">Résumé de la journée</div>
+        <div class="cbody"><div class="cal-empty">Sélectionnez une journée pour afficher les trades.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="s3"></div>
+<div class="screen-label">Écran 3/3 — Journal</div>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="tb-left">
+      <div class="brand"><span class="dot"></span> AlphaTrade <span style="color:var(--dim); font-weight:400;">v5.0.0</span></div>
+      <span class="tb-badge demo">DEMO</span><span class="tb-badge real">RÉEL</span>
+      <span class="tb-acct">#201660817 · Deriv-Demo</span>
+    </div>
+    <div class="tb-right">
+      <div class="tb-gmt">GMT<b>23:31:12</b></div>
+      <div class="tb-session">Session <b>Londres</b> 07:26:49</div>
+      <div class="tb-clock">dim. 19h31 12s</div>
+      <div class="tb-server"><i></i> Connecté</div>
+      <div class="tb-account-card"><span class="tb-avatar">A</span> Administrateur</div>
+      <div class="tb-icon-btn">⏻</div><div class="tb-icon-btn">◐</div>
+      <div class="tb-lang"><button class="active">FRA</button><button>EN</button></div>
+      <div class="tb-win"><button>–</button><button>□</button><button class="close">×</button></div>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="s"><div class="l">Solde</div><div class="v">$3557.25</div></div>
+    <div class="s"><div class="l">Équité</div><div class="v">$3479.65</div></div>
+    <div class="s"><div class="l">Profit net</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Profit flottant</div><div class="v">+$0.00</div></div>
+    <div class="s"><div class="l">Précision</div><div class="v" style="color:var(--dim);">—</div></div>
+    <div class="s"><div class="l">Espérance</div><div class="v" style="color:var(--dim);">—</div></div>
+  </div>
+  <div class="app-tabs">
+    <div class="t">Tableau de bord</div><div class="t">Trades</div><div class="t">Sessions IA</div>
+    <div class="t">Microstructure</div><div class="t">Sessions marché</div><div class="t">Calendrier</div>
+    <div class="t">Paramètres</div><div class="t active">Journal</div><div class="t">Assistant IA</div>
+  </div>
+  <div class="app-body">
+    <div class="card">
+      <div class="chead">Journal AlphaTrade</div>
+      <div class="cbody" style="min-height:300px;">
+        <pre class="journal-pre">[19:30:12] Démarrage de l'interface...
+[19:30:14] Connexion MT5 établie — compte #201660817 (Deriv-Demo)
+[19:30:15] Synchronisation params.json OK
+[19:30:16] Serveur IA connecté — 127.0.0.1:8765
+[19:30:37] Sync serveur IA — modèle XAU/USD v125
+[19:31:02] Analyse XAU/USD — score BUY 38% / SELL 22% — WAIT
+[19:31:12] Snapshot microstructure — OBI 0.000 / OFI -1.000</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" style="margin-top:26px;">
+  <div class="callout">
+    <b>Ce qui change réellement ici :</b> uniquement le style visuel sur ces 3 écrans. Aucune donnée, filtre ou fonctionnalité ne change — Sessions marché reste basé sur les 4 sessions horaires (Sydney/Tokyo/Londres/New York), le Calendrier garde sa navigation mois par mois avec résumé du jour, le Journal reste le flux brut des événements moteur.
+  </div>
+</div>
+
+<footer>Maquette statique — chaque carte est redimensionnable.</footer>
+</body>
+</html>

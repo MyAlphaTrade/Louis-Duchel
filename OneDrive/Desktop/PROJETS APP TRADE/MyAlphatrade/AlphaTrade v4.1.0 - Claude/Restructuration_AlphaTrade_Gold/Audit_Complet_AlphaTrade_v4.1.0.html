@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Audit Complet AlphaTrade v4.1.0 — Préparation Refonte "Or Only"</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070b08; --bg2:#0d130f; --panel:#0f1712; --panel2:#121b15;
+    --border:#1e2e22; --border2:#2a3d2e;
+    --text:#d8e6dc; --muted:#8aa091; --dim:#5f7568;
+    --green:#3ddc84; --green2:#7CFFB2; --greendim:#1f5c3d;
+    --red:#ff5c6c; --reddim:#4a1c22;
+    --orange:#ffb454; --orangedim:#4a3417;
+    --blue:#5cc8ff; --bluedim:#123a4a;
+    --code-bg:#0a100c;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:radial-gradient(circle at 20% 0%, #0c1610 0%, #070b08 55%);
+    color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.55; margin:0; padding:0;
+  }
+  code, .mono{font-family:"Cascadia Code","Consolas","SF Mono",monospace; font-size:0.92em;}
+  a{color:var(--green2);}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 24px 120px;}
+
+  header.hero{
+    padding:56px 24px 40px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(61,220,132,0.06), transparent);
+  }
+  header.hero .tag{
+    display:inline-block; padding:4px 12px; border:1px solid var(--greendim); border-radius:20px;
+    color:var(--green2); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:18px;
+  }
+  header.hero h1{font-size:2rem; margin:0 0 10px; color:#fff; letter-spacing:-0.5px;}
+  header.hero p.subtitle{color:var(--muted); max-width:720px; margin:0 auto; font-size:1.02rem;}
+  header.hero .meta{margin-top:22px; color:var(--dim); font-size:13px;}
+
+  nav.toc{
+    position:sticky; top:0; z-index:50; background:rgba(7,11,8,0.94); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); padding:10px 24px; display:flex; gap:6px; flex-wrap:wrap;
+    justify-content:center;
+  }
+  nav.toc a{
+    color:var(--muted); text-decoration:none; font-size:13px; padding:7px 12px; border-radius:6px;
+    border:1px solid transparent; white-space:nowrap;
+  }
+  nav.toc a:hover{color:var(--green2); border-color:var(--border2); background:var(--panel);}
+
+  section{padding:56px 0 12px; border-bottom:1px solid var(--border);}
+  section:last-of-type{border-bottom:none;}
+  .section-num{
+    display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px;
+    border-radius:8px; background:var(--panel2); border:1px solid var(--border2); color:var(--green2);
+    font-weight:700; font-size:14px; margin-right:12px;
+  }
+  h2.section-title{display:flex; align-items:center; font-size:1.5rem; color:#fff; margin:0 0 6px;}
+  .section-sub{color:var(--muted); margin:0 0 28px; font-size:0.98rem; max-width:820px;}
+
+  h3{color:var(--green2); font-size:1.08rem; margin:34px 0 12px; border-left:3px solid var(--greendim); padding-left:10px;}
+  h4{color:var(--text); font-size:0.98rem; margin:22px 0 8px; color:#c9d9cf;}
+  p{color:var(--text);}
+
+  .callout{
+    background:var(--panel); border:1px solid var(--border2); border-left:4px solid var(--green);
+    border-radius:8px; padding:16px 18px; margin:16px 0; color:var(--text); font-size:0.95rem;
+  }
+  .callout.warn{border-left-color:var(--orange);}
+  .callout.crit{border-left-color:var(--red);}
+  .callout.info{border-left-color:var(--blue);}
+  .callout b{color:#fff;}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0 28px; font-size:0.86rem; background:var(--panel);
+    border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  thead th{
+    background:var(--panel2); color:var(--muted); text-align:left; padding:10px 12px; font-size:0.72rem;
+    text-transform:uppercase; letter-spacing:0.6px; border-bottom:1px solid var(--border2);
+  }
+  tbody td{padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:rgba(61,220,132,0.03);}
+  td.mono, th.mono{white-space:nowrap;}
+
+  .badge{
+    display:inline-block; padding:2px 9px; border-radius:20px; font-size:0.72rem; font-weight:600;
+    white-space:nowrap; letter-spacing:0.2px;
+  }
+  .b-ok{background:var(--greendim); color:var(--green2);}
+  .b-warn{background:var(--orangedim); color:var(--orange);}
+  .b-dead{background:var(--reddim); color:var(--red);}
+  .b-info{background:var(--bluedim); color:var(--blue);}
+
+  .grid-stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:22px 0;}
+  .stat{background:var(--panel); border:1px solid var(--border2); border-radius:10px; padding:16px;}
+  .stat .n{font-size:1.6rem; font-weight:700; color:#fff;}
+  .stat .l{font-size:0.78rem; color:var(--muted); margin-top:4px;}
+  .stat.ok .n{color:var(--green2);} .stat.warn .n{color:var(--orange);} .stat.dead .n{color:var(--red);} .stat.info .n{color:var(--blue);}
+
+  details.block{
+    background:var(--panel); border:1px solid var(--border2); border-radius:10px; margin:14px 0; padding:0;
+    overflow:hidden;
+  }
+  details.block summary{
+    cursor:pointer; padding:14px 18px; font-weight:600; color:var(--text); list-style:none;
+    display:flex; align-items:center; justify-content:space-between; background:var(--panel2);
+  }
+  details.block summary::-webkit-details-marker{display:none;}
+  details.block summary::after{content:"+"; color:var(--green2); font-size:1.2rem; margin-left:12px;}
+  details.block[open] summary::after{content:"–";}
+  details.block .inner{padding:6px 18px 18px;}
+
+  ul, ol{color:var(--text); padding-left:22px;}
+  li{margin:5px 0;}
+
+  .flow{
+    font-family:monospace; background:var(--code-bg); border:1px solid var(--border2); border-radius:8px;
+    padding:16px 18px; font-size:0.82rem; color:var(--green2); overflow-x:auto; white-space:pre; line-height:1.7;
+  }
+  .flow .arrow{color:var(--dim);}
+  .flow .comment{color:var(--dim);}
+
+  .pill-row{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 20px;}
+
+  footer{padding:50px 24px; text-align:center; color:var(--dim); font-size:12.5px;}
+
+  .toc-mini{columns:2; gap:24px; margin:18px 0;}
+  .toc-mini a{display:block; padding:4px 0; color:var(--muted); text-decoration:none; font-size:0.9rem;}
+  .toc-mini a:hover{color:var(--green2);}
+
+  code.path{color:var(--green2); background:var(--code-bg); padding:1px 6px; border-radius:4px; font-size:0.85em;}
+
+  .action-plan li{margin-bottom:10px;}
+  .action-plan .step-badge{display:inline-block; min-width:22px; height:22px; text-align:center; border-radius:50%;
+    background:var(--greendim); color:var(--green2); font-size:0.75rem; font-weight:700; margin-right:8px; line-height:22px;}
+
+  @media (max-width:720px){
+    .wrap{padding:0 14px 90px;}
+    header.hero h1{font-size:1.5rem;}
+    nav.toc{overflow-x:auto; justify-content:flex-start;}
+    table{font-size:0.78rem;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Audit technique — Lecture seule, aucune modification appliquée</div>
+  <h1>Audit Complet AlphaTrade v4.1.0</h1>
+  <p class="subtitle">Cinq audits croisés du moteur Python, du frontend Electron et du serveur IA, pour préparer la refonte d'AlphaTrade en application exclusivement dédiée à l'or (XAU/USD).</p>
+  <div class="meta">Dossier audité : <code class="path">MyAlphatrade\AlphaTrade v4.1.0 - Claude\</code> · Généré le 12 juillet 2026</div>
+</header>
+
+<nav class="toc">
+  <a href="#resume">Résumé exécutif</a>
+  <a href="#audit1">1. Isolation Or</a>
+  <a href="#audit2">2. Paramètres</a>
+  <a href="#audit3">3. Stratégie &amp; Microstructure</a>
+  <a href="#audit4">4. Assistant IA</a>
+  <a href="#audit5">5. Origine "AVA"</a>
+  <a href="#plan">Plan d'action</a>
+</nav>
+
+<div class="wrap">
+
+<section id="resume">
+  <h2 class="section-title"><span class="section-num">0</span>Résumé exécutif</h2>
+  <p class="section-sub">Ce que révèlent les cinq audits, en une page, avant le détail technique.</p>
+
+  <div class="grid-stats">
+    <div class="stat ok"><div class="n">~68</div><div class="l">paramètres connectés et réellement fonctionnels</div></div>
+    <div class="stat warn"><div class="n">~19</div><div class="l">paramètres sauvegardés mais sans aucun effet réel</div></div>
+    <div class="stat info"><div class="n">~25</div><div class="l">paramètres moteur actifs mais invisibles dans l'UI</div></div>
+    <div class="stat dead"><div class="n">~10</div><div class="l">valeurs de risque codées en dur dans le moteur</div></div>
+  </div>
+
+  <div class="callout">
+    <b>1. Isolation Or</b> — CRASH1000 n'a jamais été réellement activé (case <code>enabled: False</code>, option UI marquée "bientôt", aucune carte de paramètres). Sa suppression est quasi gratuite. BOOM1000, lui, est pleinement fonctionnel avec plusieurs modules propriétaires (Cycle Manager, BPPL, QPC, Opportunity Engine v5, Drift Follower) — environ 800 lignes de moteur à retirer proprement, plus une décision produit sur le verrouillage par forfait (<code>PLAN_LIMITS.boom1000</code>) à trancher avant de coder.
+  </div>
+  <div class="callout warn">
+    <b>2. Paramètres</b> — Sur près de 110 paramètres recensés, <b>19 sont des leurres</b> : l'utilisateur peut les modifier et sauvegarder dans l'app, mais le moteur ne les lit jamais (ex. <code>tp_pips</code>, <code>max_position_loss</code>, <code>max_floating_loss</code>, tout le bloc "Machine à états Renfort/Rebond"). À l'inverse, ~25 paramètres qui pilotent réellement le Cycle Manager BOOM1000 ne sont modifiables qu'en éditant <code>params.json</code> à la main.
+  </div>
+  <div class="callout info">
+    <b>3. Stratégie &amp; Microstructure</b> — La stratégie XAUUSD est un système de règles techniques (EMA/RSI/MACD/momentum) avec pondération apprise de façon incrémentale — pas un modèle IA entraîné. Le module Microstructure (OBI/OFI/Kyle λ/POC) est <b>confirmé purement décoratif</b> : calculé, affiché, jamais lu par la décision de trade. Le serveur IA a un vrai pouvoir de blocage (<code>/v1/decision</code>) mais il est actuellement désactivé dans la config réelle (<code>ai_server_trade_confirmation: false</code>).
+  </div>
+  <div class="callout">
+    <b>4. Assistant IA</b> — Bonne nouvelle : Anthropic (Claude) est déjà intégré et <b>prioritaire</b> sur OpenAI pour le chat, avec les deux clés API déjà configurées. Pour les décisions de trade, un mode double-validation (Anthropic + OpenAI, consensus requis) est utilisé. Retirer OpenAI est un nettoyage ciblé sur 2 fichiers, pas une intégration à construire.
+  </div>
+  <div class="callout crit">
+    <b>5. Origine "AVA"</b> — Confirmé : "AVA / IA EXTERNE" est un libellé <b>hardcodé en dur</b> côté JavaScript pour toute origine classée <code>EXTERNAL_AI</code> côté moteur. Le vrai commentaire MT5 du robot (qui pourrait révéler "KB1000") est lu par le moteur puis jeté — jamais stocké, jamais transmis à l'affichage. Correction possible sans refonte lourde.
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- AUDIT 1 -->
+<!-- ============================================================ -->
+<section id="audit1">
+  <h2 class="section-title"><span class="section-num">1</span>Isolation Or — retrait BOOM1000 / CRASH1000</h2>
+  <p class="section-sub">Objectif : rendre AlphaTrade exclusif à XAU/USD, BOOM1000 et CRASH1000 étant désormais gérés par l'application séparée KB1000.</p>
+
+  <div class="callout info">
+    <b>Constat préalable :</b> CRASH1000 est un squelette de configuration inerte, jamais activable — <code>"CRASH1000": {"enabled": False}</code> (seul symbole avec ce flag), aucune carte de paramètres dans <code>index.html</code>, option de sélecteur marquée <code>disabled</code> avec le libellé <b>"CRASH 1000 (bientôt)"</b>. Aucun module métier (Cycle Manager, Drift Follower, Opportunity Engine) ne le mentionne jamais. Sa suppression est donc beaucoup plus simple que celle de BOOM1000, qui est lui pleinement fonctionnel.
+  </div>
+
+  <h3>1.1 — python\alphatrade_engine.py (4475 lignes)</h3>
+  <table>
+    <thead><tr><th>Élément</th><th class="mono">Lignes</th><th>Catégorie</th><th>Risque au retrait</th></tr></thead>
+    <tbody>
+      <tr><td><code>SYMBOLS</code> — registre-maître des symboles</td><td class="mono">34–50</td><td><span class="badge b-info">Point d'entrée central</span></td><td>Faible — presque tout le moteur boucle génériquement sur ce registre ; le retirer d'ici fait disparaître BOOM/CRASH de tout le pipeline générique (MT5, positions, analyse, IA, status.json)</td></tr>
+      <tr><td><code>DEFAULT_PARAMS.symbols.BOOM1000</code></td><td class="mono">141–230</td><td><span class="badge b-dead">Dédié — à supprimer</span></td><td>Faible</td></tr>
+      <tr><td><code>DEFAULT_PARAMS.symbols.CRASH1000</code></td><td class="mono">231–254</td><td><span class="badge b-dead">Dédié — à supprimer</span></td><td>Nul (déjà inerte)</td></tr>
+      <tr><td><code>STRATEGY_PROFILES.*.symbols.BOOM1000/CRASH1000</code></td><td class="mono">264–306</td><td><span class="badge b-dead">Dédié</span></td><td>Faible</td></tr>
+      <tr><td>Profil <code>synthetic_scalp</code> (entier, dédié synthétiques Deriv)</td><td class="mono">299–308</td><td><span class="badge b-dead">Profil entier à supprimer</span></td><td>Faible — supprimer aussi l'option UI (index.html:504) et sa référence renderer.js:192-195</td></tr>
+      <tr><td><code>REBOND_META</code> / <code>REBOND_STATES</code> — Capture Rebond</td><td class="mono">325–335, 2237–2609</td><td><span class="badge b-ok">Partagé — à conserver</span></td><td>Nul — déjà de fait "XAUUSD-only" (<code>rebond_lot()</code> lit en dur <code>symbols.XAUUSD</code> ligne 2241)</td></tr>
+      <tr><td>Drift Follower BOOM1000</td><td class="mono">337–343, 2612–2737</td><td><span class="badge b-dead">Dédié BOOM1000</span></td><td>Faible <b>si nettoyage complet</b> — <code>DRIFT_FOLLOWER_STATE</code> a 9 occurrences dispersées (lignes 2455, 2632, 3456, 3462, 3609, 3662, 3700, 3808…), toutes à retirer sous peine de <code>NameError</code></td></tr>
+      <tr><td>Cycle Manager + BPPL + QPC + Opportunity Engine v5</td><td class="mono">345–361, 2740–3524</td><td><span class="badge b-dead">Dédié BOOM1000</span></td><td>Modéré — bloc volumineux (~800 lignes) mais bien balisé par des commentaires <code># ── Module ... ──</code></td></tr>
+      <tr><td>3 gardes conditionnelles <code>active == "BOOM1000"</code> dans <code>auto_trade_step</code></td><td class="mono">3609–3657, 3689–3709, 3806–3864</td><td><span class="badge b-dead">Dédié</span></td><td>Nul si le reste ci-dessus est retiré</td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.2 — electron\index.html (873 lignes)</h3>
+  <table>
+    <thead><tr><th>Élément</th><th class="mono">Lignes</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>Texte "mémoires XAU/USD, BOOM 1000 et CRASH 1000 restent séparées…"</td><td class="mono">272</td><td>Adapter le texte</td></tr>
+      <tr><td>Bloc "Modèle BOOM 1000" (serveur IA)</td><td class="mono">319–325</td><td>Supprimer</td></tr>
+      <tr><td>Bloc "Modèle CRASH 1000" (serveur IA)</td><td class="mono">326–332</td><td>Supprimer</td></tr>
+      <tr><td>Bloc apprentissage "BOOM 1000"</td><td class="mono">370–378</td><td>Supprimer</td></tr>
+      <tr><td>Bloc apprentissage "CRASH 1000" (déjà mort, jamais rempli par renderer.js)</td><td class="mono">379–387</td><td>Supprimer</td></tr>
+      <tr><td>Texte source microstructure "MT5 · XAU/USD / BOOM 1000"</td><td class="mono">446</td><td>Adapter le texte</td></tr>
+      <tr><td>Option stratégie <code>synthetic_scalp</code></td><td class="mono">504</td><td>Supprimer</td></tr>
+      <tr><td>Sélecteur <code>active_symbol</code> (3 options)</td><td class="mono">513–517</td><td>Ne garder que XAUUSD</td></tr>
+      <tr><td><b>Carte de paramètres BOOM1000 complète</b> (~65 champs : base, machine à états, Cycle Manager, BPPL, QPC, OE v5, Spike Detector/Guard)</td><td class="mono">619–683</td><td>Supprimer le bloc entier</td></tr>
+      <tr><td>Bloc "Machine à états — Renfort/Rebond (global)"</td><td class="mono">685–694</td><td><span class="badge b-ok">Conserver</span> — générique, déjà libellé "(XAUUSD)"</td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.3 — electron\renderer.js (2340 lignes)</h3>
+  <table>
+    <thead><tr><th>Élément</th><th class="mono">Lignes</th><th>Catégorie</th><th>Risque</th></tr></thead>
+    <tbody>
+      <tr><td><code>defaults.symbols.BOOM1000</code> / <code>CRASH1000</code></td><td class="mono">107–171</td><td><span class="badge b-dead">Dédié</span></td><td>Faible</td></tr>
+      <tr><td>Fusion hardcodée dans <code>fillSettings()</code></td><td class="mono">1732–1736</td><td><span class="badge b-warn">Fusion codée en dur, pas générique</span></td><td>Moyen si désynchronisée du backend — à adapter en parallèle</td></tr>
+      <tr><td><code>collectSettings()</code> — boucle générique sur <code>[data-sym]</code></td><td class="mono">1795–1813</td><td><span class="badge b-ok">Rien à faire</span></td><td>Nul — se vide automatiquement si la carte HTML BOOM1000 disparaît</td></tr>
+      <tr><td><code>isSynthetic</code> + message TradingView "indices synthétiques"</td><td class="mono">225–248</td><td><span class="badge b-dead">Dédié</span></td><td>Faible</td></tr>
+      <tr><td><code>renderLearning()</code> — variables <code>vix</code>/BOOM1000</td><td class="mono">1044–1074</td><td><span class="badge b-dead">Dédié</span></td><td>Faible</td></tr>
+      <tr><td><code>renderServerLearning()</code> — tuple des 3 symboles</td><td class="mono">1127</td><td><span class="badge b-dead">Liste à réduire</span></td><td>Faible</td></tr>
+      <tr><td><code>strategyProfiles.synthetic_scalp</code></td><td class="mono">192–195</td><td><span class="badge b-dead">Dédié</span></td><td>Faible</td></tr>
+      <tr><td><code>PLAN_LIMITS.boom1000</code> + <code>updateAssetAccess()</code> — verrouillage par forfait</td><td class="mono">2036–2042, 2235–2268</td><td><span class="badge b-warn">Décision produit, pas que technique</span></td><td><b>Élevé</b> — touche la grille tarifaire ; à trancher avec toi avant suppression, vérifier si <code>boom1000</code> est utilisé ailleurs (facturation) hors de ces 4 fichiers</td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.4 — electron\main.js (390 lignes)</h3>
+  <div class="callout">Aucune référence à BOOM1000/CRASH1000. Seul point neutre : <code>active_symbol: s.symbol || s.active_symbol || 'XAUUSD'</code> (ligne 69) — déjà replié sur XAUUSD par défaut. <b>Aucune modification nécessaire dans ce fichier.</b></div>
+
+  <h3>1.5 — Bonus hors périmètre initial : python\alphatrade_ai_server.py</h3>
+  <div class="callout warn">Ligne 252 : <code>"models": {s: active_model(conn, s) for s in ("XAUUSD", "BOOM1000", "CRASH1000")}</code> — tuple en dur à réduire à <code>("XAUUSD",)</code>. Le reste du serveur IA est déjà générique (symbole passé dynamiquement). Risque nul, mais alimente <code>renderer.js:1127</code> — à ne pas oublier.</div>
+
+  <h3>1.6 — Plan de retrait recommandé (ordre suggéré)</h3>
+  <ol class="action-plan">
+    <li><span class="step-badge">1</span><b>Décision produit préalable</b> sur <code>PLAN_LIMITS</code>/<code>updateAssetAccess</code> — seule partie non purement technique.</li>
+    <li><span class="step-badge">2</span>Backend : retirer <code>SYMBOLS["BOOM1000"/"CRASH1000"]</code> → réduit automatiquement tout le pipeline générique.</li>
+    <li><span class="step-badge">3</span>Retirer <code>DEFAULT_PARAMS.symbols</code>, <code>STRATEGY_PROFILES</code> et le profil <code>synthetic_scalp</code>.</li>
+    <li><span class="step-badge">4</span>Retirer Drift Follower, Cycle Manager/BPPL/QPC/OE v5, et les 3 gardes conditionnelles (bloc contigu, bien balisé).</li>
+    <li><span class="step-badge">5</span>Frontend <code>index.html</code> : sélecteur, carte BOOM1000, blocs Sessions IA/apprentissage, textes descriptifs.</li>
+    <li><span class="step-badge">6</span><code>renderer.js</code> : <code>defaults.symbols</code>, fusion <code>fillSettings</code>, <code>isSynthetic</code>, <code>renderLearning</code>, tuple <code>renderServerLearning</code>, <code>strategyProfiles.synthetic_scalp</code>.</li>
+    <li><span class="step-badge">7</span>Réduire le tuple ligne 252 de <code>alphatrade_ai_server.py</code>.</li>
+    <li><span class="step-badge">8</span>Grep final <code>BOOM1000|CRASH1000|BOOM|CRASH</code> sur les 5 fichiers pour confirmer zéro résidu, notamment <code>DRIFT_FOLLOWER_STATE</code> et <code>CYCLE_MANAGER_STATE</code>.</li>
+  </ol>
+</section>
+
+<!-- ============================================================ -->
+<!-- AUDIT 2 -->
+<!-- ============================================================ -->
+<section id="audit2">
+  <h2 class="section-title"><span class="section-num">2</span>État réel des paramètres</h2>
+  <p class="section-sub">Pour chaque paramètre de l'onglet Paramètres : est-il vraiment lu par le moteur, et le changement dans l'app a-t-il un effet réel ?</p>
+
+  <h3>Chaîne technique vérifiée bout en bout</h3>
+  <div class="flow">index.html (form, inputs)
+   <span class="arrow">│</span> submit / saveDefaultSettings / resetSettings
+   <span class="arrow">▼</span>
+renderer.js  <span class="comment">— collectSettings() / fillSettings() / alpha.saveParams()</span>
+   <span class="arrow">▼</span>
+main.js  <span class="comment">— ipcMain 'save-params' → writeJSON('params.json', p)</span>
+   <span class="arrow">▼</span>
+C:\Users\Louis Duchel\AlphaTrade\data\params.json   <span class="comment">(fichier réel confirmé lu)</span>
+   <span class="arrow">▼</span>
+alphatrade_engine.py  <span class="comment">— DEFAULT_PARAMS + merge_params() + effective_params_for_strategy()</span></div>
+
+  <div class="callout info">Il n'y a <b>pas</b> de copie séparée du moteur en "runtime" : <code>python\alphatrade_engine.py</code> du dépôt est le fichier exécuté directement. <code>command.json</code> ne sert qu'aux commandes START/STOP, jamais aux paramètres. Le fichier <code>params.json</code> réel contient aussi des clés orphelines (<code>rebond_min_contra_score</code>, <code>rebond_rsi_oversold/overbought</code>, <code>rebond_max_main_score</code>, <code>profit_trail_pct</code> par symbole) absentes de l'UI actuelle et jamais lues — vestiges d'une version antérieure.</div>
+
+  <h3>Légende</h3>
+  <div class="pill-row">
+    <span class="badge b-ok">CONNECTÉ ET FONCTIONNEL</span>
+    <span class="badge b-warn">SAUVEGARDÉ MAIS SANS EFFET RÉEL</span>
+    <span class="badge b-dead">FANTÔME DANS L'UI</span>
+    <span class="badge b-info">MOTEUR SANS UI</span>
+  </div>
+
+  <details class="block" open>
+  <summary>2.1 — Connexion / Filtre de marché / Serveur IA / Microstructure (index.html:510-548)</summary>
+  <div class="inner">
+  <table>
+    <thead><tr><th>Paramètre</th><th class="mono">Input</th><th class="mono">Moteur</th><th>Statut</th></tr></thead>
+    <tbody>
+      <tr><td><code>mt5_path</code></td><td class="mono">512</td><td class="mono">engine.py:467</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>active_symbol</code></td><td class="mono">513-517</td><td class="mono">engine.py:3565,4006</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>anti_top_bottom</code></td><td class="mono">522</td><td class="mono">engine.py:4036</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>lookback_candles</code></td><td class="mono">523</td><td class="mono">engine.py:942</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>edge_zone_pct</code></td><td class="mono">524</td><td class="mono">engine.py:993,1048,4026</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>min_score_gap</code></td><td class="mono">525</td><td class="mono">engine.py:1054,4024</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>min_profit</code></td><td class="mono">526</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>reinforcement_enabled</code></td><td class="mono">527</td><td class="mono">engine.py:3746,4436</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_server_enabled</code></td><td class="mono">531</td><td class="mono">engine.py:628,727</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>openai_api_key</code></td><td class="mono">532</td><td class="mono">env → ai_server.py:28</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>anthropic_api_key</code></td><td class="mono">533</td><td class="mono">env → ai_server.py:30</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_server_url</code></td><td class="mono">534</td><td class="mono">engine.py:605,629</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_server_token</code></td><td class="mono">535</td><td class="mono">engine.py:608</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_sync_interval_sec</code></td><td class="mono">536</td><td class="mono">engine.py:4426</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_retrain_interval_min</code></td><td class="mono">537</td><td class="mono">engine.py:643</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_server_trade_confirmation</code></td><td class="mono">538</td><td class="mono">engine.py:729</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>ai_observation_mode</code> (checkbox désactivée)</td><td class="mono">539</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-dead">Fantôme UI</span></td></tr>
+      <tr><td><code>microstructure_enabled</code></td><td class="mono">544</td><td class="mono">engine.py:4403</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>microstructure_interval_sec</code></td><td class="mono">545</td><td class="mono">engine.py:4404</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>hyperliquid_observer_enabled</code></td><td class="mono">546</td><td class="mono">engine.py:4412</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  </details>
+
+  <details class="block">
+  <summary>2.2 — Risque et session (index.html:549-573)</summary>
+  <div class="inner">
+  <table>
+    <thead><tr><th>Paramètre</th><th class="mono">Input</th><th class="mono">Moteur</th><th>Statut</th></tr></thead>
+    <tbody>
+      <tr><td><code>risk_pct</code></td><td class="mono">551</td><td class="mono">engine.py:1507 (plafonné <code>HARD_RISK_PCT_CAP=0.50</code>)</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>session_target</code></td><td class="mono">552</td><td class="mono">engine.py:1450</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>daily_target</code></td><td class="mono">553</td><td class="mono">engine.py:1430</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>session_max_loss</code></td><td class="mono">554</td><td class="mono">engine.py:1446</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>real_lot_cap</code></td><td class="mono">555</td><td class="mono">engine.py:1501,1545-1547</td><td><span class="badge b-ok">Fonctionnel*</span></td></tr>
+      <tr><td><code>demo_lot_cap</code></td><td class="mono">556</td><td class="mono">engine.py:1501</td><td><span class="badge b-ok">Fonctionnel*</span></td></tr>
+      <tr><td><code>auto_max_positions</code></td><td class="mono">557</td><td class="mono">engine.py:3676 (+ plafond dur 8)</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>giveback</code></td><td class="mono">558</td><td class="mono">engine.py:1434</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>reinforcement_min_confidence_margin</code></td><td class="mono">560</td><td class="mono">engine.py:3753</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>reinforcement_min_score_gap</code></td><td class="mono">561</td><td class="mono">engine.py:3754</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>reinforcement_cooldown_sec</code></td><td class="mono">562</td><td class="mono">engine.py:3771</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>rebond_enabled</code></td><td class="mono">563</td><td class="mono">engine.py:2118,2427,3681,3911</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>rebond_min_signal_pct</code></td><td class="mono">564</td><td class="mono">valeur hardcodée 55 (engine.py:2311) écrase le champ</td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>rebond_cooldown_sec</code></td><td class="mono">565</td><td class="mono">engine.py:2275</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_protection_enabled</code></td><td class="mono">566</td><td class="mono">engine.py:1429</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_protection_start</code></td><td class="mono">567</td><td class="mono">engine.py:1430 — <code>daily_target</code> prioritaire, ce champ n'est qu'un repli jamais atteint</td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>profit_drawdown_pct</code></td><td class="mono">568</td><td class="mono">engine.py:1431</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_drawdown_min</code></td><td class="mono">569</td><td class="mono">engine.py:1433</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_warning_ratio</code></td><td class="mono">570</td><td class="mono">engine.py:1439</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_ai_grace_sec</code></td><td class="mono">571</td><td class="mono">écrit mais jamais relu</td><td><span class="badge b-warn">Sans effet</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn">* <code>real_lot_cap</code>/<code>demo_lot_cap</code> sont bien lus, mais la constante censée servir de garde-fou <code>HARD_REAL_LOT_CAP = 0.10</code> ne s'applique QUE si le champ est à 0 — actuellement <code>real_lot_cap: 0.8</code> en base, donc 8× la valeur que son nom "HARD" laisse penser être un plafond strict.</div>
+
+  <h4>Bloc "Machine à états — Renfort/Rebond (global)" (index.html:686-694)</h4>
+  <div class="callout crit">Doublon global des mêmes champs par symbole. <b>Aucun des 6 champs n'est lu comme clé globale</b> par le moteur (<code>seuil_perte_alerte</code>, <code>lot_multiplicateur_rebond</code>, <code>max_renforts_per_basket</code>, <code>renfort_min_interval</code>, <code>rebond_cooldown</code>, <code>max_rebound_attempts</code>) — tous <span class="badge b-warn">sans effet</span> au niveau global.</div>
+  </div>
+  </details>
+
+  <details class="block">
+  <summary>2.3 — Paramètres par symbole (XAU/USD + BOOM1000, index.html:574-683)</summary>
+  <div class="inner">
+  <table>
+    <thead><tr><th>Paramètre</th><th class="mono">Lignes (XAU/BOOM)</th><th class="mono">Moteur</th><th>Statut</th></tr></thead>
+    <tbody>
+      <tr><td><code>lot</code></td><td class="mono">577/622</td><td class="mono">engine.py:1513</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>lot_min</code></td><td class="mono">578/623</td><td class="mono">engine.py:1515,2242</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>lot_max</code></td><td class="mono">579/624</td><td class="mono">engine.py:1514,2243…</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>tp_pips</code></td><td class="mono">580/625</td><td class="mono"><i>jamais lu</i> — TP réel via <code>profit_target</code></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>max_positions</code></td><td class="mono">581/626</td><td class="mono">engine.py:3677</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>max_position_loss</code></td><td class="mono">582/627</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>max_floating_loss</code></td><td class="mono">583/628</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>timeframe</code></td><td class="mono">584/629</td><td class="mono">engine.py:943,1105,4295</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>confidence_min</code></td><td class="mono">585/630</td><td class="mono">engine.py:1029,2078,3751…</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>cadence_sec</code></td><td class="mono">586/631</td><td class="mono">engine.py:3722</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>max_trades_hour</code></td><td class="mono">587/632</td><td class="mono">engine.py:3732</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>max_hold_sec</code></td><td class="mono">588/633</td><td class="mono">engine.py:2130</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>position_review_sec</code></td><td class="mono">589/634</td><td class="mono">engine.py:2076</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_target</code></td><td class="mono">590/635</td><td class="mono">engine.py:1825,1873,1988,2131 (TP réel)</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_lock_trigger</code></td><td class="mono">591/636</td><td class="mono">engine.py:2105,2483</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>profit_lock_drawdown</code></td><td class="mono">592/637</td><td class="mono">engine.py:2106,2484</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>emergency_loss_limit</code> (protection catastrophe réelle)</td><td class="mono">603/638</td><td class="mono">engine.py:1532,1872,2126</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>min_positive_exit</code></td><td class="mono">604/639</td><td class="mono">engine.py:2109</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>cooldown_after_loss_sec</code></td><td class="mono">605/640</td><td class="mono">engine.py:3783</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>session_filter_enabled</code></td><td class="mono">606/641</td><td class="mono">engine.py:1365</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>session_start_utc</code> / <code>session_end_utc</code> / <code>stop_before_end_min</code></td><td class="mono">607-609/642-644</td><td class="mono">engine.py:1373-1375</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>seuil_perte_alerte</code></td><td class="mono">611/646</td><td class="mono"><i>jamais lu</i> — seuil réel hardcodé à -1.0$ (engine.py:2676)</td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>lot_multiplicateur_rebond</code></td><td class="mono">612/647</td><td class="mono">BOOM1000 : engine.py:2693 ✓ / XAUUSD : jamais lu</td><td>BOOM: <span class="badge b-ok">Fonctionnel</span> · XAU: <span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>max_renforts_per_basket</code></td><td class="mono">613/648</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>renfort_min_interval</code></td><td class="mono">614/649</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>rebond_cooldown</code></td><td class="mono">615/650</td><td class="mono"><i>jamais lu</i> — cooldown réel hardcodé à 60s</td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>max_rebound_attempts</code></td><td class="mono">616/651</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>daily_max_loss</code></td><td class="mono">617/652</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Spécifique XAU/USD — trailing 4 paliers + momentum (index.html:592-602)</h4>
+  <table>
+    <thead><tr><th>Paramètre</th><th class="mono">Ligne</th><th class="mono">Moteur</th><th>Statut</th></tr></thead>
+    <tbody>
+      <tr><td><code>trail_l1_above</code> / <code>trail_l1_pct</code></td><td class="mono">594-595</td><td class="mono">engine.py:2093</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>trail_l2_above</code> / <code>trail_l2_pct</code></td><td class="mono">596-597</td><td class="mono">engine.py:2094</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>trail_l3_above</code> / <code>trail_l3_pct</code></td><td class="mono">598-599</td><td class="mono">engine.py:2095</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>trail_l4_above</code> / <code>trail_l4_pct</code></td><td class="mono">600-601</td><td class="mono">engine.py:2096</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>momentum_exit_score</code></td><td class="mono">602</td><td class="mono">engine.py:2111</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  </details>
+
+  <details class="block">
+  <summary>2.4 — BOOM 1000 Cycle Manager Phase 2.3 (index.html:653-683)</summary>
+  <div class="inner">
+  <table>
+    <thead><tr><th>Paramètre</th><th class="mono">Ligne</th><th class="mono">Moteur</th><th>Statut</th></tr></thead>
+    <tbody>
+      <tr><td><code>cycle_manager_enabled</code></td><td class="mono">655</td><td class="mono">engine.py:3437</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>bppl_enabled</code></td><td class="mono">657</td><td class="mono">engine.py:3484</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>bppl_trigger_profit</code> / <code>_pct</code></td><td class="mono">658-659</td><td class="mono">engine.py:2879-2880</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>bppl_close_n_first</code></td><td class="mono">660</td><td class="mono">engine.py:2934</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>bppl_qpc_override_pips</code></td><td class="mono">661</td><td class="mono"><i>jamais lu</i></td><td><span class="badge b-warn">Sans effet</span></td></tr>
+      <tr><td><code>bppl_peg_override_pct</code></td><td class="mono">662</td><td class="mono">engine.py:2933</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>bppl_max_hold_sec</code></td><td class="mono">663</td><td class="mono">engine.py:2932</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>qpc_enabled</code></td><td class="mono">665</td><td class="mono">engine.py:3496</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>qpc_tier1_age_sec</code> / <code>_pips</code></td><td class="mono">666-667</td><td class="mono">engine.py:2993-2994</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>qpc_tier2_age_sec</code> / <code>_pips</code></td><td class="mono">668-669</td><td class="mono">engine.py:2995-2996</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>oe_enabled</code></td><td class="mono">671</td><td class="mono">engine.py:3502</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>spike_detector_enabled</code></td><td class="mono">672</td><td class="mono">engine.py:3123</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>spike_sell_guard_enabled</code></td><td class="mono">673</td><td class="mono">engine.py:3260,3503</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>oe_level_accum/exhaust/prespike</code></td><td class="mono">674-676</td><td class="mono">engine.py:3168-3170,3205-3207</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>oe_max_sell_count_*</code> (3 phases)</td><td class="mono">677-679</td><td class="mono">engine.py:3374-3376</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>spike_candle_ratio</code></td><td class="mono">680</td><td class="mono">engine.py:3134</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>oe_spike_amplitude_pts</code></td><td class="mono">681</td><td class="mono">engine.py:3147,3226,3228</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+      <tr><td><code>oe_priority_margin</code></td><td class="mono">682</td><td class="mono">engine.py:3385</td><td><span class="badge b-ok">Fonctionnel</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout info">Paramètres BPPL déclarés dans <code>DEFAULT_PARAMS</code> et <b>réellement lus par le moteur</b> mais <b>absents de l'UI</b> (modifiables seulement en éditant <code>params.json</code>) : <code>bppl_tie_threshold_pct</code> (engine.py:2772), <code>bppl_use_reversal_risk</code> (2773), <code>bppl_profit_reference_mode</code> (2881), <code>bppl_resume_min_profit</code> (2935). Et 3 poids <b>déclarés mais jamais lus nulle part</b> : <code>bppl_risk_weight_extension/distance/spike_timing</code> — la formule de risque réelle (<code>age/60*30 + profit*2</code>, ligne 2782) ne les utilise pas.</div>
+  </div>
+  </details>
+
+  <h3>2.5 — Paramètres moteur actifs mais totalement invisibles dans l'UI</h3>
+  <p>Environ 25 paramètres, modifiables uniquement en éditant <code>params.json</code> ou le code source :</p>
+  <table>
+    <thead><tr><th>Clé</th><th class="mono">Utilisation</th><th>Défaut</th></tr></thead>
+    <tbody>
+      <tr><td><code>signal_reversal_margin</code></td><td class="mono">engine.py:2082,4044</td><td>XAU 99 / BOOM 9</td></tr>
+      <tr><td><code>lot_multiplicateur_renfort</code></td><td class="mono">engine.py:3794</td><td>1.0 (fallback code)</td></tr>
+      <tr><td><code>renfort_high_confidence_min</code></td><td class="mono">engine.py:3798</td><td>seuil confiance + 15</td></tr>
+      <tr><td><code>rebond_min_zone_strength</code></td><td class="mono">engine.py:2357</td><td>28</td></tr>
+      <tr><td><code>rebond_max_active</code></td><td class="mono">engine.py:2271,2591</td><td>3</td></tr>
+      <tr><td><code>rebond_max_hold_sec</code></td><td class="mono">engine.py:2400</td><td>90</td></tr>
+      <tr><td><code>rebond_stop_pips</code></td><td class="mono">engine.py:2401,2494</td><td>2.00</td></tr>
+      <tr><td><code>bppl_amplitude_m1</code>, <code>bppl_pip_value</code></td><td class="mono">engine.py:2762-2763</td><td>50.0 / 0.01</td></tr>
+      <tr><td>Grappe Opportunity Engine v5 (~15 clés : <code>oe_decel_*</code>, <code>oe_w_c/d/dec_*</code>, <code>oe_candles_ref</code>, <code>oe_lot_ratio_min</code>, <code>oe_lot_cap_*</code>, <code>oe_impulse_ratio</code>, <code>oe_pip_value_per_lot</code>, <code>oe_sell_amplitude_pts</code>, <code>oe_use_observed_stats</code>, <code>oe_min_obs_for_stats</code>)</td><td class="mono">engine.py:3080-3323</td><td>DEFAULT_PARAMS:197-219</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.6 — Valeurs de risque codées en dur dans le moteur</h3>
+  <table>
+    <thead><tr><th>Constante</th><th class="mono">Ligne</th><th>Rôle réel</th></tr></thead>
+    <tbody>
+      <tr><td><code>HARD_REAL_LOT_CAP = 0.10</code> / <code>HARD_DEMO_LOT_CAP = 0.10</code></td><td class="mono">26-27</td><td><b>Ne plafonne pas réellement</b> — sert seulement de repli si le champ configuré vaut 0. Avec <code>real_lot_cap: 0.8</code> actif, le lot peut dépasser 0.10 librement.</td></tr>
+      <tr><td><code>HARD_RISK_PCT_CAP = 0.50</code></td><td class="mono">28</td><td>Vrai plafond dur, appliqué via <code>min()</code></td></tr>
+      <tr><td><code>HARD_AUTO_POSITION_CAP = 8</code></td><td class="mono">29</td><td>Vrai plafond dur, cohérent avec le <code>max="8"</code> HTML</td></tr>
+      <tr><td><code>trigger_threshold = -1.0</code></td><td class="mono">2676</td><td>Remplace <code>seuil_perte_alerte</code> (Drift Follower)</td></tr>
+      <tr><td>Cooldown 60s</td><td class="mono">2672</td><td>Remplace <code>rebond_cooldown</code>/<code>renfort_min_interval</code></td></tr>
+      <tr><td><code>main_score &ge; 85</code> / <code>contra_score &lt; 55</code></td><td class="mono">2303, 2311</td><td>Remplace les anciens seuils rebond configurables</td></tr>
+      <tr><td><code>rsi &le; 35</code> / <code>rsi &ge; 65</code></td><td class="mono">2307, 2310</td><td>Remplace <code>rebond_rsi_oversold/overbought</code></td></tr>
+      <tr><td><code>pip_potential &lt; 0.80</code></td><td class="mono">2346</td><td>Seuil de rentabilité rebond XAUUSD, aucun paramètre correspondant</td></tr>
+      <tr><td><code>"sl": 0.0</code></td><td class="mono">1843</td><td><b>Aucun Stop Loss broker n'est jamais posé</b> — toute la protection est logicielle (boucle du moteur)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.7 — Anomalies à retenir</h3>
+  <ul>
+    <li><b><code>tp_pips</code> totalement mort</b> sur les deux actifs — le TP réel est calculé en dollars (<code>profit_target</code>).</li>
+    <li><b><code>max_position_loss</code> et <code>max_floating_loss</code> morts</b> — deux champs de risque bien visibles dans l'UI, jamais consultés ; seul <code>emergency_loss_limit</code> protège réellement.</li>
+    <li><b>Toute la "Machine à états Renfort/Rebond"</b> (bloc global + 12 champs par symbole) est déconnectée du code réel — le comportement effectif utilise des seuils câblés en dur qui ne correspondent pas aux valeurs par défaut affichées.</li>
+    <li><b>Aucun Stop Loss broker</b> n'est jamais posé — cohérent avec le fait que les champs de perte max par position soient des reliquats non câblés.</li>
+    <li><b>~25 paramètres avancés</b> (Opportunity Engine v5, BPPL) pilotent réellement BOOM1000 mais sont invisibles dans l'UI.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<!-- AUDIT 3 -->
+<!-- ============================================================ -->
+<section id="audit3">
+  <h2 class="section-title"><span class="section-num">3</span>Stratégie réelle &amp; Microstructure / Sessions IA</h2>
+  <p class="section-sub">Quelle stratégie est réellement implémentée, et qu'est-ce qui, dans les onglets Microstructure et Sessions IA, influence vraiment les trades ?</p>
+
+  <h3>3.1 — Nature de la stratégie XAUUSD</h3>
+  <div class="callout">
+    <b>Un système de règles techniques classiques avec pondération apprise de façon incrémentale — pas un modèle IA entraîné.</b>
+    Indicateurs bruts sur bougies M5 : EMA9/21/50, RSI14, MACD (EMA12−EMA26), momentum sur 5 bougies, position dans la zone haute/basse ("edge"). Chaque composant (<code>trend</code>, <code>rsi</code>, <code>macd</code>, <code>edge</code>, <code>momentum</code>) reçoit un score +1/0/-1, pondéré par un poids appris borné [0.65, 1.35]. Score BUY/SELL final = base 25 + bonus pondérés + biais multi-timeframe, clampé 0-100 (<code>symbol_analysis</code>, engine.py:939-1099).
+  </div>
+
+  <h4>Le mécanisme "d'apprentissage" affiché dans Sessions IA</h4>
+  <p>C'est exactement ce qui produit les textes vus à l'écran ("le composant le plus renforcé est macd", "seuil ajusté de -2.20 points") : à chaque position fermée, <code>reward = profit / max(MFE, MAE, 0.25)</code>, et pour chaque composant aligné avec la direction du trade, <code>weights[name] += 0.025 × reward × alignment</code> (clampé). Le seuil de confiance dérive de <code>confidence_offset</code> : +0.45 si perte, -0.12 si gain (clampé [-4, 10]). <b>Ce n'est pas un entraînement ML classique</b> (pas de descente de gradient, pas de fonction de perte globale) — c'est un renforcement heuristique incrémental de poids appliqués à des règles déjà câblées en dur (<code>track_position_contexts</code>, engine.py:1641-1745).</p>
+
+  <h4>Cascade de blocages avant l'ouverture d'un trade</h4>
+  <p>Un signal candidat traverse successivement : protection session/jour → sécurité lot → zone extrême sans confirmation → RSI → signal M5 rapide contradictoire → écart BUY/SELL minimum → biais multi-timeframe opposé → <b>gouverneur de risque quantitatif</b> (<code>quant_veto</code>, bloque si <code>regime_risk ≥ 85</code> — règles fixes, pas d'IA) → confirmation serveur IA. Seul un signal ayant passé tous ces filtres ouvre réellement une position (<code>auto_trade_step</code>, engine.py:4040-4188).</p>
+
+  <h4>Logique de sortie</h4>
+  <ul>
+    <li><b>Trail dynamique par paliers</b> : sortie <code>PROFIT_TRAIL</code> selon le pic de profit atteint (4 paliers configurables et réellement actifs).</li>
+    <li><b>Momentum exit</b> : sortie si le score opposé dépasse <code>momentum_exit_score</code> alors que la position est déjà en profit minimal.</li>
+    <li><span class="badge b-info">Correction factuelle</span> le trail dynamique/momentum exit est une fonctionnalité de la <b>Phase 2.2</b> (absente du backup Phase 2.1), pas de la Phase 2.1 comme le nom pourrait le suggérer.</li>
+  </ul>
+
+  <h3>3.2 — Module Microstructure : confirmé 100% décoratif</h3>
+  <div class="callout crit">
+    Le module calcule bien OBI (order book imbalance), OFI (order flow imbalance), Kyle λ et POC (point de contrôle du volume) — code réel et correct dans <code>market_microstructure.py</code>. La classe se déclare elle-même <i>"Moteur d'observation sans aucune méthode d'exécution d'ordre"</i>, renvoie <code>"mode": "OBSERVATION_ONLY", "execution_authorized": False</code>.<br><br>
+    <b>Vérification exhaustive dans <code>alphatrade_engine.py</code></b> : les valeurs OBI/OFI/Kyle λ/POC sont injectées dans <code>status.json</code> (payload pour l'UI) mais <b>ne sont lues par aucune fonction de décision</b> (<code>symbol_analysis</code>, <code>auto_trade_step</code>, <code>position_exit_reason</code>). Confirmé aussi côté UI : le texte affiché dit explicitement qu'il s'agit d'un module d'observation uniquement.
+  </div>
+  <div class="callout warn">
+    <b>Piège visuel identifié</b> : le "Signal détecté" / "État de l'entrée" / "Blocages observés" affichés dans l'onglet Microstructure proviennent en réalité de la décision locale rule-based (§3.1), <b>pas</b> des métriques OBI/OFI/Kyle/POC juxtaposées sur le même écran — la mise en page laisse penser à un lien causal qui n'existe pas dans le code.
+  </div>
+
+  <h3>3.3 — Serveur IA : deux pipelines à ne pas confondre</h3>
+  <p>Le texte affiché <i>"Les signaux serveur sont observés uniquement. L'exécution locale garde le contrôle."</i> est montré inconditionnellement dès que le serveur est connecté — sans distinguer ces deux pipelines très différents :</p>
+
+  <table>
+    <thead><tr><th>Pipeline</th><th>Rôle</th><th>Impact réel sur les trades</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>a) Prédiction ML</b> (RandomForest, <code>/v1/train</code> + <code>/v1/predict</code>)</td>
+        <td>Entraîné par symbole, résultat stocké dans <code>AI_SERVER_STATE</code></td>
+        <td><span class="badge b-warn">Purement décoratif</span> — alimente l'onglet Sessions IA (modèle XAU/USD, version, échantillon, score, signal observé), jamais relu par la décision de trade</td>
+      </tr>
+      <tr>
+        <td><b>b) Validation d'entrée LLM</b> (<code>/v1/decision</code>, OpenAI/Anthropic)</td>
+        <td>Appelée juste avant <code>open_position()</code> via <code>server_trade_confirmation</code></td>
+        <td><span class="badge b-dead">Veto réel possible</span> — si <code>ai_server_trade_confirmation=True</code> et réponse <code>approved=False</code>, le trade est annulé <b>avant</b> ouverture</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="callout info">
+    <b>État réel constaté dans <code>params.json</code></b> : <code>ai_server_trade_confirmation</code> y est actuellement à <code>false</code> (le défaut code est pourtant <code>True</code>) — donc dans la configuration actuellement déployée, ce veto ne s'exécute jamais et le texte "observé uniquement" est vrai <i>de facto</i>, même s'il est trompeur en tant que description générale du code. Activer la case "Valider les entrées avec AlphaTrade IA serveur" ferait basculer ce module d'un rôle décoratif à un vrai filtre de blocage.
+  </div>
+
+  <h3>3.4 — Tableau exhaustif : utilisé dans la décision vs purement affiché</h3>
+  <table>
+    <thead><tr><th>Métrique</th><th>Onglet</th><th>Utilisée dans la décision ?</th></tr></thead>
+    <tbody>
+      <tr><td>OBI</td><td>Microstructure</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>OFI</td><td>Microstructure</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>Kyle λ</td><td>Microstructure</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>POC</td><td>Microstructure</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>"Signal détecté" / "État de l'entrée" / "Blocages observés"</td><td>Microstructure</td><td><span class="badge b-ok">Utilisée</span> — mais c'est la décision locale, pas OBI/OFI/Kyle/POC (juxtaposition trompeuse)</td></tr>
+      <tr><td>Mode "OBSERVATION_ONLY"</td><td>Microstructure</td><td>Informatif — reflète fidèlement l'absence d'usage</td></tr>
+      <tr><td>Modèle XAU/USD — version, échantillon, score</td><td>Sessions IA</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>"Signal observé" (RandomForest)</td><td>Sessions IA</td><td><span class="badge b-warn">Décorative</span></td></tr>
+      <tr><td>"Composant le plus/moins renforcé" (macd/edge…)</td><td>Sessions IA</td><td><span class="badge b-ok">Utilisée</span> — multiplie directement les bonus de score</td></tr>
+      <tr><td>"Seuil de confiance ajusté de X points"</td><td>Sessions IA</td><td><span class="badge b-ok">Utilisée</span> — ajoute/retranche du seuil réellement appliqué</td></tr>
+      <tr><td>/v1/decision (LLM OpenAI/Anthropic)</td><td>—</td><td><span class="badge b-info">Potentiellement bloquante</span>, actuellement inactive (config)</td></tr>
+      <tr><td>Gouverneur quantitatif (<code>quant_veto</code>)</td><td>Dashboard</td><td><span class="badge b-ok">Utilisée</span> — bloque réellement si <code>regime_risk ≥ 85</code></td></tr>
+      <tr><td>Trail dynamique / Momentum exit</td><td>Positions</td><td><span class="badge b-ok">Utilisée</span> — ferme réellement la position</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ -->
+<!-- AUDIT 4 -->
+<!-- ============================================================ -->
+<section id="audit4">
+  <h2 class="section-title"><span class="section-num">4</span>Assistant IA — OpenAI vs Anthropic</h2>
+  <p class="section-sub">Quel fournisseur IA est réellement actif, et que faudrait-il changer pour passer à 100% Anthropic/Claude ?</p>
+
+  <div class="callout">
+    <b>Diagnostic :</b> les deux clés (OpenAI et Anthropic) sont déjà configurées et remplies dans <code>C:\Users\Louis Duchel\AlphaTrade\data\params.json</code> (le fichier réellement chargé au runtime). Comportement actuel :
+    <ul>
+      <li><b>Chat (onglet Assistant IA)</b> : Anthropic (Claude Haiku 4.5) en priorité, OpenAI (gpt-4.1-mini) seulement en secours si Anthropic échoue — fonction <code>best_chat()</code>, ai_server.py:539-549.</li>
+      <li><b>Décision de trade (<code>/v1/decision</code>)</b> : mode double-validation — <b>les deux</b> IA sont interrogées, un consensus est requis ; en cas de désaccord, la décision est bloquée en <code>WAIT</code> par précaution (<code>dual_trade_decision</code>, ai_server.py:494-536).</li>
+    </ul>
+  </div>
+
+  <h3>4.1 — Ce que l'utilisateur voit réellement</h3>
+  <p>L'onglet "Assistant IA" (index.html:711-735) n'affiche <b>aucune mention explicite</b> d'OpenAI ou d'Anthropic — le provider est masqué derrière la marque "AlphaTrade IA". Le seul contrôle utilisateur se trouve dans l'onglet <b>Paramètres</b> (pas Assistant IA), section "Serveur IA - validation" : deux champs mot de passe (clé OpenAI, clé Anthropic), sans sélecteur explicite de provider — le choix résulte implicitement des clés renseignées.</p>
+  <div class="callout warn">Bug cosmétique mineur repéré : <code>renderer.js:678</code> affiche en dur <i>"réponse OpenAI indisponible"</i> en cas d'échec du serveur IA, même quand c'est en réalité Anthropic qui a échoué — message trompeur à corriger.</div>
+
+  <h3>4.2 — Modifications nécessaires pour un passage 100% Anthropic</h3>
+  <table>
+    <thead><tr><th>Fichier</th><th class="mono">Lignes</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="6"><code class="path">python\alphatrade_ai_server.py</code></td><td class="mono">28-29</td><td>Supprimer/neutraliser la lecture de <code>OPENAI_API_KEY</code>/<code>OPENAI_MODEL</code></td></tr>
+      <tr><td class="mono">340-369, 408-446</td><td>Supprimer <code>openai_chat()</code> et <code>openai_trade_decision()</code></td></tr>
+      <tr><td class="mono">494-536</td><td>Simplifier <code>dual_trade_decision()</code> pour n'appeler qu'Anthropic (retirer la logique de consensus)</td></tr>
+      <tr><td class="mono">539-549</td><td>Retirer le repli OpenAI dans <code>best_chat()</code></td></tr>
+      <tr><td class="mono">582-592</td><td>Retirer <code>openai_ready</code>, <code>dual_validation</code>, <code>openai_model</code> de <code>/health</code></td></tr>
+      <tr><td class="mono">640-646</td><td>Retirer le bloc de log OpenAI au démarrage</td></tr>
+      <tr><td><code class="path">electron\main.js</code></td><td class="mono">145, 317-318</td><td>Retirer <code>OPENAI_API_KEY</code> de l'environnement transmis ; simplifier la détection de changement de clé</td></tr>
+      <tr><td><code class="path">electron\index.html</code></td><td class="mono">532</td><td>Retirer/masquer le champ "Clé API OpenAI"</td></tr>
+      <tr><td rowspan="2"><code class="path">electron\renderer.js</code></td><td class="mono">77</td><td>Retirer <code>openai_api_key: ''</code> des paramètres par défaut</td></tr>
+      <tr><td class="mono">678</td><td>Corriger le message d'erreur générique (ne plus nommer un provider spécifique)</td></tr>
+      <tr><td>Config locale</td><td>—</td><td>Vider le champ <code>openai_api_key</code> dans <code>params.json</code>/<code>params.defaults.json</code> via l'UI Paramètres</td></tr>
+    </tbody>
+  </table>
+  <div class="callout info">Aucune valeur de clé API n'a été affichée durant cet audit — seule leur présence/longueur a été vérifiée, jamais leur contenu.</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- AUDIT 5 -->
+<!-- ============================================================ -->
+<section id="audit5">
+  <h2 class="section-title"><span class="section-num">5</span>Origine des trades externes — "AVA" hardcodé</h2>
+  <p class="section-sub">Pourquoi tous les trades détectés comme IA externe s'affichent "AVA / IA EXTERNE", même pour des robots comme KB1000 ?</p>
+
+  <h3>5.1 — Logique de détection côté moteur</h3>
+  <div class="flow"><span class="comment"># engine.py:23-24</span>
+MAGIC = 20260607        <span class="comment"># magic number du bot AlphaTrade lui-même</span>
+AVA_MAGIC = 7525001      <span class="comment"># magic number d'UN SEUL robot externe nommé "AVA"</span>
+
+<span class="comment"># engine.py:1122-1134 — trade_origin()</span>
+si magic == MAGIC ou comment contient "alphatrade"/"alphakaris"  <span class="arrow">→</span> "BOT"
+si magic == AVA_MAGIC ou comment contient "ava"/"bridge"          <span class="arrow">→</span> "EXTERNAL_AI"
+si magic != 0 (tout le reste, y compris KB1000)                   <span class="arrow">→</span> "EXTERNAL_AI"
+sinon                                                              <span class="arrow">→</span> "MANUAL"</div>
+
+  <div class="callout crit">
+    <b>Le système est binaire à 3 seaux</b> (BOT / EXTERNAL_AI / MANUAL) — <b>aucune table de mapping</b> <code>magic_number → nom_app</code> n'existe. Python renvoie correctement un seau générique <code>"EXTERNAL_AI"</code> pour n'importe quel robot externe inconnu (donc KB1000 y tombe aussi, à raison). Le vrai commentaire MT5 de l'ordre — qui pourrait révéler "KB1000" — <b>est bien lu</b> par <code>trade_origin()</code> pour tester les mots-clés, puis <b>immédiatement jeté</b> : la table SQLite <code>trades</code> (engine.py:486-500) n'a même pas de colonne <code>comment</code>.
+  </div>
+
+  <h3>5.2 — Où "AVA" est réellement câblé en dur</h3>
+  <div class="flow"><span class="comment">// renderer.js:995-1000 — originLabel()</span>
+function originLabel(origin) {
+  if (key === 'BOT') return 'ALPHATRADE';
+  if (key === 'EXTERNAL_AI') return 'AVA / IA EXTERNE';  <span class="comment">← câblé en dur ici</span>
+  return 'MANUEL';
+}</div>
+  <p>C'est <b>exactement cette ligne côté JavaScript</b> qui traduit systématiquement <code>EXTERNAL_AI</code> par "AVA / IA EXTERNE", quel que soit le robot réellement détecté. La fonction ne reçoit que la catégorie (<code>BOT</code>/<code>EXTERNAL_AI</code>/<code>MANUAL</code>), jamais le commentaire MT5 brut — qui n'existe de toute façon plus à ce stade côté frontend.</p>
+
+  <h3>5.3 — Chaîne causale complète</h3>
+  <ol>
+    <li>Un robot externe (ex. KB1000 sur BOOM1000) ouvre un ordre MT5 avec son propre <code>magic</code> et un <code>comment</code> qui pourrait contenir "KB1000".</li>
+    <li><code>trade_origin()</code> ne reconnaît ni le magic ni le comment → classe correctement en <code>"EXTERNAL_AI"</code> (comportement backend correct, c'est un seau générique).</li>
+    <li>Le <code>comment</code> original est perdu — pas de colonne DB, pas de champ transmis pour les trades fermés.</li>
+    <li><code>originLabel()</code> traduit systématiquement <code>EXTERNAL_AI</code> par le libellé fixe <b>"AVA / IA EXTERNE"</b>, quel que soit le robot réel.</li>
+  </ol>
+  <div class="callout">
+    <b>"AVA" n'est donc ni un vrai mapping, ni une capacité technique volontairement écrasée</b> — c'est le libellé d'un seau générique câblé sur le nom du seul robot externe identifié historiquement (via <code>AVA_MAGIC = 7525001</code>). Tout nouveau robot externe hérite du même libellé fixe, à tort.
+  </div>
+
+  <h3>5.4 — Pistes de correction (à trancher, sans code pour l'instant)</h3>
+  <table>
+    <thead><tr><th>Option</th><th>Description</th><th>Effort</th></tr></thead>
+    <tbody>
+      <tr><td><b>A — Libellé générique honnête</b></td><td>Remplacer "AVA / IA EXTERNE" par "IA EXTERNE" tout court (renderer.js:998), tant qu'aucune identification fiable n'est possible</td><td><span class="badge b-ok">Minimal</span></td></tr>
+      <tr><td><b>B — Conserver le commentaire MT5 brut</b></td><td>Ajouter une colonne <code>comment</code> au schéma <code>trades</code>, la faire remonter jusqu'au renderer, afficher le commentaire nettoyé si présent</td><td><span class="badge b-warn">Modéré</span></td></tr>
+      <tr><td><b>C — Table de mapping magic → nom</b></td><td>Dictionnaire explicite <code>{7525001: "AVA", &lt;magic_KB1000&gt;: "KB1000", ...}</code> à côté de <code>MAGIC</code>/<code>AVA_MAGIC</code></td><td><span class="badge b-warn">Modéré</span> — nécessite de connaître à l'avance le magic number de KB1000</td></tr>
+      <tr><td><b>D — Combinaison B+C</b></td><td>Mapping quand il matche (fiable), sinon parsing du commentaire brut conservé, sinon "IA EXTERNE" générique en dernier recours</td><td><span class="badge b-dead">Le plus complet</span></td></tr>
+    </tbody>
+  </table>
+  <p class="section-sub">Dans tous les cas, la correction touche deux endroits en parallèle : <code>alphatrade_engine.py</code> (<code>trade_origin</code> lignes 1122-1134, schéma DB 486-500, construction des objets trade/position 1159-1171 et 1218-1258) et <code>renderer.js</code> (<code>originLabel</code> lignes 995-1000, usages lignes 990 et 1532).</p>
+</section>
+
+<!-- ============================================================ -->
+<!-- PLAN D'ACTION -->
+<!-- ============================================================ -->
+<section id="plan">
+  <h2 class="section-title"><span class="section-num">✓</span>Plan d'action global proposé</h2>
+  <p class="section-sub">Rien n'a été codé. Voici l'ordre suggéré pour la suite — à valider point par point.</p>
+
+  <ol class="action-plan">
+    <li><span class="step-badge">1</span><b>Décision produit</b> sur le verrouillage BOOM1000 par forfait (<code>PLAN_LIMITS.boom1000</code>) avant de toucher au code — ça dépasse le seul périmètre technique.</li>
+    <li><span class="step-badge">2</span><b>Retrait BOOM1000/CRASH1000</b> (audit 1) : backend d'abord (registre <code>SYMBOLS</code>, modules dédiés), puis frontend (cartes, sélecteurs, textes).</li>
+    <li><span class="step-badge">3</span><b>Nettoyage des paramètres fantômes</b> (audit 2) : décider au cas par cas — supprimer le champ UI (ex. <code>tp_pips</code>, <code>max_position_loss</code>) ou câbler enfin le paramètre au moteur (ex. bloc Machine à états Renfort/Rebond).</li>
+    <li><span class="step-badge">4</span><b>Décision sur la Microstructure</b> (audit 3) : retirer le module puisqu'il est confirmé décoratif, ou l'intégrer réellement dans le score de décision.</li>
+    <li><span class="step-badge">5</span><b>Bascule 100% Anthropic</b> (audit 4) : nettoyage ciblé sur 2 fichiers, risque faible, les clés sont déjà en place.</li>
+    <li><span class="step-badge">6</span><b>Correction origine "AVA"</b> (audit 5) : choisir entre l'option A (rapide) et B/C/D (plus complet, nécessite le magic number de KB1000).</li>
+  </ol>
+
+  <div class="callout info">Dis-moi par quel point tu veux commencer, et sur quels points tu veux trancher toi-même (verrouillage forfait BOOM1000, sort des paramètres fantômes, avenir du module Microstructure) avant que je passe à l'implémentation.</div>
+</section>
+
+</div>
+
+<footer>Audit généré par lecture seule du code source — aucun fichier applicatif n'a été modifié pendant cette analyse.</footer>
+
+</body>
+</html>

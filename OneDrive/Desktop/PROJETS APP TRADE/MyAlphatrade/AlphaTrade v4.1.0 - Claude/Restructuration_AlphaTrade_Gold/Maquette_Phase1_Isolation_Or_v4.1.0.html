@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette Phase 1 — Isolation Or (AVANT / APRÈS)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --panel2:#0e1610; --card:#0c130e;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --red:#ff4d5e; --red-dim:#5c2028;
+    --text:#d7e6db; --muted:#7c9284; --dim:#4d6357;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:0;}
+  .mono{font-family:"Cascadia Code","Consolas",monospace;}
+  .wrap{max-width:1300px; margin:0 auto; padding:0 22px 100px;}
+
+  header.hero{padding:44px 22px 30px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header.hero .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px;}
+  header.hero h1{font-size:1.8rem; margin:0 0 8px; color:#fff;}
+  header.hero p{color:var(--muted); max-width:700px; margin:0 auto;}
+
+  nav.toc{position:sticky; top:0; z-index:50; background:rgba(7,10,8,0.95); backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--border); padding:10px 22px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;}
+  nav.toc a{color:var(--muted); text-decoration:none; font-size:13px; padding:7px 12px; border-radius:6px; border:1px solid transparent;}
+  nav.toc a:hover{color:var(--green); border-color:var(--border-strong); background:var(--panel);}
+
+  section{padding:48px 0 10px; border-bottom:1px solid var(--border);}
+  section:last-of-type{border-bottom:none;}
+  h2.stitle{font-size:1.35rem; color:#fff; margin:0 0 6px; display:flex; align-items:center; gap:10px;}
+  h2.stitle .num{width:30px; height:30px; border-radius:8px; background:var(--panel2); border:1px solid var(--border-strong);
+    color:var(--green); display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;}
+  p.ssub{color:var(--muted); margin:0 0 26px; max-width:820px;}
+
+  .compare{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;}
+  @media (max-width:880px){.compare{grid-template-columns:1fr;}}
+  .col{border-radius:12px; overflow:hidden; border:1px solid var(--border);}
+  .col.before{border-color:var(--red-dim);}
+  .col.after{border-color:var(--green-dim);}
+  .col-label{padding:9px 16px; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; font-weight:700;}
+  .col.before .col-label{background:var(--red-dim); color:#ffb3ba;}
+  .col.after .col-label{background:var(--green-dim); color:#c9ffdc;}
+  .col-body{background:var(--panel); padding:18px;}
+
+  /* --- App chrome replica --- */
+  .app-tabs{display:flex; gap:18px; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:16px; font-size:12px; color:var(--muted); overflow-x:auto;}
+  .app-tabs .t{white-space:nowrap; padding-bottom:8px;}
+  .app-tabs .t.active{color:var(--green); border-bottom:2px solid var(--green);}
+
+  select.asset-select{
+    width:100%; background:var(--card); color:var(--text); border:1px solid var(--border-strong);
+    border-radius:6px; padding:9px 10px; font-size:13px;
+  }
+  select.asset-select option:disabled{color:var(--dim);}
+  .fixed-badge{
+    display:flex; align-items:center; justify-content:space-between; background:var(--card);
+    border:1px solid var(--green-dim); border-radius:6px; padding:10px 14px;
+  }
+  .fixed-badge .name{color:var(--green); font-weight:700; letter-spacing:0.5px;}
+  .fixed-badge .hint{color:var(--dim); font-size:11px;}
+
+  .asset-cards{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .asset-cards.single{grid-template-columns:1fr; max-width:520px; margin:0 auto;}
+  .asset-card{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px;}
+  .asset-card .title{color:var(--green); font-weight:700; font-size:12px; letter-spacing:1px; margin-bottom:4px;}
+  .asset-card .desc{color:var(--dim); font-size:11px; margin-bottom:12px;}
+  .asset-card.dimmed{opacity:0.35; position:relative;}
+  .asset-card.dimmed::after{content:"RETIRÉ (géré par KB1000)"; position:absolute; inset:0; display:flex;
+    align-items:center; justify-content:center; background:rgba(7,10,8,0.55); color:var(--red); font-size:11px;
+    font-weight:700; letter-spacing:1px; border-radius:10px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
+  .field{background:var(--panel2); border:1px solid var(--border); border-radius:5px; padding:6px 8px;}
+  .field label{display:block; color:var(--dim); font-size:9.5px; text-transform:uppercase; margin-bottom:3px;}
+  .field .v{color:var(--text); font-size:12px;}
+
+  .sess-cards{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;}
+  .sess-cards.single{grid-template-columns:1fr; max-width:420px; margin:0 auto;}
+  .sess-card{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px;}
+  .sess-card.dimmed{opacity:0.3; position:relative;}
+  .sess-card .h{color:var(--green); font-size:12px; font-weight:700; margin-bottom:8px;}
+  .sess-card .row{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); padding:3px 0; border-bottom:1px solid var(--border);}
+  .sess-card .row b{color:var(--text); font-weight:600;}
+
+  .strat-select{width:100%; background:var(--card); color:var(--text); border:1px solid var(--border-strong); border-radius:6px; padding:9px 10px; font-size:13px;}
+
+  .callout{background:var(--panel); border:1px solid var(--border-strong); border-left:4px solid var(--green);
+    border-radius:8px; padding:14px 18px; margin:16px 0; font-size:0.92rem;}
+  .callout.warn{border-left-color:#ffb454;}
+  .callout b{color:#fff;}
+
+  .decision-note{margin-top:14px; padding:12px 16px; background:var(--panel2); border:1px dashed var(--border-strong);
+    border-radius:8px; font-size:12.5px; color:var(--muted);}
+  .decision-note b{color:var(--green-soft);}
+
+  footer{padding:44px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">Maquette visuelle — Phase 1 — Aucun code touché</div>
+  <h1>Isolation Or : à quoi ressemblera AlphaTrade</h1>
+  <p>Aperçu avant/après des 3 zones affectées par le retrait de BOOM1000 et CRASH1000. Purement visuel — rien n'a été modifié dans l'application réelle. À valider avant de commencer le code.</p>
+</header>
+
+<nav class="toc">
+  <a href="#z1">1. Sélecteur d'actif</a>
+  <a href="#z2">2. Page Paramètres</a>
+  <a href="#z3">3. Sessions IA</a>
+  <a href="#z4">Récapitulatif</a>
+</nav>
+
+<div class="wrap">
+
+<section id="z1">
+  <h2 class="stitle"><span class="num">1</span>Sélecteur d'actif principal (barre Paramètres)</h2>
+  <p class="ssub">Aujourd'hui un menu déroulant à 3 entrées (dont CRASH1000 grisé "bientôt"). Avec un seul actif, le menu déroulant n'a plus lieu d'être.</p>
+
+  <div class="compare">
+    <div class="col before">
+      <div class="col-label">Avant</div>
+      <div class="col-body">
+        <label style="color:var(--dim); font-size:11px; text-transform:uppercase; display:block; margin-bottom:6px;">Actif principal</label>
+        <select class="asset-select" disabled>
+          <option>XAU/USD (Or)</option>
+          <option>BOOM 1000 Index</option>
+          <option disabled>CRASH 1000 (bientôt)</option>
+        </select>
+      </div>
+    </div>
+    <div class="col after">
+      <div class="col-label">Après</div>
+      <div class="col-body">
+        <label style="color:var(--dim); font-size:11px; text-transform:uppercase; display:block; margin-bottom:6px;">Actif principal</label>
+        <div class="fixed-badge">
+          <span class="name">XAU / USD — OR</span>
+          <span class="hint">actif unique</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="decision-note">À trancher : <b>garde-t-on un sélecteur (même à une seule option) pour préparer un futur actif "dans le sens de l'or", ou passe-t-on à un badge fixe non modifiable ?</b> Le badge fixe simplifie l'UI immédiatement ; le sélecteur à une option facilite une réouverture future sans retoucher le composant. Dis-moi ta préférence.</div>
+</section>
+
+<section id="z2">
+  <h2 class="stitle"><span class="num">2</span>Page Paramètres</h2>
+  <p class="ssub">La carte "BOOM 1000 INDEX" et toute sa configuration (Cycle Manager, BPPL, QPC, Opportunity Engine v5, Spike Detector) disparaissent. La carte XAU/USD reste identique à aujourd'hui — son contenu sera revu séparément en Phase 2.</p>
+
+  <div class="compare">
+    <div class="col before">
+      <div class="col-label">Avant</div>
+      <div class="col-body">
+        <div class="asset-cards">
+          <div class="asset-card">
+            <div class="title">XAU/USD - OR</div>
+            <div class="desc">Réglages XAU/USD uniquement. Marché 24/5.</div>
+            <div class="field-row">
+              <div class="field"><label>Lot fixe</label><div class="v">0,03</div></div>
+              <div class="field"><label>Lot minimum</label><div class="v">0,01</div></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Positions max</label><div class="v">6</div></div>
+              <div class="field"><label>Timeframe</label><div class="v">M15</div></div>
+            </div>
+          </div>
+          <div class="asset-card dimmed">
+            <div class="title">BOOM 1000 INDEX</div>
+            <div class="desc">Indice synthétique Deriv.</div>
+            <div class="field-row">
+              <div class="field"><label>Lot fixe</label><div class="v">0,5</div></div>
+              <div class="field"><label>Cycle Manager</label><div class="v">actif</div></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>BPPL / QPC</label><div class="v">actif</div></div>
+              <div class="field"><label>Opportunity Engine v5</label><div class="v">actif</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col after">
+      <div class="col-label">Après</div>
+      <div class="col-body">
+        <div class="asset-cards single">
+          <div class="asset-card">
+            <div class="title">XAU/USD - OR</div>
+            <div class="desc">Réglages XAU/USD — actif unique de l'application.</div>
+            <div class="field-row">
+              <div class="field"><label>Lot fixe</label><div class="v">0,03</div></div>
+              <div class="field"><label>Lot minimum</label><div class="v">0,01</div></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Positions max</label><div class="v">6</div></div>
+              <div class="field"><label>Timeframe</label><div class="v">M15</div></div>
+            </div>
+            <div style="text-align:center; margin-top:10px; color:var(--dim); font-size:11px;">— reste du formulaire inchangé pour l'instant (revu en Phase 2) —</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;">
+          <label style="color:var(--dim); font-size:11px; text-transform:uppercase; display:block; margin-bottom:6px;">Stratégie</label>
+          <select class="strat-select" disabled>
+            <option>Scalping rapide</option>
+            <option>Scalping sécurisé</option>
+            <option>Analyse longue</option>
+            <option>Combiné</option>
+            <option style="color:var(--red); text-decoration:line-through;">Scalping synthétiques (retiré)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="callout">Le bloc "Machine à états — Renfort/Rebond (global)" en bas de page est <b>conservé tel quel</b> — il est déjà générique/étiqueté XAUUSD (son contenu réel sera nettoyé en Phase 2, pas ici).</div>
+</section>
+
+<section id="z3">
+  <h2 class="stitle"><span class="num">3</span>Onglet Sessions IA — cartes "Modèle"</h2>
+  <p class="ssub">Les cartes "Modèle BOOM 1000" et "Modèle CRASH 1000" (serveur IA) disparaissent, ainsi que les statistiques d'apprentissage associées.</p>
+
+  <div class="compare">
+    <div class="col before">
+      <div class="col-label">Avant</div>
+      <div class="col-body">
+        <div class="sess-cards">
+          <div class="sess-card">
+            <div class="h">Modèle XAU/USD</div>
+            <div class="row"><span>Version active</span><b>v125</b></div>
+            <div class="row"><span>Échantillon</span><b>1047</b></div>
+            <div class="row"><span>Signal observé</span><b style="color:var(--green);">BUY 61.8%</b></div>
+          </div>
+          <div class="sess-card dimmed">
+            <div class="h">Modèle BOOM 1000</div>
+            <div class="row"><span>Version active</span><b>v61</b></div>
+            <div class="row"><span>Échantillon</span><b>1130</b></div>
+            <div class="row"><span>Signal observé</span><b style="color:var(--red);">SELL 89.0%</b></div>
+          </div>
+          <div class="sess-card dimmed">
+            <div class="h">Modèle CRASH 1000</div>
+            <div class="row"><span>Version active</span><b>v21</b></div>
+            <div class="row"><span>Échantillon</span><b>1100</b></div>
+            <div class="row"><span>Signal observé</span><b>WAIT</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col after">
+      <div class="col-label">Après</div>
+      <div class="col-body">
+        <div class="sess-cards single">
+          <div class="sess-card">
+            <div class="h">Modèle XAU/USD</div>
+            <div class="row"><span>Version active</span><b>v125</b></div>
+            <div class="row"><span>Échantillon</span><b>1047</b></div>
+            <div class="row"><span>Signal observé</span><b style="color:var(--green);">BUY 61.8%</b></div>
+          </div>
+        </div>
+        <div style="text-align:center; margin-top:14px; color:var(--dim); font-size:11px;">Espace libéré — réutilisable en Phase 4/5 pour le futur panneau multi-timeframe (D1→M1)</div>
+      </div>
+    </div>
+  </div>
+  <div class="callout warn">Le bloc "Bilan d'apprentissage de la session" (composant le plus/moins renforcé, seuil ajusté) reste inchangé — il ne concerne déjà que XAUUSD.</div>
+</section>
+
+<section id="z4">
+  <h2 class="stitle"><span class="num">✓</span>Récapitulatif de ce que valide cette maquette</h2>
+  <ul style="color:var(--text); padding-left:20px;">
+    <li>Suppression de la carte de paramètres BOOM1000 et de tout son contenu (Cycle Manager/BPPL/QPC/OE v5)</li>
+    <li>Suppression des 2 options BOOM1000/CRASH1000 dans le sélecteur d'actif — <span style="color:var(--green-soft);">reste à trancher : badge fixe ou dropdown à une option</span></li>
+    <li>Suppression des cartes "Modèle BOOM 1000" / "Modèle CRASH 1000" et de leurs statistiques d'apprentissage</li>
+    <li>Suppression de l'option de stratégie "Scalping synthétiques"</li>
+    <li>Carte XAU/USD et bloc Machine à états conservés à l'identique pour l'instant (retouchés en Phase 2 uniquement)</li>
+  </ul>
+  <div class="callout">Une fois cette maquette validée, je passe au retrait réel dans <code class="mono">alphatrade_engine.py</code>, <code class="mono">index.html</code>, <code class="mono">renderer.js</code> selon le plan de retrait détaillé dans l'audit (ordre : backend d'abord, puis frontend), en excluant la décision <code class="mono">PLAN_LIMITS.boom1000</code> qui reste à trancher séparément avec toi.</div>
+</section>
+
+</div>
+<footer>Maquette statique — aucune interaction ne modifie l'application réelle.</footer>
+</body>
+</html>
