@@ -221,6 +221,17 @@
       <div class="docs"><a class="doc" href="Maquette_ParametresRegroupesParMoteur_v5.0.0.html">Maquette_ParametresRegroupesParMoteur_v5.0.0.html</a></div>
     </div>
   </div>
+  <div class="phase">
+    <div class="num">12</div>
+    <div class="content">
+      <span class="status done">Diagnostiqué et corrigé le soir même — 16/07/2026</span>
+      <h3>Phase 12 — Incident réel KB1000 (-150$) : stop non appliqué + décision non sensible au prix</h3>
+      <p class="desc">Louis a signalé une position KB1000 fermée à -150$ (plafond générique) pendant qu'AlphaTrade AI enchaînait des petits gains en parallèle (~80$). Diagnostic confirmé par le journal réel : SELL ouvert à RSI 17-18 (survente extrême — AlphaTrade AI avait bloqué SON PROPRE signal au même instant via sa protection anti-sommet/creux, KB1000 n'a pas d'équivalent), resté ouvert 14min17s sans aucune protection intermédiaire jusqu'au plafond de 150$.</p>
+      <p class="desc">Louis a demandé pourquoi la correction envisagée se basait sur le RSI (l'outil d'AlphaTrade AI) plutôt que sur les indicateurs propres à KB1000 déjà construits. Réponse trouvée dans le code : <code>kb7_decision()</code> documentait déjà que ses correspondances zones/FVG/Order Block/Liquidity Grab n'étaient "pas encore une vérification de proximité au prix actuel", et <code>premium_discount</code> (calculé par KB5, l'équivalent Smart Money de "zone de survente/surachat") n'était jamais transmis au score de décision.</p>
+      <p class="desc"><b>Corrigé</b> : <code>manage_position()</code> (KB8) applique désormais réellement le stop calculé (nouvelle action <code>STOP_LOSS</code>, fermeture complète) — avant ce correctif, ce stop ne servait qu'au calcul du lot à l'ouverture, jamais vérifié contre le prix courant. <code>kb7_decision()</code> exige maintenant une vraie proximité au prix actuel pour ses correspondances de zones/patterns, et <code>premium_discount</code> est branché dans <code>decision_score()</code> — vendre en zone DISCOUNT ou acheter en zone PREMIUM est désormais pénalisé. 10 scénarios testés dont une reproduction directe du scénario réel, zéro régression sur l'ensemble (16 suites). Nouvel installateur reconstruit.</p>
+      <p class="desc" style="color:var(--orange)">Reste ouvert : la fuite inter-moteurs du Renfort (porte "position perdante" toujours basée sur la confiance d'AlphaTrade AI) — proposition E de l'audit Phase 11, non traitée.</p>
+    </div>
+  </div>
 
 </div>
 <footer>Ce sommaire est mis à jour à chaque nouvelle étape produite ou validée.</footer>
