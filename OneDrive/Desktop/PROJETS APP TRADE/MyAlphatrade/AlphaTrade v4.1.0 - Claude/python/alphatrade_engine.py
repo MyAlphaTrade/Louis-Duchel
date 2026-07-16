@@ -2306,7 +2306,6 @@ def kb1000_manage_positions(positions: list[dict], params: dict, symbol_names: d
             },
             plan_state.get("levels") or [],
             be_config={
-                "activation_rr": float(plan_state.get("activation_rr", 0.5)),
                 "spread": spread,
                 "tick_size": tick_size,
                 "buffer_ticks": float(plan_state.get("be_buffer_ticks", 5)),
@@ -3170,9 +3169,14 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         account_lot_cap = float(params.get("demo_lot_cap" if demo else "real_lot_cap", 0) or 0)
         symbol_lot_cap = float(symbol_params.get("lot_max", 0) or 0)
         kb1000_lot_cap = min((v for v in (account_lot_cap, symbol_lot_cap) if v > 0), default=0.0)
+        # Même garde-fou absolu qu'AlphaTrade AI (HARD_RISK_PCT_CAP) — ce n'est
+        # pas une logique propre à un moteur, c'est une protection de compte
+        # universelle et doit s'appliquer de façon identique quel que soit le
+        # moteur actif.
+        kb1000_risk_pct = min(max(0.0, float(params.get("risk_pct", 0.35))), HARD_RISK_PCT_CAP)
         kb1000_plan = kb8_position_plan(
             symbol, direction_word,
-            risk_pct=float(params.get("risk_pct", 0.35)),
+            risk_pct=kb1000_risk_pct,
             lot_min_floor=float(symbol_params.get("lot_min", 0) or 0),
             lot_max_cap=kb1000_lot_cap,
         )
@@ -3242,7 +3246,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                     "stop_price": float(kb1000_plan["stop_price"]),
                     "direction": kb1000_plan["direction"],
                     "levels": kb1000_plan["take_profit_levels"],
-                    "activation_rr": 0.5,
                     "be_buffer_ticks": 5,
                     "orig_vol": float(new_pos.get("lot") or 0),
                     "tp_hit": set(),

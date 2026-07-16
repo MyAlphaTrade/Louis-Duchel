@@ -105,12 +105,15 @@ def manage_position(position: dict, levels: list[dict], be_config: dict | None =
         if reached:
             return {"action": "PARTIAL_CLOSE", "tier": level["tier"], "price": level["price"], "close_pct": level["close_pct"]}
 
-    if not position.get("be_applied") and be_config:
-        trigger = break_even_trigger(entry, position["stop_price"], direction, be_config.get("activation_rr", 0.5))
-        reached = (current >= trigger) if direction == "bullish" else (current <= trigger)
-        if reached:
-            be_price = break_even_level(entry, direction, be_config["spread"], be_config["tick_size"], be_config.get("buffer_ticks", 5))
-            return {"action": "MOVE_TO_BREAK_EVEN", "price": be_price}
+    # Break-Even s'enclenche dès que le premier palier (TP1, tier 0) est
+    # atteint — pas à un pourcentage indépendant de la distance du stop.
+    # C'est la stratégie décrite pour KB1000 (paliers puis BE immédiat pour
+    # laisser courir le reste sans risque) et c'est exactement le même
+    # principe déjà utilisé par partial_tp_step() pour AlphaTrade AI
+    # (`if next_tp == 1 and move_be`).
+    if not position.get("be_applied") and be_config and 0 in tp_hit:
+        be_price = break_even_level(entry, direction, be_config["spread"], be_config["tick_size"], be_config.get("buffer_ticks", 5))
+        return {"action": "MOVE_TO_BREAK_EVEN", "price": be_price}
 
     if trail_config and len(tp_hit) >= trail_config.get("activate_after_tier", 1):
         new_stop = trailing_stop_level(current, direction, trail_config["tick_size"], trail_config["trail_ticks"])
