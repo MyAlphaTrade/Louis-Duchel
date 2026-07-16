@@ -103,7 +103,8 @@ const defaults = {
       signal_reversal_margin: 7, cooldown_after_loss_sec: 60,
       session_filter_enabled: false, session_start_utc: 8, session_end_utc: 17, stop_before_end_min: 30,
       lot_multiplicateur_renfort: 1.0, renfort_high_confidence_min: 75,
-      lot_multiplicateur_rebond: 3.0
+      lot_multiplicateur_rebond: 3.0,
+      partial_tp_enabled: false, partial_tp_count: 3, partial_tp_close_pct: 25, partial_tp_move_be: true
     }
   }
 };
