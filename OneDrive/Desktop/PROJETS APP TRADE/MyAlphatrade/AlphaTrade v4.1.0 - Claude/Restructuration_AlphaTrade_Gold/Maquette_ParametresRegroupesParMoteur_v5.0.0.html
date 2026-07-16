@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Paramètres regroupés par moteur</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --cyan:#5cc8ff; --blue:#5cc8ff; --green:#39ff88; --red:#ff5c6c; --orange:#ffb454;
+    --card2:#0f1811; --border-strong:#2a4433;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid #1c6e3f; border-radius:20px; color:var(--green); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:900px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:900px;}
+
+  .titlebar{display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--border-strong); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:#1c6e3f;}
+  .titlebar .spacer{flex:1;}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted); text-align:center;}
+  .tabs{display:flex; gap:2px; padding:0 16px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs .tab{padding:10px 14px; font-size:12.5px; color:var(--muted); white-space:nowrap; cursor:default;}
+  .tabs .tab.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+
+  .page{max-width:1300px; margin:0 auto; padding:20px 24px 90px;}
+
+  .engine-picker{background:var(--panel2); border:1px solid var(--border-strong); border-radius:12px; padding:14px 16px; margin:0 0 18px;}
+  .engine-picker .ep-label{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px;}
+  .engine-cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px;}
+  .engine-card{background:var(--panel); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px; cursor:pointer; transition:.15s;}
+  .engine-card:hover{border-color:var(--green);}
+  .engine-card.selected{border-color:var(--green); box-shadow:0 0 0 1px var(--green) inset; background:var(--card2);}
+  .engine-card.future{opacity:.45; cursor:not-allowed;}
+  .engine-card .en-name{color:#fff; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .engine-card.selected .en-name{color:var(--green);}
+  .engine-card .en-desc{color:var(--muted); font-size:11.5px; margin:5px 0 0; line-height:1.4;}
+
+  .group-header{display:flex; align-items:center; gap:10px; margin:26px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line);}
+  .group-header h2{font-size:13px; color:var(--green); text-transform:uppercase; letter-spacing:.6px; margin:0;}
+  .scope-badge{font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px; white-space:nowrap;}
+  .scope-badge.shared{background:#4a3417; color:var(--orange);}
+  .scope-badge.ata{background:#123a4a; color:var(--blue);}
+  .scope-badge.kb{background:#1c6e3f; color:var(--green);}
+  .scope-note{color:var(--muted); font-size:11.5px; margin-left:auto;}
+
+  .panel{border:1px solid var(--border-strong); border-radius:12px; background:var(--panel); padding:14px 16px; margin-bottom:8px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px 16px;}
+  label{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--muted); font-weight:600;}
+  label.check{flex-direction:row; align-items:center; font-weight:600;}
+  input, select{background:#050805; border:1px solid var(--border-strong); border-radius:6px; color:var(--text); padding:7px 9px; font-size:13px;}
+  .info-dot{color:var(--cyan); font-size:10px; cursor:help; margin-left:3px;}
+
+  .engine-group{display:none;}
+  .engine-group.active{display:block;}
+
+  .flag{background:var(--panel2); border-left:3px solid var(--orange); border-radius:6px; padding:8px 12px; margin:8px 0; font-size:12px; color:var(--muted);}
+  .flag b{color:var(--orange);}
+  .flag.bug{border-left-color:var(--red);}
+  .flag.bug b{color:var(--red);}
+
+  footer{padding:36px 22px; text-align:center; color:#4d6357; font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette — aucun code touché</div>
+  <h1>Paramètres regroupés par thème ET par moteur</h1>
+  <p>Réorganisation proposée suite à l'audit du 16/07/2026 : les groupes réellement <b>partagés</b> entre les deux moteurs restent toujours visibles et fixés en haut de page ; les groupes <b>propres à un seul moteur</b> n'apparaissent que si ce moteur est sélectionné — ce qui verrouille immédiatement (masque, donc rend impossible à modifier par erreur) les réglages du moteur non actif.</p>
+  <div class="note">👉 <b>Clique sur une carte "Moteur IA actif" ci-dessous</b> pour voir la bascule en direct. Chaque groupe porte un badge : <span style="color:var(--orange)">◆ Partagé</span> (toujours visible), <span style="color:var(--blue)">◆ AlphaTrade AI</span> ou <span style="color:var(--green)">◆ KB1000</span> (visible seulement si ce moteur est actif). Les intitulés de champs sont les vrais, tirés de l'audit champ par champ.</div>
+</div>
+
+<div class="titlebar">
+  <div class="brand">🥇 AlphaTrade <span class="badge">v5.0.0</span></div>
+  <span class="badge demo">DEMO</span>
+  <span class="badge">RÉEL</span>
+  <span class="badge">#201660817 Deriv-Demo</span>
+  <div class="spacer"></div>
+  <div class="clock">GMT<br>12:07:26</div>
+  <span class="badge">Session Londres</span>
+</div>
+<div class="tabs">
+  <div class="tab">Tableau de bord</div><div class="tab">Trades</div><div class="tab">Sessions IA</div>
+  <div class="tab">Microstructure</div><div class="tab">Sessions marché</div><div class="tab">Calendrier</div>
+  <div class="tab active">Paramètres</div><div class="tab">Journal</div><div class="tab">Assistant IA</div>
+</div>
+
+<div class="page">
+
+  <div class="engine-picker">
+    <div class="ep-label">Moteur IA actif</div>
+    <div class="engine-cards">
+      <div class="engine-card selected" data-engine="alphatrade_ai" onclick="selectEngine('alphatrade_ai')">
+        <div class="en-name">⭐ AlphaTrade AI</div>
+        <div class="en-desc">Moteur historique — EMA, RSI, MACD, momentum, multi-timeframe, mémoire adaptative.</div>
+      </div>
+      <div class="engine-card" data-engine="kb1000_gold_ai" onclick="selectEngine('kb1000_gold_ai')">
+        <div class="en-name">⭐ KB1000 Gold AI</div>
+        <div class="en-desc">Structure, zones, Fibonacci, Smart Money, confirmations, gestion de position intelligente.</div>
+      </div>
+      <div class="engine-card future">
+        <div class="en-name">Institutional AI <span style="font-size:9px;">BIENTÔT</span></div>
+        <div class="en-desc">Futur moteur — non construit.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GROUPES PARTAGÉS — TOUJOURS VISIBLES ============ -->
+
+  <div class="group-header">
+    <h2>🟦 Connexion & IA</h2>
+    <span class="scope-badge shared">Partagé</span>
+    <span class="scope-badge" style="background:#1a2620; color:#7c9284;">🔒 Réglages avancés</span>
+    <span class="scope-note">Déplacé dans "Réglages avancés" (mécanisme déjà existant, repliée par défaut) — clés API et connexion, pas besoin de l'avoir sous les yeux en permanence</span>
+  </div>
+  <div class="panel"><div class="grid">
+    <label>Terminal MT5 <span class="info-dot">ⓘ</span><input type="text"></label>
+    <label class="check"><input type="checkbox" checked> Valider les entrées avec AlphaTrade IA serveur</label>
+    <label>Clé API Anthropic <span class="info-dot">ⓘ</span><input type="password" placeholder="sk-ant-..."></label>
+    <label>Clé API OpenAI <span class="info-dot">ⓘ</span><input type="password" placeholder="sk-..."></label>
+    <label class="check"><input type="checkbox" checked> Activer l'observation microstructure</label>
+  </div></div>
+
+  <div class="group-header">
+    <h2>🟦 Risque & Compte</h2>
+    <span class="scope-badge shared">Partagé</span>
+    <span class="scope-note">Cadence/Max trades-heure déplacés ici depuis "Stratégie Or" (s'appliquaient déjà aux deux moteurs, mais invisibles pour KB1000)</span>
+  </div>
+  <div class="panel"><div class="grid">
+    <label>Risque / trade % <span class="info-dot">ⓘ</span><input type="number" value="0.35" step="0.01"></label>
+    <label>Lot max compte réel <span class="info-dot">ⓘ</span><input type="number" value="0.8" step="0.001"></label>
+    <label>Lot max compte démo <span class="info-dot">ⓘ</span><input type="number" value="1" step="0.001"></label>
+    <label>Lot minimum <span class="info-dot">ⓘ</span><input type="number" value="0.1" step="0.001"></label>
+    <label>Lot maximum <span class="info-dot">ⓘ</span><input type="number" value="0.8" step="0.001"></label>
+    <label>Positions auto max <span class="info-dot">ⓘ</span><input type="number" value="5"></label>
+    <label>Positions max (symbole) <span class="info-dot">ⓘ</span><input type="number" value="5"></label>
+    <label>Cadence d'analyse (s) <span class="info-dot">ⓘ</span><input type="number" value="15"></label>
+    <label>Max trades / heure <span class="info-dot">ⓘ</span><input type="number" value="80"></label>
+  </div></div>
+
+  <div class="group-header">
+    <h2>🟦 Session & Protection compte</h2>
+    <span class="scope-badge shared">Partagé</span>
+  </div>
+  <div class="panel"><div class="grid">
+    <label>Perte max session $ <span class="info-dot">ⓘ</span><input type="number" value="-2000"></label>
+    <label>Objectif session $ <span class="info-dot">ⓘ</span><input type="number" value="100"></label>
+    <label>Objectif journalier $ <span class="info-dot">ⓘ</span><input type="number" value="1000"></label>
+    <label>Giveback $ <span class="info-dot">ⓘ</span><input type="number" value="100"></label>
+    <label class="check"><input type="checkbox"> Trader uniquement pendant une plage horaire</label>
+    <label>Ouverture UTC <span class="info-dot">ⓘ</span><input type="number" value="8"></label>
+    <label>Fermeture UTC <span class="info-dot">ⓘ</span><input type="number" value="17"></label>
+    <label>Arrêter avant fin (min) <span class="info-dot">ⓘ</span><input type="number" value="30"></label>
+    <label class="check"><input type="checkbox" checked> Protection du profit active</label>
+    <label>Recul depuis pic % <span class="info-dot">ⓘ</span><input type="number" value="5"></label>
+    <label>Recul minimum $ <span class="info-dot">ⓘ</span><input type="number" value="10"></label>
+    <label>Zone avertissement % <span class="info-dot">ⓘ</span><input type="number" value="0.75"></label>
+    <label>Perte max / position $ <span class="info-dot">ⓘ</span><input type="number" value="15"></label>
+    <label>Flottant max portefeuille $ <span class="info-dot">ⓘ</span><input type="number" value="50"></label>
+  </div></div>
+
+  <div class="group-header">
+    <h2>🟦 Renfort & Rebond</h2>
+    <span class="scope-badge shared">Partagé</span>
+    <span class="scope-note">Regroupés à la demande de Louis — deux mécanismes qui ajoutent une position secondaire à la principale</span>
+  </div>
+  <div class="panel">
+    <div class="flag bug"><b>Non résolu par ce regroupement (proposition E de l'audit) :</b> la porte "position perdante" du Renfort lit toujours la confiance d'AlphaTrade AI, jamais le score KB1000.</div>
+    <div class="flag"><b>Question ouverte (proposition D de l'audit) :</b> le Rebond garde sa propre logique de décision basée sur l'analyse d'AlphaTrade AI, quel que soit le moteur qui a ouvert la position principale.</div>
+    <h3 style="margin:14px 0 6px; color:#fff; font-size:12.5px;">Renfort</h3>
+    <div class="grid">
+      <label class="check"><input type="checkbox" checked> Activer le Renfort de position <span class="info-dot">ⓘ</span></label>
+      <label>Écart confiance renfort % <span class="info-dot">ⓘ</span><input type="number" value="10"></label>
+      <label>Écart score renfort <span class="info-dot">ⓘ</span><input type="number" value="15"></label>
+      <label>Pause entre renforts (s) <span class="info-dot">ⓘ</span><input type="number" value="300"></label>
+      <label>Pause après perte (s) <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+    </div>
+    <h3 style="margin:16px 0 6px; color:#fff; font-size:12.5px;">Rebond</h3>
+    <div class="grid">
+      <label class="check"><input type="checkbox" checked> Activer la stratégie Rebond</label>
+      <label>Seuil signal contraire min % <span class="info-dot">ⓘ</span><input type="number" value="90"></label>
+      <label>Force min de zone <span class="info-dot">ⓘ</span><input type="number" value="28"></label>
+      <label>Cooldown rebond (s) <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+    </div>
+  </div>
+
+  <!-- ============ GROUPE ALPHATRADE AI UNIQUEMENT ============ -->
+  <div class="engine-group ata-group active">
+    <div class="group-header">
+      <h2>🟦 Stratégie Or</h2>
+      <span class="scope-badge ata">AlphaTrade AI</span>
+      <span class="scope-note">Masqué dès que KB1000 est sélectionné</span>
+    </div>
+    <div class="panel"><div class="grid">
+      <label>Seuil de confiance min % <span class="info-dot">ⓘ</span><input type="number" value="90"></label>
+      <label>Timeframe d'analyse <span class="info-dot">ⓘ</span><select><option>M5</option></select></label>
+      <label>Max hold (s) <span class="info-dot">ⓘ</span><input type="number" value="90"></label>
+      <label>Délai de réanalyse (s) <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+      <label>Cible profit $ <span class="info-dot">ⓘ</span><input type="number" value="3.0"></label>
+      <label class="check"><input type="checkbox" checked> Éviter achat au sommet / vente au creux</label>
+      <label>Bougies analysées <span class="info-dot">ⓘ</span><input type="number" value="200"></label>
+      <label>Zone de bord % <span class="info-dot">ⓘ</span><input type="number" value="18"></label>
+      <label>Écart BUY/SELL minimum <span class="info-dot">ⓘ</span><input type="number" value="12"></label>
+      <label>Marge retournement signal <span class="info-dot">ⓘ</span><input type="number" value="7"></label>
+    </div></div>
+
+    <div class="group-header">
+      <h2>🟦 Lot & Renfort (spécifique)</h2>
+      <span class="scope-badge ata">AlphaTrade AI</span>
+      <span class="scope-note">KB1000 ne calcule jamais un lot à plat — ces champs n'ont aucun effet pour lui</span>
+    </div>
+    <div class="panel"><div class="grid">
+      <label>Lot fixe <span class="info-dot">ⓘ</span><input type="number" value="0.3" step="0.001"></label>
+      <label>Multiplicateur lot renfort <span class="info-dot">ⓘ</span><input type="number" value="2"></label>
+      <label>Confiance min. renfort % <span class="info-dot">ⓘ</span><input type="number" value="75"></label>
+    </div></div>
+
+    <div class="group-header">
+      <h2>🟦 Trailing & Protection profit</h2>
+      <span class="scope-badge ata">AlphaTrade AI</span>
+      <span class="scope-note">Inerte pour KB1000 depuis le correctif du 16/07 — d'où le regroupement ici</span>
+    </div>
+    <div class="panel"><div class="grid">
+      <label>Protection catastrophe $ <span class="info-dot">ⓘ</span><input type="number" value="150"></label>
+      <label>Profit min. sortie $ <span class="info-dot">ⓘ</span><input type="number" value="0.09"></label>
+      <label>Verrou profit dès $ <span class="info-dot">ⓘ</span><input type="number" value="1"></label>
+      <label>Recul max profit <span class="info-dot">ⓘ</span><input type="number" value="0.5"></label>
+      <label>Palier 1 — seuil $ <span class="info-dot">ⓘ</span><input type="number" value="5"></label>
+      <label>Palier 1 — recul <span class="info-dot">ⓘ</span><input type="number" value="0.2"></label>
+      <label>Palier 2 — seuil $ <span class="info-dot">ⓘ</span><input type="number" value="10"></label>
+      <label>Palier 2 — recul <span class="info-dot">ⓘ</span><input type="number" value="0.15"></label>
+      <label>Palier 3 — seuil $ <span class="info-dot">ⓘ</span><input type="number" value="15"></label>
+      <label>Palier 3 — recul <span class="info-dot">ⓘ</span><input type="number" value="0.1"></label>
+      <label>Palier 4 — seuil $ <span class="info-dot">ⓘ</span><input type="number" value="25"></label>
+      <label>Palier 4 — recul <span class="info-dot">ⓘ</span><input type="number" value="0.07"></label>
+      <label>Score momentum sortie <span class="info-dot">ⓘ</span><input type="number" value="55"></label>
+    </div></div>
+  </div>
+
+  <!-- ============ GROUPE KB1000 UNIQUEMENT ============ -->
+  <div class="engine-group kb-group">
+    <div class="group-header">
+      <h2>🟦 KB1000 Gold AI — Réglages (décision)</h2>
+      <span class="scope-badge kb">KB1000</span>
+      <span class="scope-note">Masqué dès qu'AlphaTrade AI est sélectionné</span>
+    </div>
+    <div class="panel"><div class="grid">
+      <label>Bougies analysées / niveau (KB1) <span class="info-dot">ⓘ</span><input type="number" value="200"></label>
+      <label>Seuil de cohérence min % (KB1) <span class="info-dot">ⓘ</span><input type="number" value="75"></label>
+      <label>Confirmations min. requises (KB6) <span class="info-dot">ⓘ</span><input type="number" value="4"></label>
+      <label>Score d'entrée min % (KB7) <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+    </div></div>
+
+    <div class="group-header">
+      <h2>🟦 KB1000 Gold AI — Gestion de position (KB8)</h2>
+      <span class="scope-badge kb">KB1000</span>
+      <span class="scope-note">Pas encore exposé dans l'app réelle — ratios TP/BE encore fixés dans le code, pas dans Paramètres (à faire séparément, hors scope de ce regroupement)</span>
+    </div>
+    <div class="panel">
+      <div class="flag"><b>Non couvert par cette maquette :</b> les ratios risk:reward des paliers TP (1×/2×/3×), les % de clôture par palier (40/30/30) et les ticks de marge du Break-Even sont aujourd'hui des valeurs par défaut dans le code, pas des champs Paramètres. Les exposer serait un chantier séparé, pas inclus dans le regroupement demandé.</div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Maquette interactive — 16/07/2026 — AlphaTrade Gold v5.0.0 — aucun code de l'application modifié</footer>
+
+<script>
+function selectEngine(engine) {
+  document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
+    card.classList.toggle('selected', card.dataset.engine === engine);
+  });
+  document.querySelector('.ata-group').classList.toggle('active', engine === 'alphatrade_ai');
+  document.querySelector('.kb-group').classList.toggle('active', engine === 'kb1000_gold_ai');
+}
+</script>
+
+</body>
+</html>
