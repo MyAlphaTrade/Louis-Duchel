@@ -1807,7 +1807,11 @@ function selectEngine(engine) {
   document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
     card.classList.toggle('selected', card.dataset.engine === engine);
   });
-  if ($('strategieOrPanel')) $('strategieOrPanel').style.display = engine === 'alphatrade_ai' ? '' : 'none';
+  // Stratégie Or, Lot & Renfort (spécifique) et Trailing & Protection profit
+  // partagent tous la classe ata-engine-only — ils basculent ensemble.
+  document.querySelectorAll('.ata-engine-only').forEach(panel => {
+    panel.style.display = engine === 'alphatrade_ai' ? '' : 'none';
+  });
   if ($('kb1000Panel')) $('kb1000Panel').style.display = engine === 'kb1000_gold_ai' ? '' : 'none';
   if (params) params.active_engine = engine;
 }
