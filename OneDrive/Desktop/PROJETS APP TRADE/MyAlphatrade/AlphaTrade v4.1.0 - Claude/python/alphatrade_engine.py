@@ -972,16 +972,23 @@ def kb8_position_plan(symbol: str, direction: str, stop_price: float | None = No
                        rr_ratios=(1.0, 2.0, 3.0), close_pct=(0.4, 0.3, 0.3),
                        activation_rr: float = 0.5, be_buffer_ticks: float = 5,
                        structure_timeframe: str = "H1", structure_candles: int = 300,
-                       swing_lookback: int = 2) -> dict:
+                       swing_lookback: int = 2,
+                       lot_min_floor: float | None = None,
+                       lot_max_cap: float | None = None) -> dict:
     """KB1000 Gold AI — KB8 (sizing). Lot calculé depuis le capital réel et le
     risque accepté, TP par paliers en risk:reward, Break-Even calibré par les
     specs réelles du broker (tick_value/tick_size/spread) — jamais de valeur
     en dur. Si stop_price n'est pas fourni, il est dérivé automatiquement du
     dernier swing de structure opposé (KB2, réutilise detect_swings) — jamais
-    une distance fixe. La gestion en direct (manage_position, dans
-    market_position_sizing.py) reste pure et est appelée directement par
-    l'engine avec les données déjà disponibles, sans wrapper MT5 dédié.
-    Pas encore branchée sur un moteur actif."""
+    une distance fixe. lot_min_floor/lot_max_cap permettent à l'appelant de
+    faire respecter les bornes RÉELLEMENT configurées par l'utilisateur (lot
+    minimum/maximum du symbole, plafond de compte réel/démo) en plus des
+    limites techniques du broker — sinon le lot calculé par le risque pourrait
+    tomber sous le lot minimum voulu par l'utilisateur, ou (si le stop est
+    serré) dépasser son plafond de compte, sans jamais être rattrapé. La
+    gestion en direct (manage_position, dans market_position_sizing.py) reste
+    pure et est appelée directement par l'engine avec les données déjà
+    disponibles, sans wrapper MT5 dédié."""
     info = mt5.symbol_info(symbol) if mt5 else None
     account = mt5.account_info() if mt5 else None
     if info is None or account is None:
@@ -994,6 +1001,10 @@ def kb8_position_plan(symbol: str, direction: str, stop_price: float | None = No
     lot_min = float(getattr(info, "volume_min", 0.01) or 0.01)
     lot_max = float(getattr(info, "volume_max", 100.0) or 100.0)
     lot_step = float(getattr(info, "volume_step", 0.01) or 0.01)
+    if lot_min_floor is not None and lot_min_floor > 0:
+        lot_min = max(lot_min, float(lot_min_floor))
+    if lot_max_cap is not None and lot_max_cap > 0:
+        lot_max = min(lot_max, max(lot_min, float(lot_max_cap)))
 
     if stop_price is None:
         structure = kb2_market_structure(symbol, timeframe=structure_timeframe,
@@ -2371,6 +2382,7 @@ def position_exit_reason(
     session_state_name: str,
     peak: float,
     age: float,
+    kb1000_managed: bool = False,
 ) -> str:
     profit = float(position.get("profit") or 0)
     review_sec = max(30, int(pos_params.get("position_review_sec", 120)))
@@ -2395,6 +2407,18 @@ def position_exit_reason(
         return "PROTECTION"
     if session_state_name in {"PRECLOSE", "CLOSED"}:
         return "SESSION"
+    if kb1000_managed:
+        # Une position gérée par KB1000 (kb1000_manage_positions: TP paliers +
+        # Break-Even réel, sur le plan calculé par KB8) ne doit PAS être aussi
+        # soumise au trailing/profit-lock/sortie-momentum/cible d'AlphaTrade AI
+        # ci-dessous — c'est une logique de sortie différente, tarée sur ses
+        # propres seuils (profit_target, trail_l1..l4, etc.), qui fermerait la
+        # position bien avant que le plan KB8 (paliers plus larges, calculés
+        # sur la structure réelle) n'ait sa chance. Seules les protections de
+        # compte universelles ci-dessus (MAX_POSITION_LOSS, PROTECTION,
+        # SESSION) et MAX_FLOATING_LOSS (gérée séparément dans auto_trade_step)
+        # restent partagées entre les moteurs.
+        return ""
     trail_steps = [
         (float(pos_params.get("trail_l1_above", 0.0)), float(pos_params.get("trail_l1_pct", 0.0))),
         (float(pos_params.get("trail_l2_above", 0.0)), float(pos_params.get("trail_l2_pct", 0.0))),
@@ -2985,6 +3009,7 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 str(payload.get("session_access", {}).get(position.get("symbol_key"), {}).get("state") or ""),
                 peak,
                 age,
+                kb1000_managed=int(position.get("ticket", 0)) in KB1000_POSITION_STATE,
             )
         if close_reason:
             ok, message = close_bot_position(position, close_reason)
@@ -3142,7 +3167,15 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
     kb1000_plan = None
     if str(decision.get("engine")) == "kb1000_gold_ai":
         direction_word = "bullish" if str(decision.get("signal")) == "BUY" else "bearish"
-        kb1000_plan = kb8_position_plan(symbol, direction_word, risk_pct=float(params.get("risk_pct", 0.35)))
+        account_lot_cap = float(params.get("demo_lot_cap" if demo else "real_lot_cap", 0) or 0)
+        symbol_lot_cap = float(symbol_params.get("lot_max", 0) or 0)
+        kb1000_lot_cap = min((v for v in (account_lot_cap, symbol_lot_cap) if v > 0), default=0.0)
+        kb1000_plan = kb8_position_plan(
+            symbol, direction_word,
+            risk_pct=float(params.get("risk_pct", 0.35)),
+            lot_min_floor=float(symbol_params.get("lot_min", 0) or 0),
+            lot_max_cap=kb1000_lot_cap,
+        )
         kb8_lot = float((kb1000_plan.get("sizing") or {}).get("lot") or 0)
         if kb8_lot <= 0:
             reason = str((kb1000_plan.get("sizing") or {}).get("reason") or kb1000_plan.get("reason") or "KB1000: lot invalide.")
