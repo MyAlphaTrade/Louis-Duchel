@@ -1807,8 +1807,10 @@ function selectEngine(engine) {
   document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
     card.classList.toggle('selected', card.dataset.engine === engine);
   });
-  // Stratégie Or, Lot & Renfort (spécifique) et Trailing & Protection profit
-  // partagent tous la classe ata-engine-only — ils basculent ensemble.
+  // Depuis la simplification du 16/07/2026, seule la génération du signal
+  // reste propre à chaque moteur (Stratégie Or ci-dessous, panneau KB1000
+  // Gold AI géré séparément) — lot, TP, trailing et protections sont
+  // désormais partagés (plus de classe ata-engine-only dessus).
   document.querySelectorAll('.ata-engine-only').forEach(panel => {
     panel.style.display = engine === 'alphatrade_ai' ? '' : 'none';
   });

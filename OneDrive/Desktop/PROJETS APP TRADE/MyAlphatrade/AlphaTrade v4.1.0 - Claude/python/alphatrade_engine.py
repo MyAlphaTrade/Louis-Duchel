@@ -29,10 +29,6 @@ from market_smart_money import (
 )
 from market_confirmations import confirmations as kb6_confirmations_check
 from market_decision import decision_score
-from market_position_sizing import (
-    calculate_lot, take_profit_levels, break_even_trigger, break_even_level, stop_placement_from_structure,
-    manage_position as kb8_manage_position,
-)
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
@@ -201,11 +197,6 @@ AI_SERVER_STATE = {
 AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
 PARTIAL_TP_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applied}}
-# {ticket: {entry_price, stop_price (mutable: BE/trailing), direction, levels, tp_hit: set(), be_applied}}
-# En mémoire uniquement (comme PARTIAL_TP_STATE) : un redémarrage pendant qu'une
-# position KB1000 est ouverte perd le plan associé (limite déjà acceptée pour
-# le mécanisme équivalent d'AlphaTrade AI).
-KB1000_POSITION_STATE: dict[int, dict] = {}
 
 # Symboles déjà abonnés au vrai carnet d'ordres MT5 (Depth of Market) — évite de
 # rappeler market_book_add() à chaque tick, l'abonnement reste actif tant que
@@ -1007,70 +998,6 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
     result = decision_score(signals, candidate_direction, entry_threshold=entry_threshold)
     result["signals"] = signals
     return result
-
-
-def kb8_position_plan(symbol: str, direction: str, stop_price: float | None = None, risk_pct: float = 1.0,
-                       rr_ratios=(1.0, 2.0, 3.0), close_pct=(0.4, 0.3, 0.3),
-                       activation_rr: float = 0.5, be_buffer_ticks: float = 5,
-                       structure_timeframe: str = "H1", structure_candles: int = 300,
-                       swing_lookback: int = 2,
-                       lot_min_floor: float | None = None,
-                       lot_max_cap: float | None = None) -> dict:
-    """KB1000 Gold AI — KB8 (sizing). Lot calculé depuis le capital réel et le
-    risque accepté, TP par paliers en risk:reward, Break-Even calibré par les
-    specs réelles du broker (tick_value/tick_size/spread) — jamais de valeur
-    en dur. Si stop_price n'est pas fourni, il est dérivé automatiquement du
-    dernier swing de structure opposé (KB2, réutilise detect_swings) — jamais
-    une distance fixe. lot_min_floor/lot_max_cap permettent à l'appelant de
-    faire respecter les bornes RÉELLEMENT configurées par l'utilisateur (lot
-    minimum/maximum du symbole, plafond de compte réel/démo) en plus des
-    limites techniques du broker — sinon le lot calculé par le risque pourrait
-    tomber sous le lot minimum voulu par l'utilisateur, ou (si le stop est
-    serré) dépasser son plafond de compte, sans jamais être rattrapé. La
-    gestion en direct (manage_position, dans market_position_sizing.py) reste
-    pure et est appelée directement par l'engine avec les données déjà
-    disponibles, sans wrapper MT5 dédié."""
-    info = mt5.symbol_info(symbol) if mt5 else None
-    account = mt5.account_info() if mt5 else None
-    if info is None or account is None:
-        return {"lot": 0.0, "reason": "symbol_info ou account_info indisponible"}
-
-    entry_price = float(info.ask if direction == "bullish" else info.bid)
-    tick_size = float(getattr(info, "trade_tick_size", 0) or info.point)
-    tick_value = float(getattr(info, "trade_tick_value", 0) or 0)
-    spread = float(info.ask - info.bid)
-    lot_min = float(getattr(info, "volume_min", 0.01) or 0.01)
-    lot_max = float(getattr(info, "volume_max", 100.0) or 100.0)
-    lot_step = float(getattr(info, "volume_step", 0.01) or 0.01)
-    if lot_min_floor is not None and lot_min_floor > 0:
-        lot_min = max(lot_min, float(lot_min_floor))
-    if lot_max_cap is not None and lot_max_cap > 0:
-        lot_max = min(lot_max, max(lot_min, float(lot_max_cap)))
-
-    if stop_price is None:
-        structure = kb2_market_structure(symbol, timeframe=structure_timeframe,
-                                          candles=structure_candles, swing_lookback=swing_lookback)
-        stop_price = stop_placement_from_structure(
-            structure.get("swings", []), direction, buffer_ticks=be_buffer_ticks, tick_size=tick_size,
-        )
-        if stop_price is None:
-            return {"lot": 0.0, "reason": "aucun niveau de structure exploitable pour placer le stop"}
-
-    sizing = calculate_lot(float(account.balance), risk_pct, entry_price, stop_price,
-                            tick_value, tick_size, lot_min=lot_min, lot_max=lot_max, lot_step=lot_step)
-    levels = take_profit_levels(entry_price, stop_price, direction, rr_ratios=rr_ratios, close_pct=close_pct)
-    be_trigger = break_even_trigger(entry_price, stop_price, direction, activation_rr=activation_rr)
-    be_price = break_even_level(entry_price, direction, spread, tick_size, buffer_ticks=be_buffer_ticks)
-
-    return {
-        "entry_price": entry_price,
-        "stop_price": stop_price,
-        "direction": direction,
-        "sizing": sizing,
-        "take_profit_levels": levels,
-        "break_even_trigger": be_trigger,
-        "break_even_price": be_price,
-    }
 
 
 # ── Registre de moteurs IA (Phase 3bis) ─────────────────────────────────────
@@ -2039,7 +1966,7 @@ def send_deal(request: dict):
     return last_result
 
 
-def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL", tp_override: float | None = None):
+def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL"):
     account = mt5.account_info()
     if not account:
         return False, "Compte MT5 indisponible.", None
@@ -2065,17 +1992,11 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
         effective_target = raw_target * confidence_ratio
     else:
         effective_target = raw_target
-    if tp_override is not None:
-        # Moteur avec sa propre gestion de sortie (ex: KB1000 Gold AI, clôtures
-        # partielles par paliers) : pas de TP broker unique, tout est piloté
-        # en logiciel comme le SL (voir kb1000_manage_positions()).
-        tp = float(tp_override)
-    else:
-        tp_distance = max(
-            min_distance,
-            money_price_distance(symbol, direction, volume, price, info, effective_target),
-        )
-        tp = price + tp_distance if direction == "BUY" else price - tp_distance
+    tp_distance = max(
+        min_distance,
+        money_price_distance(symbol, direction, volume, price, info, effective_target),
+    )
+    tp = price + tp_distance if direction == "BUY" else price - tp_distance
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -2306,151 +2227,6 @@ def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str,
             log(f"[TP{next_tp}] Fermeture partielle refusée ({retcode}) — {symbol_key}", "ERROR")
 
 
-def kb1000_manage_positions(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
-    """Exécute en direct le plan KB8 (TP par paliers, passage à Break-Even)
-    des positions ouvertes par KB1000 Gold AI, selon le même schéma MT5 que
-    partial_tp_step() (TRADE_ACTION_DEAL pour les clôtures partielles,
-    TRADE_ACTION_SLTP pour le Break-Even). Le trailing KB8 n'est pas encore
-    activé ici (trail_config=None) — periode de wiring initiale, à activer
-    dans un passage ultérieur une fois la mécanique de paliers/BE validée en
-    conditions réelles. Le filet de sécurité logiciel (position_exit_reason,
-    protections de compte) reste géré séparément et s'applique de façon
-    identique à tous les moteurs — cette fonction ne touche qu'au plan de
-    sortie propre à KB1000."""
-    global KB1000_POSITION_STATE
-    if not KB1000_POSITION_STATE:
-        return
-    open_tickets = {int(p.get("ticket", 0)) for p in positions}
-    for ticket in list(KB1000_POSITION_STATE.keys()):
-        if ticket not in open_tickets:
-            del KB1000_POSITION_STATE[ticket]
-    for position in positions:
-        ticket = int(position.get("ticket", 0))
-        plan_state = KB1000_POSITION_STATE.get(ticket)
-        if plan_state is None:
-            continue
-        symbol_key = position.get("symbol_key", "")
-        symbol = symbol_names.get(symbol_key)
-        if not symbol:
-            continue
-        sym_info = mt5.symbol_info(symbol)
-        tick = mt5.symbol_info_tick(symbol)
-        if sym_info is None or tick is None:
-            continue
-        direction = str(plan_state.get("direction"))
-        is_buy = direction == "bullish"
-        current_price = float(tick.bid if is_buy else tick.ask)
-        tick_size = float(getattr(sym_info, "trade_tick_size", 0) or sym_info.point)
-        spread = float(sym_info.ask - sym_info.bid)
-        action = kb8_manage_position(
-            {
-                "entry_price": float(plan_state["entry_price"]),
-                "stop_price": float(plan_state["stop_price"]),
-                "current_price": current_price,
-                "direction": direction,
-                "tp_hit": plan_state.get("tp_hit") or set(),
-                "be_applied": bool(plan_state.get("be_applied")),
-            },
-            plan_state.get("levels") or [],
-            be_config={
-                "spread": spread,
-                "tick_size": tick_size,
-                "buffer_ticks": float(plan_state.get("be_buffer_ticks", 5)),
-            },
-            trail_config=None,
-        )
-        act = action.get("action")
-        if act == "PARTIAL_CLOSE":
-            tier = int(action["tier"])
-            close_pct = float(action["close_pct"])
-            orig_vol = float(plan_state.get("orig_vol") or position.get("lot") or 0)
-            current_vol = float(position.get("lot") or 0)
-            lot_step = float(sym_info.volume_step)
-            lot_min = float(sym_info.volume_min)
-            vol_to_close = round((orig_vol * close_pct) / lot_step) * lot_step
-            # Ne jamais fermer plus que le volume réellement ouvert (contrairement à
-            # max(lot_min, ...), qui forcerait à lot_min même si current_vol est plus
-            # petit — risque d'envoyer un ordre de clôture surdimensionné).
-            vol_to_close = min(vol_to_close, current_vol)
-            if vol_to_close < lot_min:
-                log(f"[KB1000 TP{tier}] Volume {vol_to_close:.2f} < minimum {lot_min}, palier ignoré.", "WARNING")
-                plan_state.setdefault("tp_hit", set()).add(tier)
-                continue
-            request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "position": ticket,
-                "symbol": symbol,
-                "volume": vol_to_close,
-                "type": mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY,
-                "price": current_price,
-                "deviation": 40,
-                "magic": MAGIC,
-                "comment": f"KB1000 TP{tier}",
-                "type_time": mt5.ORDER_TIME_GTC,
-            }
-            result = mt5.order_send(request)
-            ok = result is not None and int(result.retcode) in {
-                mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_DONE_PARTIAL, mt5.TRADE_RETCODE_PLACED
-            }
-            if ok:
-                plan_state.setdefault("tp_hit", set()).add(tier)
-                log(
-                    f"[KB1000 TP{tier}] Fermeture partielle {int(close_pct*100)}%"
-                    f" ({vol_to_close:.2f} lot) — {symbol_key}",
-                    "SUCCESS",
-                )
-            else:
-                retcode = int(result.retcode) if result else None
-                log(f"[KB1000 TP{tier}] Fermeture partielle refusée ({retcode}) — {symbol_key}", "ERROR")
-        elif act == "MOVE_TO_BREAK_EVEN":
-            new_sl = float(action["price"])
-            sl_req = {
-                "action": mt5.TRADE_ACTION_SLTP,
-                "position": ticket,
-                "symbol": symbol,
-                "sl": new_sl,
-                "tp": 0.0,
-            }
-            sl_res = mt5.order_send(sl_req)
-            if sl_res is not None and int(sl_res.retcode) in {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED}:
-                plan_state["be_applied"] = True
-                plan_state["stop_price"] = new_sl
-                log(f"[KB1000] Break-Even appliqué à {new_sl} sur ticket {ticket}", "SUCCESS")
-            else:
-                log(f"[KB1000] Break-Even refusé sur ticket {ticket}: {sl_res}", "WARNING")
-        elif act == "STOP_LOSS":
-            # Le stop calculé par KB8 (structure au départ, niveau de
-            # Break-Even ensuite) est désormais un vrai stop appliqué —
-            # fermeture complète, pas partielle. Trouvé le 16/07/2026 : sans
-            # ce chemin, une position pouvait perdre bien plus que sa
-            # distance de stop réelle avant qu'un garde-fou de compte
-            # générique (perte max/position, un plafond fixe) n'intervienne.
-            current_vol = float(position.get("lot") or 0)
-            if current_vol <= 0:
-                continue
-            request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "position": ticket,
-                "symbol": symbol,
-                "volume": current_vol,
-                "type": mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY,
-                "price": current_price,
-                "deviation": 40,
-                "magic": MAGIC,
-                "comment": "KB1000 SL",
-                "type_time": mt5.ORDER_TIME_GTC,
-            }
-            result = mt5.order_send(request)
-            ok = result is not None and int(result.retcode) in {
-                mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_DONE_PARTIAL, mt5.TRADE_RETCODE_PLACED
-            }
-            if ok:
-                log(f"[KB1000] Stop atteint ({action['price']:.2f}) — fermeture complète ticket {ticket}.", "SUCCESS")
-            else:
-                retcode = int(result.retcode) if result else None
-                log(f"[KB1000] Fermeture sur stop refusée ({retcode}) — ticket {ticket}.", "ERROR")
-
-
 def position_exit_reason(
     position: dict,
     pos_params: dict,
@@ -2459,7 +2235,6 @@ def position_exit_reason(
     session_state_name: str,
     peak: float,
     age: float,
-    kb1000_managed: bool = False,
 ) -> str:
     profit = float(position.get("profit") or 0)
     review_sec = max(30, int(pos_params.get("position_review_sec", 120)))
@@ -2484,18 +2259,6 @@ def position_exit_reason(
         return "PROTECTION"
     if session_state_name in {"PRECLOSE", "CLOSED"}:
         return "SESSION"
-    if kb1000_managed:
-        # Une position gérée par KB1000 (kb1000_manage_positions: TP paliers +
-        # Break-Even réel, sur le plan calculé par KB8) ne doit PAS être aussi
-        # soumise au trailing/profit-lock/sortie-momentum/cible d'AlphaTrade AI
-        # ci-dessous — c'est une logique de sortie différente, tarée sur ses
-        # propres seuils (profit_target, trail_l1..l4, etc.), qui fermerait la
-        # position bien avant que le plan KB8 (paliers plus larges, calculés
-        # sur la structure réelle) n'ait sa chance. Seules les protections de
-        # compte universelles ci-dessus (MAX_POSITION_LOSS, PROTECTION,
-        # SESSION) et MAX_FLOATING_LOSS (gérée séparément dans auto_trade_step)
-        # restent partagées entre les moteurs.
-        return ""
     trail_steps = [
         (float(pos_params.get("trail_l1_above", 0.0)), float(pos_params.get("trail_l1_pct", 0.0))),
         (float(pos_params.get("trail_l2_above", 0.0)), float(pos_params.get("trail_l2_pct", 0.0))),
@@ -3086,7 +2849,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 str(payload.get("session_access", {}).get(position.get("symbol_key"), {}).get("state") or ""),
                 peak,
                 age,
-                kb1000_managed=int(position.get("ticket", 0)) in KB1000_POSITION_STATE,
             )
         if close_reason:
             ok, message = close_bot_position(position, close_reason)
@@ -3236,35 +2998,18 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
 
-    # KB1000 Gold AI: sizing propre (KB8) au lieu du lot configuré à plat.
-    # Le stop est dérivé de la structure réelle (KB2), le lot du risque réel
-    # (risk_pct, déjà un paramètre partagé existant — pas de nouvelle valeur
-    # en dur). Le plan (TP par paliers, BE) est stocké pour être exécuté par
-    # kb1000_manage_positions() une fois la position ouverte.
-    kb1000_plan = None
-    if str(decision.get("engine")) == "kb1000_gold_ai":
-        direction_word = "bullish" if str(decision.get("signal")) == "BUY" else "bearish"
-        account_lot_cap = float(params.get("demo_lot_cap" if demo else "real_lot_cap", 0) or 0)
-        symbol_lot_cap = float(symbol_params.get("lot_max", 0) or 0)
-        kb1000_lot_cap = min((v for v in (account_lot_cap, symbol_lot_cap) if v > 0), default=0.0)
-        # Même garde-fou absolu qu'AlphaTrade AI (HARD_RISK_PCT_CAP) — ce n'est
-        # pas une logique propre à un moteur, c'est une protection de compte
-        # universelle et doit s'appliquer de façon identique quel que soit le
-        # moteur actif.
-        kb1000_risk_pct = min(max(0.0, float(params.get("risk_pct", 0.35))), HARD_RISK_PCT_CAP)
-        kb1000_plan = kb8_position_plan(
-            symbol, direction_word,
-            risk_pct=kb1000_risk_pct,
-            lot_min_floor=float(symbol_params.get("lot_min", 0) or 0),
-            lot_max_cap=kb1000_lot_cap,
-        )
-        kb8_lot = float((kb1000_plan.get("sizing") or {}).get("lot") or 0)
-        if kb8_lot <= 0:
-            reason = str((kb1000_plan.get("sizing") or {}).get("reason") or kb1000_plan.get("reason") or "KB1000: lot invalide.")
-            state["reason"] = reason
-            save_trading_state(state)
-            return state
-        lot_info = {"effective_lot": kb8_lot, "reason": "KB8 — lot calculé depuis le risque réel"}
+    # Simplification du 16/07/2026 (décision de Louis) : KB1000 Gold AI n'est
+    # plus un second moteur d'exécution parallèle — c'est désormais une
+    # source de signal alternative (KB1-KB7 décide BUY/SELL/WAIT) qui passe
+    # par exactement le même pipeline qu'AlphaTrade AI (lot_safety_state déjà
+    # calculé plus haut dans lot_info, open_position sans TP par paliers
+    # séparé, partial_tp_step/position_exit_reason partagés sans exception).
+    # L'ancien calcul de lot dédié (KB8, kb8_position_plan) et la gestion de
+    # sortie dédiée (kb1000_manage_positions) sont retirés de l'exécution en
+    # direct : ils dupliquaient un système déjà éprouvé et en ont repris les
+    # mêmes bugs (lot minimum ignoré, entre autres) sans apporter de valeur
+    # que le partage n'apporte pas déjà. KB1-KB7 restent utilisés tels quels
+    # pour la décision d'entrée.
 
     approved_by_server, server_reply = server_trade_confirmation(
         params,
@@ -3297,7 +3042,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         lot_info,
         analysis,
         bool(demo or state.get("real_confirmed")),
-        tp_override=(0.0 if kb1000_plan else None),
     )
     log(message, "SUCCESS" if ok else "ERROR")
     state["last_action"] = message
@@ -3306,30 +3050,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         state["last_entry_at"] = now
         state["entry_times"] = [*entry_times, now]
         state["last_error"] = ""
-        if kb1000_plan:
-            time.sleep(0.2)
-            fresh_positions = live_positions({active: symbol}, params)
-            known_now = {int(p.get("ticket", 0)) for p in positions}
-            new_pos = next(
-                (p for p in sorted(fresh_positions, key=lambda x: -int(x.get("open_timestamp", 0)))
-                 if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
-                 and p.get("direction") == str(decision.get("signal"))
-                 and p.get("symbol_key") == active
-                 and int(p.get("ticket", 0)) not in known_now),
-                None,
-            )
-            if new_pos:
-                KB1000_POSITION_STATE[int(new_pos["ticket"])] = {
-                    "entry_price": float(kb1000_plan["entry_price"]),
-                    "stop_price": float(kb1000_plan["stop_price"]),
-                    "direction": kb1000_plan["direction"],
-                    "levels": kb1000_plan["take_profit_levels"],
-                    "be_buffer_ticks": 5,
-                    "orig_vol": float(new_pos.get("lot") or 0),
-                    "tp_hit": set(),
-                    "be_applied": False,
-                }
-                log(f"[KB1000] Plan de gestion enregistré pour ticket #{new_pos['ticket']}.", "INFO")
     else:
         state["last_error"] = message
     save_trading_state(state)
@@ -3930,7 +3650,6 @@ def main() -> int:
             partial_tp_step(positions, params, symbol_names)
             auto_state = auto_trade_step(params, symbol_names, payload, positions)
             positions = live_positions(symbol_names, params)
-            kb1000_manage_positions(positions, params, symbol_names)
             payload = status_payload(params, symbol_names, trades, positions)
             payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}
             # Restaurer l'analyse du premier appel pour l'affichage temps réel.

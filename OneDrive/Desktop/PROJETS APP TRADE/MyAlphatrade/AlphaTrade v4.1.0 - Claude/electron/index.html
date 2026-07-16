@@ -600,14 +600,11 @@
           <p class="mini-help">La porte de Renfort sur position perdante lit aujourd'hui la confiance d'AlphaTrade AI même quand KB1000 est actif — pas encore corrigé (correctif séparé prévu). Le Rebond garde sa propre logique de décision, indépendante du moteur actif.</p>
         </article>
 
-        <!-- 🟦 Stratégie Or (AlphaTrade AI uniquement) -->
+        <!-- 🟦 Stratégie Or — génération du signal (AlphaTrade AI uniquement ; KB1000 utilise ses propres seuils KB1-KB7 ci-dessous) -->
         <article class="panel settings-full-width risk-session-panel ata-engine-only" id="strategieOrPanel">
           <div class="panel-title">🟦 Stratégie Or</div>
           <label>Seuil de confiance min % <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span><input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
           <label>Timeframe d'analyse <span class="info-dot" data-tip="Unité de temps des bougies utilisées pour calculer le signal (EMA/RSI/MACD).">ⓘ</span><select data-sym="XAUUSD" name="timeframe"><option>M1</option><option>M5</option><option>M15</option><option>M30</option><option>H1</option></select></label>
-          <label>Max hold (s) <span class="info-dot" data-tip="Durée maximale de maintien d'une position avant fermeture forcée.">ⓘ</span><input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
-          <label>Délai de réanalyse (s) <span class="info-dot" data-tip="Intervalle entre deux vérifications de sortie sur une position déjà ouverte.">ⓘ</span><input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
-          <label>Cible profit $ <span class="info-dot" data-tip="Profit visé par trade — sert de base au calcul de la distance du take-profit.">ⓘ</span><input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
           <label class="check"><input name="anti_top_bottom" type="checkbox"> Éviter achat au sommet / vente au creux <span class="info-dot" data-tip="Évite d'entrer juste après un sommet/plancher récent.">ⓘ</span></label>
           <label>Bougies analysées <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer la zone de range (support/résistance récents).">ⓘ</span><input name="lookback_candles" type="number" min="5" max="500"></label>
           <label>Zone de bord % <span class="info-dot" data-tip="Définit la zone haute/basse du range récent considérée comme extrême (achat en zone haute évité).">ⓘ</span><input name="edge_zone_pct" type="number" min="5" max="45"></label>
@@ -615,29 +612,31 @@
           <label>Marge retournement signal <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span><input data-sym="XAUUSD" name="signal_reversal_margin" type="number" min="5" max="100"></label>
         </article>
 
-        <!-- 🟦 Lot & Renfort spécifique (AlphaTrade AI uniquement) -->
-        <article class="panel settings-full-width risk-session-panel ata-engine-only">
-          <div class="panel-title">🟦 Lot &amp; Renfort (spécifique)</div>
-          <p class="mini-help">KB1000 Gold AI ne calcule jamais un lot à plat — ces champs n'ont aucun effet pour lui.</p>
-          <label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base utilisée par défaut par AlphaTrade AI. Sans effet pour KB1000 (lot toujours calculé depuis le risque).">ⓘ</span><input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
-          <label>Multiplicateur lot renfort <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable. Sans effet pour KB1000.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_renfort" type="number" step="0.1" min="1" max="5"></label>
-          <label>Confiance min. renfort % <span class="info-dot" data-tip="Auparavant invisible — seuil de confiance minimum pour autoriser un renfort. Sans effet pour KB1000.">ⓘ</span><input data-sym="XAUUSD" name="renfort_high_confidence_min" type="number" min="50" max="100"></label>
+        <!-- 🟦 Lot & Renfort (partagé — depuis la simplification du 16/07/2026, KB1000 passe par le même calcul de lot qu'AlphaTrade AI) -->
+        <article class="panel settings-full-width risk-session-panel">
+          <div class="panel-title">🟦 Lot &amp; Renfort</div>
+          <label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base — repli utilisé si le lot calculé par le risque tombe sous le minimum. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
+          <label>Multiplicateur lot renfort <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_renfort" type="number" step="0.1" min="1" max="5"></label>
+          <label>Confiance min. renfort % <span class="info-dot" data-tip="Auparavant invisible — seuil de confiance minimum pour autoriser un renfort. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="renfort_high_confidence_min" type="number" min="50" max="100"></label>
         </article>
 
-        <!-- 🟦 KB1000 Gold AI — Réglages (KB1000 Gold AI uniquement) -->
+        <!-- 🟦 KB1000 Gold AI — Réglages (KB1000 Gold AI uniquement — génération du signal seulement, l'exécution est partagée) -->
         <article class="panel settings-full-width risk-session-panel" id="kb1000Panel" style="display:none;">
           <div class="panel-title">🟦 KB1000 Gold AI — Réglages</div>
           <label>Bougies analysées / niveau (KB1) <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer le trend de chaque niveau de la cascade multi-timeframe D1→M1.">ⓘ</span><input name="kb1000_candles_per_level" type="number" min="60" max="500"></label>
           <label>Seuil de cohérence min % (KB1) <span class="info-dot" data-tip="Proportion minimale de niveaux alignés avec D1 pour que la cascade multi-timeframe soit considérée exploitable.">ⓘ</span><input name="kb1000_coherence_min_pct" type="number" min="10" max="100"></label>
           <label>Confirmations min. requises (KB6) <span class="info-dot" data-tip="Sur 4 indicateurs (EMA/RSI/MACD/Momentum), combien doivent confirmer la direction pour valider le setup.">ⓘ</span><input name="kb1000_min_confirmations" type="number" min="1" max="4"></label>
           <label>Score d'entrée min % (KB7) <span class="info-dot" data-tip="Score de synthèse minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée.">ⓘ</span><input name="kb1000_entry_threshold" type="number" min="40" max="95"></label>
-          <p class="mini-help">KB8 (gestion de position) est branché sur l'exécution réelle (stop/TP paliers/Break-Even) mais ses ratios risk:reward restent encore fixés dans le code, pas exposés ici — à faire séparément.</p>
+          <p class="mini-help">Simplification du 16/07/2026 : KB1000 (KB1-KB7) n'est plus qu'une source de signal — une fois BUY/SELL décidé ici, le lot, le TP, le trailing et les protections sont exactement les mêmes qu'AlphaTrade AI (blocs ci-dessus/dessous, désormais partagés). L'ancienne gestion de sortie dédiée (KB8) est retirée de l'exécution.</p>
         </article>
 
-        <!-- 🟦 Trailing & Protection profit (AlphaTrade AI uniquement) -->
-        <article class="panel settings-full-width risk-session-panel ata-engine-only">
+        <!-- 🟦 Trailing & Protection profit (partagé — depuis la simplification du 16/07/2026, KB1000 utilise le même pipeline de sortie qu'AlphaTrade AI) -->
+        <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title">🟦 Trailing &amp; Protection profit</div>
-          <label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil — dernier filet de sécurité côté AlphaTrade AI.">ⓘ</span><input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
+          <label>Max hold (s) <span class="info-dot" data-tip="Durée maximale de maintien d'une position avant fermeture forcée. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
+          <label>Délai de réanalyse (s) <span class="info-dot" data-tip="Intervalle entre deux vérifications de sortie sur une position déjà ouverte. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
+          <label>Cible profit $ <span class="info-dot" data-tip="Profit visé par trade — sert de base au calcul de la distance du take-profit. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
+          <label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil — dernier filet de sécurité, partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Profit min. sortie $ <span class="info-dot" data-tip="Profit minimum requis pour autoriser une sortie sur signal inversé.">ⓘ</span><input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Verrou profit dès $ <span class="info-dot" data-tip="Active le verrouillage de profit dynamique une fois ce seuil de gain atteint.">ⓘ</span><input data-sym="XAUUSD" name="profit_lock_trigger" type="number" min="0.05" step="0.05"></label>
           <label>Recul max profit <span class="info-dot" data-tip="Fraction du pic de profit avant fermeture. Ex : 0.20 → ferme si profit recule de 20% depuis son pic">ⓘ</span><input data-sym="XAUUSD" name="profit_lock_drawdown" type="number" min="0.05" max="0.50" step="0.01"></label>
@@ -651,7 +650,7 @@
           <label>Palier 4 — seuil $ <span class="info-dot" data-tip="À partir de ce profit ($), le palier 4 (le plus protecteur) du trail dynamique devient actif.">ⓘ</span><input data-sym="XAUUSD" name="trail_l4_above" type="number" min="5.00" step="1.00"></label>
           <label>Palier 4 — recul <span class="info-dot" data-tip="Fraction de recul tolérée depuis le pic une fois le palier 4 atteint — la plus faible, profits élevés très protégés.">ⓘ</span><input data-sym="XAUUSD" name="trail_l4_pct" type="number" min="0.01" max="0.50" step="0.01"></label>
           <label>Score momentum sortie <span class="info-dot" data-tip="Sort la position si le score du sens opposé dépasse ce seuil.">ⓘ</span><input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
-          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Ce bloc entier est propre à AlphaTrade AI — KB1000 gère sa sortie via ses propres paliers TP + Break-Even (voir KB1000 Gold AI — Réglages).</p>
+          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Ce bloc est partagé entre les deux moteurs — quelle que soit la source du signal d'entrée (AlphaTrade AI ou KB1000), la sortie suit exactement les mêmes règles.</p>
         </article>
         </div>
         <div class="settings-actions">
