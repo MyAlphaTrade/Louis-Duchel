@@ -96,7 +96,21 @@ def manage_position(position: dict, levels: list[dict], be_config: dict | None =
     direction = position["direction"]
     current = position["current_price"]
     entry = position["entry_price"]
+    stop_price = position.get("stop_price")
     tp_hit = position.get("tp_hit") or set()
+
+    # Le stop (structure au départ, puis niveau de Break-Even une fois
+    # déplacé) est désormais un vrai stop appliqué, pas seulement une
+    # distance utilisée pour calculer le lot à l'ouverture. Trouvé le
+    # 16/07/2026 : sans ce contrôle, rien ne fermait une position KB1000
+    # avant un palier TP/BE — une position pouvait perdre bien plus que sa
+    # distance de stop réellement calculée avant qu'un garde-fou de compte
+    # générique (ex: perte max/position, un plafond fixe) ne finisse par
+    # intervenir, bien plus tard.
+    if stop_price is not None:
+        breached = (current <= stop_price) if direction == "bullish" else (current >= stop_price)
+        if breached:
+            return {"action": "STOP_LOSS", "price": stop_price}
 
     for level in levels:
         if level["tier"] in tp_hit:

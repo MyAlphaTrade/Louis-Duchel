@@ -81,6 +81,16 @@ def _kb5_subscore(signals: dict, candidate_direction: str) -> float:
         parts.append(0.5)
     if signals.get("kb5_liquidity_grab_supportive"):
         parts.append(0.5)
+    # Premium/Discount : vendre en zone DISCOUNT (proche des creux, là où les
+    # acheteurs chercheraient à entrer) ou acheter en zone PREMIUM est
+    # défavorable — c'est exactement le cas qui a coûté 150$ le 16/07/2026
+    # (SELL ouvert avec un RSI à 17, en zone de survente extrême). Avant ce
+    # correctif, premium_discount était calculé par KB5 mais jamais utilisé.
+    zone = signals.get("kb5_premium_discount")
+    if zone == "PREMIUM":
+        parts.append(0.5 if candidate_direction == "bearish" else -0.5)
+    elif zone == "DISCOUNT":
+        parts.append(0.5 if candidate_direction == "bullish" else -0.5)
     return sum(parts) / len(parts) if parts else 0.0
 
 

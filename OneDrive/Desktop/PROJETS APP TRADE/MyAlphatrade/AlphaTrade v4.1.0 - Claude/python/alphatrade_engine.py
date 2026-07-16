@@ -911,18 +911,37 @@ def kb6_confirmations(symbol: str, candidate_direction: str, timeframe: str = "H
     return kb6_confirmations_check(closes, candidate_direction, min_confirmations=min_confirmations)
 
 
+def _near_level(current_price: float | None, level: float | None, tolerance_pct: float) -> bool:
+    if current_price is None or level is None or level <= 0:
+        return False
+    return abs(current_price - level) / level * 100 <= tolerance_pct
+
+
+def _near_range(current_price: float | None, bottom: float | None, top: float | None, tolerance_pct: float) -> bool:
+    if current_price is None or bottom is None or top is None or current_price <= 0:
+        return False
+    lo, hi = min(bottom, top), max(bottom, top)
+    buffer = current_price * tolerance_pct / 100
+    return (lo - buffer) <= current_price <= (hi + buffer)
+
+
 def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2,
                   entry_threshold: float = 70.0, kb1_candles_per_level: int = 160,
-                  kb1_coherence_threshold_pct: float = 60.0, kb6_min_confirmations: int = 3) -> dict:
+                  kb1_coherence_threshold_pct: float = 60.0, kb6_min_confirmations: int = 3,
+                  price_proximity_pct: float = 0.5) -> dict:
     """KB1000 Gold AI — KB7. Synthèse pondérée de KB1-KB6 (voir
     market_decision.decision_score). La direction candidate vient du biais
     global de KB1 (contexte le plus large en premier, comme demandé) ; si KB1
     ne donne aucun biais exploitable, aucune décision n'est prise.
-    Extraction des signaux volontairement simplifiée pour cette première
-    version (présence de zones/FVG/Order Block/Liquidity Grab dans la liste,
-    pas encore une vérification de proximité au prix actuel) — à affiner
-    quand ce module sera réellement branché sur un moteur actif.
-    Pas encore branchée sur un moteur actif."""
+    Les correspondances zones/FVG/Order Block/Liquidity Grab exigent désormais
+    que le prix actuel soit réellement proche (price_proximity_pct) du niveau
+    concerné — corrige un bug trouvé le 16/07/2026 où une entrée pouvait
+    scorer haut alors que le prix n'était pas du tout au niveau du signal
+    invoqué. premium_discount (déjà calculé par KB5, jamais utilisé avant ce
+    correctif) est désormais transmis au score : vendre en zone DISCOUNT
+    (proche des creux) ou acheter en zone PREMIUM est pénalisé — c'est
+    exactement la situation qui a coûté 150$ (SELL ouvert à RSI 17, zone de
+    survente extrême, sans que rien dans KB1000 ne le détecte)."""
     cascade = kb1_multi_timeframe_cascade(
         symbol, candles_per_level=kb1_candles_per_level, coherence_threshold_pct=kb1_coherence_threshold_pct,
     )
@@ -941,12 +960,24 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
     confirm = kb6_confirmations(symbol, candidate_direction, timeframe=timeframe, candles=candles,
                                  min_confirmations=kb6_min_confirmations)
 
+    current_price = None
+    if mt5 is not None:
+        rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, 1)
+        if rates is not None and len(rates):
+            current_price = float(rates[-1][4])
+
     zone_type = "demand" if candidate_direction == "bullish" else "supply"
+    opposing_type = "supply" if candidate_direction == "bullish" else "demand"
     zone_match = None
-    if any(z.get("type") == zone_type for z in zones.get("institutional", [])):
+    if any(z.get("type") == zone_type and _near_level(current_price, z.get("price"), price_proximity_pct)
+           for z in zones.get("institutional", [])):
         zone_match = "institutional"
-    elif any(z["type"] == zone_type for z in zones.get("supply_demand", [])):
+    elif any(z["type"] == zone_type and _near_level(current_price, z.get("price"), price_proximity_pct)
+             for z in zones.get("supply_demand", [])):
         zone_match = "supply_demand"
+    elif any(z["type"] == opposing_type and _near_level(current_price, z.get("price"), price_proximity_pct)
+             for z in zones.get("supply_demand", []) + zones.get("institutional", [])):
+        zone_match = "opposing"
 
     bos_choch = smart_money.get("bos_choch", [])
     last_event = max(bos_choch, key=lambda e: e["index"]) if bos_choch else None
@@ -958,9 +989,19 @@ def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_l
         "kb3_zone_match": zone_match,
         "kb4_in_golden_zone": fibo.get("in_golden_zone"),
         "kb5_last_event": last_event,
-        "kb5_fvg_match": any(g["type"] == candidate_direction for g in smart_money.get("fvg", [])),
-        "kb5_order_block_match": any(o["type"] == candidate_direction for o in smart_money.get("order_blocks", [])),
-        "kb5_liquidity_grab_supportive": any(g["type"] == candidate_direction for g in smart_money.get("liquidity_grabs", [])),
+        "kb5_fvg_match": any(
+            g["type"] == candidate_direction and _near_range(current_price, g.get("bottom"), g.get("top"), price_proximity_pct)
+            for g in smart_money.get("fvg", [])
+        ),
+        "kb5_order_block_match": any(
+            o["type"] == candidate_direction and _near_range(current_price, o.get("bottom"), o.get("top"), price_proximity_pct)
+            for o in smart_money.get("order_blocks", [])
+        ),
+        "kb5_liquidity_grab_supportive": any(
+            g["type"] == candidate_direction and _near_level(current_price, g.get("level"), price_proximity_pct)
+            for g in smart_money.get("liquidity_grabs", [])
+        ),
+        "kb5_premium_discount": (smart_money.get("premium_discount") or {}).get("zone"),
         "kb6_confirmation_pct": confirm.get("confirmation_pct"),
     }
     result = decision_score(signals, candidate_direction, entry_threshold=entry_threshold)
@@ -2371,6 +2412,37 @@ def kb1000_manage_positions(positions: list[dict], params: dict, symbol_names: d
                 log(f"[KB1000] Break-Even appliqué à {new_sl} sur ticket {ticket}", "SUCCESS")
             else:
                 log(f"[KB1000] Break-Even refusé sur ticket {ticket}: {sl_res}", "WARNING")
+        elif act == "STOP_LOSS":
+            # Le stop calculé par KB8 (structure au départ, niveau de
+            # Break-Even ensuite) est désormais un vrai stop appliqué —
+            # fermeture complète, pas partielle. Trouvé le 16/07/2026 : sans
+            # ce chemin, une position pouvait perdre bien plus que sa
+            # distance de stop réelle avant qu'un garde-fou de compte
+            # générique (perte max/position, un plafond fixe) n'intervienne.
+            current_vol = float(position.get("lot") or 0)
+            if current_vol <= 0:
+                continue
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "position": ticket,
+                "symbol": symbol,
+                "volume": current_vol,
+                "type": mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY,
+                "price": current_price,
+                "deviation": 40,
+                "magic": MAGIC,
+                "comment": "KB1000 SL",
+                "type_time": mt5.ORDER_TIME_GTC,
+            }
+            result = mt5.order_send(request)
+            ok = result is not None and int(result.retcode) in {
+                mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_DONE_PARTIAL, mt5.TRADE_RETCODE_PLACED
+            }
+            if ok:
+                log(f"[KB1000] Stop atteint ({action['price']:.2f}) — fermeture complète ticket {ticket}.", "SUCCESS")
+            else:
+                retcode = int(result.retcode) if result else None
+                log(f"[KB1000] Fermeture sur stop refusée ({retcode}) — ticket {ticket}.", "ERROR")
 
 
 def position_exit_reason(
