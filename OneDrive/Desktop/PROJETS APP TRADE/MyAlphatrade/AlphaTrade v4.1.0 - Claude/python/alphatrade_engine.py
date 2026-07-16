@@ -1749,7 +1749,13 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         name = symbol_names.get(key)
         info = mt5.symbol_info(name) if mt5 and name else None
         tick = mt5.symbol_info_tick(name) if mt5 and name else None
-        broker_min = float(info.volume_min) if info else requested_min
+        # Le "Lot minimum" configuré par l'utilisateur doit toujours être
+        # respecté, pas seulement en repli quand MT5 est déconnecté — bug
+        # trouvé le 16/07/2026 (même défaut que celui déjà corrigé pour
+        # KB1000) : avec MT5 connecté, seul le minimum technique du broker
+        # (souvent 0.01) était utilisé, ignorant totalement la valeur voulue
+        # par l'utilisateur.
+        broker_min = max(float(info.volume_min), requested_min) if info else requested_min
         broker_step = float(info.volume_step) if info else broker_min or 0.01
         loss_per_lot = 0.0
         risk_lot_cap = 0.0
