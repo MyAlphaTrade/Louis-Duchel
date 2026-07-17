@@ -1591,10 +1591,16 @@ def protection_state(params: dict, daily: dict, account_login: int | None) -> di
     daily_locked = bool(stored.get("daily_locked", False)) if same_session else False
     state = "INACTIVE"
     reason = f"Protection journaliere active a partir de +${activation:.2f}."
-    if current <= float(params.get("session_max_loss", -150)):
+    # Comparé à session_profit (perte DEPUIS le début de session), pas à
+    # current (absolu) — sinon une position déjà ouverte AVANT le
+    # redémarrage se retrouve fermée immédiatement au clic Démarrer dès que
+    # son flottant dépasse ce seuil, sans avoir eu la moindre chance d'être
+    # gérée normalement. Corrigé le 17/07/2026 (demande de Louis : le moteur
+    # doit reconnaître une position déjà ouverte et continuer à la gérer).
+    if session_profit <= float(params.get("session_max_loss", -150)):
         daily_locked = True
         state = "HARD_LOCK"
-        reason = "Perte maximale journaliere atteinte."
+        reason = "Perte maximale de la session atteinte."
     elif session_profit >= float(params.get("session_target", 25)):
         session_locked = True
         state = "TARGET_REACHED"
@@ -3408,14 +3414,6 @@ def main() -> int:
 
     account = mt5.account_info()
     log(f"MT5 connecte - compte {account.login if account else '?'} - serveur {account.server if account else '?'}")
-    if not args.once:
-        reset_session_state(int(account.login) if account else None, 0.0)
-        log("Nouvelle session AlphaTrade ouverte; historique MT5 conserve.", "SUCCESS")
-    startup_state = load_trading_state()
-    startup_state["enabled"] = False
-    startup_state["real_confirmed"] = False
-    startup_state["reason"] = "Application ouverte en lecture MT5. Cliquez sur Demarrer pour autoriser les nouvelles positions."
-    save_trading_state(startup_state)
     account_key = (int(account.login), str(account.server)) if account else None
     symbol_names = {}
     _startup_params = merge_params()
@@ -3430,6 +3428,24 @@ def main() -> int:
             log(f"Symbole disponible sur MT5: {key} -> {name}", "SUCCESS")
         else:
             log(f"Symbole introuvable sur MT5: {key}", "WARNING")
+    if not args.once:
+        # Le baseline de session doit inclure le flottant réel des positions
+        # bot déjà ouvertes AVANT ce redémarrage, sinon session_max_loss
+        # (comparé à session_profit dans protection_state) considère ce
+        # flottant comme une perte "de cette session" et ferme la position
+        # immédiatement au premier cycle — corrigé le 17/07/2026.
+        _startup_positions = live_positions(symbol_names, _startup_params)
+        _startup_bot_floating = sum(
+            float(p.get("profit") or 0) for p in _startup_positions
+            if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+        )
+        reset_session_state(int(account.login) if account else None, _startup_bot_floating)
+        log("Nouvelle session AlphaTrade ouverte; historique MT5 conserve.", "SUCCESS")
+    startup_state = load_trading_state()
+    startup_state["enabled"] = False
+    startup_state["real_confirmed"] = False
+    startup_state["reason"] = "Application ouverte en lecture MT5. Cliquez sur Demarrer pour autoriser les nouvelles positions."
+    save_trading_state(startup_state)
 
     # Précharger l'historique de chaque symbole au démarrage.
     # MT5 télécharge les données de façon asynchrone après symbol_select — sans ce
@@ -3515,7 +3531,12 @@ def main() -> int:
                 else:
                     log(f"Symbole introuvable sur MT5: {key}", "WARNING")
             if live_account:
-                reset_session_state(int(live_account.login), 0.0)
+                _switch_positions = live_positions(symbol_names, params)
+                _switch_bot_floating = sum(
+                    float(p.get("profit") or 0) for p in _switch_positions
+                    if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+                )
+                reset_session_state(int(live_account.login), _switch_bot_floating)
                 log("Nouvelle session AlphaTrade initialisee pour ce compte.", "SUCCESS")
 
         positions = live_positions(symbol_names, params)
