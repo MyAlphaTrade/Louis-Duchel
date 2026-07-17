@@ -353,6 +353,27 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 .symbol-settings { display: grid !important; }
 .risk-session-panel { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 .risk-session-panel .mini-help, .risk-session-panel .check { grid-column: 1 / -1; }
+
+/* Accordéon des cartes Paramètres — ajouté le 17/07/2026 pour éviter le mur
+   de champs visible d'un coup (demande de Louis). Repliée = seul .panel-title
+   reste visible ; les autres enfants directs de .panel sont masqués. */
+.settings-scroll .panel-title.collapsible { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; }
+.settings-scroll .panel-title.collapsible .acc-chevron { margin-left: auto; font-size: 10px; transition: transform .15s; color: var(--muted); }
+.settings-scroll .panel-title.collapsible:hover .acc-chevron { color: var(--green); }
+.settings-scroll .panel.collapsed { overflow: hidden; }
+.settings-scroll .panel.collapsed > *:not(.panel-title) { display: none !important; }
+.settings-scroll .panel:not(.collapsed) .acc-chevron { transform: rotate(90deg); }
+
+/* Niveaux Take Profit dynamiques (TP1-6) — carte "Take Profit / BE", ajoutés le 17/07/2026 */
+.risk-session-panel #takeProfitLevels, .risk-session-panel #addTakeProfitLevelBtn { grid-column: 1 / -1; }
+#takeProfitLevels { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.tp-level-row { display: grid; grid-template-columns: 34px 1fr 1fr 30px; gap: 10px; align-items: end; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+.tp-level-row label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.tp-level-row input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: #070c16; }
+.tp-level-num { color: var(--green); font-weight: 800; font-size: 12px; align-self: center; text-align: center; }
+.tp-level-remove { height: 30px; align-self: center; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: var(--red, #ff5c6c); cursor: pointer; }
+.tp-level-remove:hover { border-color: var(--red, #ff5c6c); }
+.tp-level-remove:disabled { opacity: .3; cursor: not-allowed; }
 .strategy-toolbar-control {
   display: inline-flex;
   align-items: center;

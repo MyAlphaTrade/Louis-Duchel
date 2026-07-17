@@ -45,6 +45,7 @@ const defaults = {
   daily_target: 500,
   session_max_loss: -200,
   giveback: 100,
+  fast_be_enabled: true,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
   profit_warning_ratio: .75,
@@ -62,7 +63,8 @@ const defaults = {
   rebond_enabled: false,
   rebond_cooldown_sec: 60,
   rebond_min_signal_pct: 55,
-  rebond_min_zone_strength: 28,
+  rebond_min_loss_trigger: 2.0,
+  rebond_target_pips: 1.50,
   rebond_stop_pips: 2.00,
   rebond_max_hold_sec: 90,
   rebond_max_active: 3,
@@ -85,15 +87,19 @@ const defaults = {
       confidence_min: 70, cadence_sec: 30, max_trades_hour: 120,
       max_hold_sec: 120, position_review_sec: 120,
       profit_target: 1.5,
-      trail_l1_above: 0.50, trail_l1_pct: 0.20,
-      trail_l2_above: 25.00, trail_l2_pct: 0.07,
       momentum_exit_score: 55,
       emergency_loss_limit: 15, min_positive_exit: .05,
       signal_reversal_margin: 7, cooldown_after_loss_sec: 60,
       session_filter_enabled: false, session_start_utc: 8, session_end_utc: 17, stop_before_end_min: 30,
       lot_multiplicateur_renfort: 1.0,
       lot_multiplicateur_rebond: 3.0,
-      partial_tp_enabled: false, partial_tp_count: 3, partial_tp_close_pct: 25, partial_tp_move_be: true
+      take_profit_enabled: false,
+      take_profit_levels: [
+        { threshold: 3.75, pct: 25 },
+        { threshold: 7.50, pct: 25 },
+        { threshold: 11.25, pct: 25 }
+      ],
+      take_profit_move_be: true
     }
   }
 };
@@ -793,7 +799,50 @@ function renderStatus(s) {
   renderCalendar();
   renderActiveMarket();
   renderMicrostructurePage();
+  renderFullAnalysis(s);
   if (currentLanguage === 'en') translateStatic('en');
+}
+
+function renderFullAnalysis(s) {
+  const decision = (s && s.simulated_decision) || {};
+  const engine = decision.engine || params?.active_engine || 'alphatrade_ai';
+  const yesNo = value => value === true ? 'Oui' : value === false ? 'Non' : '-';
+  const pct = value => value === undefined || value === null ? '-' : `${Number(value).toFixed(1)}%`;
+  if (!$('faEngineLabel')) return;
+
+  if (engine === 'kb1000_gold_ai') {
+    $('faEngineLabel').textContent = 'Moteur : KB1000 Gold AI (KB1-KB7)';
+    if ($('fullAnalysisAlphaTrade')) $('fullAnalysisAlphaTrade').style.display = 'none';
+    if ($('fullAnalysisKB1000')) $('fullAnalysisKB1000').style.display = '';
+    if ($('faGrade')) $('faGrade').textContent = decision.grade || '-';
+    if ($('faProbaBuy')) $('faProbaBuy').textContent = pct(decision.probability_buy_pct);
+    if ($('faProbaSell')) $('faProbaSell').textContent = pct(decision.probability_sell_pct);
+    if ($('faKbEligible')) $('faKbEligible').textContent = yesNo(decision.eligible);
+    const subEl = $('faSubscores');
+    if (subEl) {
+      const subscores = decision.subscores || {};
+      const keys = Object.keys(subscores);
+      subEl.innerHTML = keys.length
+        ? keys.map(key => `<span>${key} <b>${Number(subscores[key]).toFixed(1)}</b></span>`).join('')
+        : '<span>Aucun sous-score disponible</span>';
+    }
+  } else {
+    $('faEngineLabel').textContent = 'Moteur : AlphaTrade AI';
+    if ($('fullAnalysisAlphaTrade')) $('fullAnalysisAlphaTrade').style.display = '';
+    if ($('fullAnalysisKB1000')) $('fullAnalysisKB1000').style.display = 'none';
+    if ($('faRawSignal')) $('faRawSignal').textContent = decision.raw_signal || '-';
+    if ($('faRawConfidence')) $('faRawConfidence').textContent = pct(decision.raw_confidence);
+    if ($('faConfidenceMin')) $('faConfidenceMin').textContent = pct(decision.confidence_min);
+    if ($('faMtfBias')) $('faMtfBias').textContent = decision.multi_timeframe_bias || '-';
+    if ($('faScoreGap')) $('faScoreGap').textContent = decision.score_gap != null ? Number(decision.score_gap).toFixed(1) : '-';
+    if ($('faMinScoreGap')) $('faMinScoreGap').textContent = decision.min_score_gap != null ? Number(decision.min_score_gap).toFixed(1) : '-';
+    if ($('faFastSignal')) $('faFastSignal').textContent = decision.fast_signal || '-';
+    if ($('faFastOverride')) $('faFastOverride').textContent = yesNo(decision.fast_override);
+    if ($('faRsiOverride')) $('faRsiOverride').textContent = yesNo(decision.rsi_override);
+    if ($('faReversalApplied')) $('faReversalApplied').textContent = yesNo(decision.reversal_applied);
+    if ($('faReversalMin')) $('faReversalMin').textContent = pct(decision.reversal_min);
+    if ($('faEligible')) $('faEligible').textContent = yesNo(decision.eligible);
+  }
 }
 
 function renderMicrostructurePage() {
@@ -1710,6 +1759,7 @@ function fillSettings(values) {
   updateAssetCards();
   selectEngine(params.active_engine || 'alphatrade_ai');
   renderOriginsTable();
+  renderTakeProfitLevels();
 }
 
 const ORIGIN_TYPE_LABELS = {
@@ -1790,6 +1840,74 @@ document.getElementById('tradeOriginsBody')?.addEventListener('click', event => 
     o.enabled = !o.enabled;
     renderOriginsTable();
   }
+});
+
+const MAX_TAKE_PROFIT_LEVELS = 6;
+
+function renderTakeProfitLevels() {
+  const wrap = $('takeProfitLevels');
+  if (!wrap || !params) return;
+  const sym = params.symbols.XAUUSD;
+  if (!sym.take_profit_levels) sym.take_profit_levels = [];
+  const levels = sym.take_profit_levels;
+  wrap.innerHTML = levels.length ? levels.map((lvl, i) => `
+    <div class="tp-level-row">
+      <span class="tp-level-num">TP${i + 1}</span>
+      <label>Seuil $<input type="number" step="0.05" min="0.05" value="${lvl.threshold}" data-tp-field="threshold" data-tp-index="${i}"></label>
+      <label>% fermé<input type="number" step="5" min="5" max="100" value="${lvl.pct}" data-tp-field="pct" data-tp-index="${i}"></label>
+      <button type="button" class="tp-level-remove" data-tp-remove="${i}" ${levels.length <= 1 ? 'disabled' : ''}>✕</button>
+    </div>
+  `).join('') : '<p class="mini-help">Aucun Take Profit configuré.</p>';
+  const addBtn = $('addTakeProfitLevelBtn');
+  if (addBtn) {
+    addBtn.disabled = levels.length >= MAX_TAKE_PROFIT_LEVELS;
+    addBtn.textContent = levels.length >= MAX_TAKE_PROFIT_LEVELS
+      ? `Maximum ${MAX_TAKE_PROFIT_LEVELS} Take Profit atteint`
+      : '+ Ajouter un Take Profit';
+  }
+}
+
+$('takeProfitLevels')?.addEventListener('input', event => {
+  const index = event.target.dataset.tpIndex;
+  const field = event.target.dataset.tpField;
+  if (index === undefined || !field || !params) return;
+  const level = params.symbols.XAUUSD.take_profit_levels?.[Number(index)];
+  if (!level) return;
+  level[field] = Number(event.target.value) || 0;
+});
+
+$('takeProfitLevels')?.addEventListener('click', event => {
+  const removeIdx = event.target.dataset.tpRemove;
+  if (removeIdx === undefined || !params) return;
+  const levels = params.symbols.XAUUSD.take_profit_levels;
+  if (!levels || levels.length <= 1) return;
+  levels.splice(Number(removeIdx), 1);
+  renderTakeProfitLevels();
+});
+
+$('addTakeProfitLevelBtn')?.addEventListener('click', () => {
+  if (!params) return;
+  const sym = params.symbols.XAUUSD;
+  if (!sym.take_profit_levels) sym.take_profit_levels = [];
+  if (sym.take_profit_levels.length >= MAX_TAKE_PROFIT_LEVELS) return;
+  const last = sym.take_profit_levels[sym.take_profit_levels.length - 1] || { threshold: 0, pct: 20 };
+  sym.take_profit_levels.push({ threshold: Math.round((last.threshold + 3.75) * 100) / 100, pct: 20 });
+  renderTakeProfitLevels();
+});
+
+// Accordéon des cartes Paramètres — ajouté le 17/07/2026 (demande de Louis,
+// évite le mur de champs visible d'un coup). État persistant par carte.
+document.querySelectorAll('.settings-scroll .panel-title.collapsible').forEach(title => {
+  const panel = title.closest('.panel');
+  if (!panel) return;
+  const key = `alphatrade-acc-${title.textContent.trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+  const stored = localStorage.getItem(key);
+  const collapsed = stored === null ? true : stored === '1';
+  panel.classList.toggle('collapsed', collapsed);
+  title.addEventListener('click', () => {
+    const nowCollapsed = panel.classList.toggle('collapsed');
+    localStorage.setItem(key, nowCollapsed ? '1' : '0');
+  });
 });
 
 function selectEngine(engine) {

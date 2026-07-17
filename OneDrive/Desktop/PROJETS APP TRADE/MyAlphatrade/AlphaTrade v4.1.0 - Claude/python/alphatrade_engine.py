@@ -68,6 +68,7 @@ DEFAULT_PARAMS = {
     "daily_target": 50.0,
     "session_max_loss": -150.0,
     "giveback": 100.0,
+    "fast_be_enabled": True,
     "profit_protection_enabled": True,
     "profit_drawdown_pct": 30.0,
     "profit_warning_ratio": 0.75,
@@ -90,7 +91,8 @@ DEFAULT_PARAMS = {
     "ai_retrain_interval_min": 360,
     "rebond_enabled": False,
     "rebond_min_signal_pct": 55,
-    "rebond_min_zone_strength": 28,
+    "rebond_min_loss_trigger": 2.0,
+    "rebond_target_pips": 1.50,
     "rebond_cooldown_sec": 60,
     "rebond_max_hold_sec": 90,
     "rebond_stop_pips": 2.00,
@@ -113,8 +115,6 @@ DEFAULT_PARAMS = {
             "max_hold_sec": 3600,
             "position_review_sec": 300,
             "profit_target": 5.00,
-            "trail_l1_above": 0.50,  "trail_l1_pct": 0.20,
-            "trail_l2_above": 25.00, "trail_l2_pct": 0.07,
             "momentum_exit_score": 55,
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
@@ -124,10 +124,13 @@ DEFAULT_PARAMS = {
             "session_start_utc": 7,
             "session_end_utc": 22,
             "stop_before_end_min": 10,
-            "partial_tp_enabled": False,
-            "partial_tp_count": 3,
-            "partial_tp_close_pct": 25,
-            "partial_tp_move_be": True,
+            "take_profit_enabled": False,
+            "take_profit_levels": [
+                {"threshold": 3.75, "pct": 25},
+                {"threshold": 7.50, "pct": 25},
+                {"threshold": 11.25, "pct": 25},
+            ],
+            "take_profit_move_be": True,
             "lot_multiplicateur_renfort": 1.0,
             "lot_multiplicateur_rebond": 3.0,
         },
@@ -181,7 +184,8 @@ AI_SERVER_STATE = {
 }
 AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
-PARTIAL_TP_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applied}}
+TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applied}}
+FAST_BE_STATE: dict[int, bool] = {}  # {ticket: True} une fois le Break-Even rapide appliqué (fast_breakeven_step)
 
 # Symboles déjà abonnés au vrai carnet d'ordres MT5 (Depth of Market) — évite de
 # rappeler market_book_add() à chaque tick, l'abonnement reste actif tant que
@@ -1967,7 +1971,12 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
     spread_distance = max(0.0, float(tick.ask) - float(tick.bid))
     broker_stop_distance = float(getattr(info, "trade_stops_level", 0)) * point
     min_distance = max(point, broker_stop_distance + spread_distance + (5 * point))
-    raw_target = float(symbol_params.get("profit_target", 0.50))
+    if bool(symbol_params.get("take_profit_enabled", False)) and symbol_params.get("take_profit_levels"):
+        raw_target = float(symbol_params["take_profit_levels"][-1].get("threshold", 0) or 0)
+    else:
+        raw_target = float(symbol_params.get("profit_target", 0.50))
+    if raw_target <= 0:
+        raw_target = float(symbol_params.get("profit_target", 0.50))
     if "confidence" in analysis:
         confidence_ratio = min(1.0, max(0.5, float(analysis["confidence"]) / 100))
         effective_target = raw_target * confidence_ratio
@@ -2112,38 +2121,44 @@ def log_trade_exit(
     })
 
 
-def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
-    """Fermeture partielle progressive basée sur le profit_target."""
-    global PARTIAL_TP_STATE
+def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
+    """Clôture partielle progressive selon un tableau explicite de niveaux
+    Take Profit (seuil $ / % fermé), défini par l'utilisateur — jusqu'à 6
+    niveaux (take_profit_levels). Remplace le 17/07/2026 l'ancien calcul par
+    formule (profit_target * palier * 0.25), source de confusion avec le
+    "Palier" du trail dynamique (retiré à la même date, voir position_exit_reason)."""
+    global TAKE_PROFIT_STATE
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     open_tickets = {int(p.get("ticket", 0)) for p in bot_positions}
-    for t in list(PARTIAL_TP_STATE.keys()):
+    for t in list(TAKE_PROFIT_STATE.keys()):
         if t not in open_tickets:
-            del PARTIAL_TP_STATE[t]
+            del TAKE_PROFIT_STATE[t]
     for position in bot_positions:
         ticket = int(position.get("ticket", 0))
         if not ticket:
             continue
         symbol_key = position.get("symbol_key", "")
         pos_params = params.get("symbols", {}).get(symbol_key, {})
-        if not bool(pos_params.get("partial_tp_enabled", False)):
+        if not bool(pos_params.get("take_profit_enabled", False)):
+            continue
+        levels = pos_params.get("take_profit_levels") or []
+        if not levels:
             continue
         profit = float(position.get("profit") or 0)
         current_vol = float(position.get("lot") or 0)
-        profit_target = float(pos_params.get("profit_target", 5.0))
-        tp_count = max(1, min(4, int(pos_params.get("partial_tp_count", 3))))
-        close_pct = float(pos_params.get("partial_tp_close_pct", 25)) / 100.0
-        move_be = bool(pos_params.get("partial_tp_move_be", True))
-        if ticket not in PARTIAL_TP_STATE:
-            PARTIAL_TP_STATE[ticket] = {"orig_vol": current_vol, "tp_done": 0, "be_applied": False}
-        state = PARTIAL_TP_STATE[ticket]
+        move_be = bool(pos_params.get("take_profit_move_be", True))
+        if ticket not in TAKE_PROFIT_STATE:
+            TAKE_PROFIT_STATE[ticket] = {"orig_vol": current_vol, "tp_done": 0, "be_applied": False}
+        state = TAKE_PROFIT_STATE[ticket]
         tp_done = int(state.get("tp_done", 0))
         orig_vol = float(state.get("orig_vol", current_vol))
-        if tp_done >= tp_count:
+        if tp_done >= len(levels):
             continue
         next_tp = tp_done + 1
-        trigger = profit_target * next_tp * 0.25
-        if profit < trigger:
+        level = levels[tp_done]
+        trigger = float(level.get("threshold", 0) or 0)
+        close_pct = max(0.0, min(100.0, float(level.get("pct", 0) or 0))) / 100.0
+        if trigger <= 0 or close_pct <= 0 or profit < trigger:
             continue
         symbol = symbol_names.get(symbol_key)
         if not symbol:
@@ -2183,7 +2198,7 @@ def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str,
         if ok:
             state["tp_done"] = next_tp
             log(
-                f"[TP{next_tp}/{tp_count}] Fermeture partielle {int(close_pct*100)}%"
+                f"[TP{next_tp}/{len(levels)}] Fermeture partielle {int(close_pct*100)}%"
                 f" ({vol_to_close:.2f} lot) à +{profit:.2f}$ | {symbol_key}",
                 "SUCCESS",
             )
@@ -2208,6 +2223,80 @@ def partial_tp_step(positions: list[dict], params: dict, symbol_names: dict[str,
             log(f"[TP{next_tp}] Fermeture partielle refusée ({retcode}) — {symbol_key}", "ERROR")
 
 
+def fast_breakeven_step(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
+    """Sécurise le profit dès que la distance technique minimale autorisée
+    par le broker pour un stop (trade_stops_level, en points) est franchie —
+    remonte le stop au prix d'entrée (Break-Even réel, broker) immédiatement,
+    indépendamment de la clôture partielle par Take Profit (take_profit_step,
+    qui n'applique son propre BE qu'après le 1er niveau). Demande de Louis le
+    17/07/2026 : sécuriser le minimum de profit techniquement atteignable dès
+    que possible, pour limiter les pertes en cas de retournement — avant même
+    d'atteindre la cible de profit configurée. S'applique à toute position
+    ouverte par le bot, quel que soit le moteur source du signal (AlphaTrade
+    AI ou KB1000 — pipeline de sortie déjà partagé). Le seuil réel inclut
+    aussi le spread courant : un BE placé sous le spread se ferait
+    immédiatement toucher par le bruit normal du marché."""
+    global FAST_BE_STATE
+    if mt5 is None or not bool(params.get("fast_be_enabled", True)):
+        return
+    bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
+    open_tickets = {int(p.get("ticket", 0)) for p in bot_positions}
+    for t in list(FAST_BE_STATE.keys()):
+        if t not in open_tickets:
+            del FAST_BE_STATE[t]
+    for position in bot_positions:
+        ticket = int(position.get("ticket", 0))
+        if not ticket or FAST_BE_STATE.get(ticket):
+            continue
+        profit = float(position.get("profit") or 0)
+        if profit <= 0:
+            continue
+        symbol_key = position.get("symbol_key", "")
+        symbol = symbol_names.get(symbol_key)
+        entry_price = float(position.get("open_price") or 0)
+        volume = float(position.get("lot") or 0)
+        direction = position.get("direction")
+        if not symbol or entry_price <= 0 or volume <= 0 or direction not in ("BUY", "SELL"):
+            continue
+        info = mt5.symbol_info(symbol)
+        tick = mt5.symbol_info_tick(symbol)
+        if info is None or tick is None:
+            continue
+        point = float(info.point)
+        spread_distance = max(0.0, float(tick.ask) - float(tick.bid))
+        broker_stop_distance = float(getattr(info, "trade_stops_level", 0)) * point
+        min_distance = broker_stop_distance + spread_distance + (2 * point)
+        order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
+        probe_close = entry_price + min_distance if direction == "BUY" else entry_price - min_distance
+        estimated = mt5.order_calc_profit(order_type, symbol, volume, entry_price, probe_close)
+        min_be_profit = abs(float(estimated or 0))
+        if min_be_profit <= 0 or profit < min_be_profit:
+            continue
+        # Récupère le TP broker actuel pour le préserver — TRADE_ACTION_SLTP
+        # exige les deux valeurs, et ce BE rapide ne doit pas annuler la
+        # cible de profit déjà posée à l'ouverture.
+        raw_pos = mt5.positions_get(ticket=ticket)
+        current_tp = float(raw_pos[0].tp) if raw_pos else 0.0
+        sl_req = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": ticket,
+            "symbol": symbol,
+            "sl": entry_price,
+            "tp": current_tp,
+        }
+        sl_res = mt5.order_send(sl_req)
+        if sl_res is not None and int(sl_res.retcode) in {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED}:
+            FAST_BE_STATE[ticket] = True
+            log(
+                f"[BE RAPIDE] Break-Even appliqué à {entry_price} sur ticket {ticket} "
+                f"(profit {profit:.2f}$ >= minimum broker {min_be_profit:.2f}$) — {symbol_key}",
+                "SUCCESS",
+            )
+        else:
+            retcode = int(sl_res.retcode) if sl_res else None
+            log(f"[BE RAPIDE] Break-Even refusé sur ticket {ticket} ({retcode}) — {symbol_key}", "WARNING")
+
+
 def position_exit_reason(
     position: dict,
     pos_params: dict,
@@ -2226,10 +2315,26 @@ def position_exit_reason(
         and float(position_analysis.get("confidence") or 0)
         >= threshold + float(pos_params.get("signal_reversal_margin", 7))
     )
+    rebond_enabled = bool(pos_params.get("rebond_enabled", False))
+    max_position_loss = float(pos_params.get("max_position_loss", 0) or 0)
+
+    # Protection catastrophe sur retournement de signal — vérifiée AVANT le
+    # plafond brutal (MAX_POSITION_LOSS) pour qu'elle ait réellement une
+    # chance d'agir. Correctif du 17/07/2026 : avant, réglée au même montant
+    # que max_position_loss (checké juste après, sans condition), elle
+    # n'avait jamais l'occasion de se déclencher — le plafond aveugle gagnait
+    # toujours la course puisqu'il ne demande rien d'autre que le montant.
+    # Son seuil est désormais plafonné à celui du plafond brutal, jamais
+    # au-delà, pour ne jamais dépasser le pire cas déjà accepté par ailleurs.
+    if not rebond_enabled and age >= review_sec and reversal:
+        catastrophic_limit = abs(float(pos_params.get("emergency_loss_limit", 3.0)))
+        if max_position_loss > 0:
+            catastrophic_limit = min(catastrophic_limit, abs(max_position_loss))
+        if profit <= -catastrophic_limit:
+            return "CATASTROPHIC_PROTECTION"
 
     # Protection individuelle par position — max_position_loss, indépendante
     # de l'âge de la position ou d'un signal inversé (filet de sécurité absolu).
-    max_position_loss = float(pos_params.get("max_position_loss", 0) or 0)
     if max_position_loss > 0 and profit <= -abs(max_position_loss):
         return "MAX_POSITION_LOSS"
 
@@ -2240,17 +2345,6 @@ def position_exit_reason(
         return "PROTECTION"
     if session_state_name in {"PRECLOSE", "CLOSED"}:
         return "SESSION"
-    trail_steps = [
-        (float(pos_params.get("trail_l1_above", 0.0)), float(pos_params.get("trail_l1_pct", 0.0))),
-        (float(pos_params.get("trail_l2_above", 0.0)), float(pos_params.get("trail_l2_pct", 0.0))),
-    ]
-    trail_pct = 0.0
-    for threshold, pct in trail_steps:
-        if threshold > 0 and peak >= threshold:
-            trail_pct = pct
-    if trail_pct > 0:
-        if profit > 0 and profit <= peak - peak * trail_pct:
-            return "PROFIT_TRAIL"
     min_positive_exit = max(0.0, float(pos_params.get("min_positive_exit", 0.05)))
     # Sortie sur perte de momentum — actif même quand rebond_enabled=True
     momentum_exit_score = float(pos_params.get("momentum_exit_score", 0))
@@ -2258,128 +2352,33 @@ def position_exit_reason(
         opp_key = "score_sell" if position.get("direction") == "BUY" else "score_buy"
         if float(position_analysis.get(opp_key, 0)) >= momentum_exit_score:
             return "MOMENTUM_EXIT"
-    # Si le module Capture Rebond est actif, on ne ferme JAMAIS sur signal inversé.
-    # La position principale reste ouverte — le rebond est géré par auto_rebond_step.
-    rebond_enabled = bool(pos_params.get("rebond_enabled", False))
+    # Si le module Capture Rebond est actif, on ne ferme JAMAIS sur signal inversé
+    # positif ici — la position principale reste ouverte, le rebond est géré
+    # par auto_rebond_step (la protection catastrophe équivalente côté perte
+    # est déjà vérifiée plus haut, avant le plafond brutal).
     if not rebond_enabled:
-        # Fermeture sur signal inversé uniquement si module rebond désactivé
         if age >= review_sec and reversal and profit >= min_positive_exit:
             return "SIGNAL_REVERSED_POSITIVE"
-        if (
-            age >= review_sec
-            and reversal
-            and profit <= -abs(float(pos_params.get("emergency_loss_limit", 3.0)))
+    # Fermeture sur profit cible atteint — seulement si Take Profit est
+    # désactivé (sinon les niveaux Take Profit gèrent seuls la sortie sur
+    # profit, cf. carte "Cible profit & Protection" : "Cible profit $" ne
+    # sert de cible broker que si Take Profit est désactivé).
+    if not bool(pos_params.get("take_profit_enabled", False)):
+        if age >= max(review_sec, int(pos_params.get("max_hold_sec", 45))) and profit >= float(
+            pos_params.get("profit_target", 0.50)
         ):
-            return "CATASTROPHIC_PROTECTION"
-    # Fermeture sur profit cible atteint
-    if age >= max(review_sec, int(pos_params.get("max_hold_sec", 45))) and profit >= float(
-        pos_params.get("profit_target", 0.50)
-    ):
-        return "TARGET"
+            return "TARGET"
     return ""
 
 
 # ── Fonctions du module Capture Rebond ────────────────────────────────────────
-
-def detect_sd_zones(symbol: str, timeframes: list[str] | None = None) -> list[dict]:
-    """Détecte les zones d'offre (Supply) et de demande (Demand) sur plusieurs
-    timeframes. Une zone est identifiée par une consolidation serrée suivie d'une
-    bougie impulsive forte. Retourne les zones actives triées par force décroissante."""
-    if mt5 is None:
-        return []
-    if timeframes is None:
-        timeframes = ["M5", "M15", "M30", "H1"]
-    zones: list[dict] = []
-    for tf in timeframes:
-        rates = mt5.copy_rates_from_pos(symbol, tf_const(tf), 0, 200)
-        if rates is None or len(rates) < 20:
-            continue
-        current_price = float(rates[-1][4])
-        for i in range(4, len(rates) - 2):
-            # Bougie impulsive = range de la bougie >= 1.8x la moyenne des 4 précédentes
-            candle_range = abs(float(rates[i][2]) - float(rates[i][3]))
-            prev_ranges = [abs(float(rates[j][2]) - float(rates[j][3])) for j in range(i - 4, i)]
-            avg_range = sum(prev_ranges) / len(prev_ranges) if prev_ranges else 0
-            if avg_range <= 0 or candle_range < avg_range * 1.6:
-                continue
-            open_c = float(rates[i][1])
-            close_c = float(rates[i][4])
-            high_c = float(rates[i][2])
-            low_c = float(rates[i][3])
-            is_bullish = close_c > open_c
-            # Zone de demande : base de la bougie haussière (rebond potentiel vers le haut)
-            # Zone d'offre  : sommet de la bougie baissière (rejet potentiel vers le bas)
-            if is_bullish:
-                zone_top = max(open_c, close_c)
-                zone_bot = min(open_c, close_c)
-                zone_type = "DEMAND"
-            else:
-                zone_top = max(open_c, close_c)
-                zone_bot = min(open_c, close_c)
-                zone_type = "SUPPLY"
-            # Compter combien de fois le prix a touché cette zone depuis
-            touches = 0
-            for j in range(i + 1, min(i + 60, len(rates))):
-                future_low = float(rates[j][3])
-                future_high = float(rates[j][2])
-                if future_low <= zone_top and future_high >= zone_bot:
-                    touches += 1
-            # Fraîcheur: les zones récentes valent plus (index plus élevé = plus récent)
-            recency_score = (i / len(rates)) * 30
-            # Force globale de la zone
-            strength = min(100, int(
-                (candle_range / max(avg_range, 1e-9) - 1) * 25
-                + touches * 8
-                + recency_score
-            ))
-            if strength < 25:
-                continue
-            zones.append({
-                "type": zone_type,
-                "top": round(zone_top, 5),
-                "bot": round(zone_bot, 5),
-                "mid": round((zone_top + zone_bot) / 2, 5),
-                "strength": strength,
-                "touches": touches,
-                "timeframe": tf,
-                "distance": round(abs(current_price - (zone_top + zone_bot) / 2), 5),
-                "candle_index": i,
-            })
-    # Dédoublonner les zones très proches (même niveau, TF différents)
-    merged: list[dict] = []
-    for z in sorted(zones, key=lambda x: -x["strength"]):
-        too_close = any(abs(z["mid"] - m["mid"]) < z["mid"] * 0.0003 for m in merged)
-        if not too_close:
-            merged.append(z)
-    return sorted(merged, key=lambda x: x["distance"])
+# Refonte du 17/07/2026 : le déclenchement se base désormais sur la perte en
+# cours de la position principale + un retracement en temps réel
+# (should_open_rebond), plus sur une zone S&D préexistante — voir le
+# docstring de should_open_rebond() pour le détail de ce changement.
 
 
-def nearest_obstacle(current_price: float, direction: str, zones: list[dict]) -> dict | None:
-    """Retourne la zone la plus proche dans la direction du rebond
-    (résistance pour un BUY contra, support pour un SELL contra).
-    Cible fermeture AVANT le niveau — marge de 20% de la zone."""
-    if not zones:
-        return None
-    if direction == "BUY":
-        # Cherche la première zone d'OFFRE au-dessus du prix actuel
-        candidates = [z for z in zones if z["type"] == "SUPPLY" and z["bot"] > current_price]
-        if not candidates:
-            return None
-        zone = min(candidates, key=lambda z: z["bot"])
-        # On ferme 20% avant le bas de la zone (marge de sécurité)
-        target = zone["bot"] - (zone["top"] - zone["bot"]) * 0.2
-        return {"zone": zone, "target_price": round(target, 5)}
-    else:
-        # Cherche la première zone de DEMANDE en-dessous du prix actuel
-        candidates = [z for z in zones if z["type"] == "DEMAND" and z["top"] < current_price]
-        if not candidates:
-            return None
-        zone = max(candidates, key=lambda z: z["top"])
-        target = zone["top"] + (zone["top"] - zone["bot"]) * 0.2
-        return {"zone": zone, "target_price": round(target, 5)}
-
-
-def rebond_lot(main_lot: float, zone_strength: int, params: dict, is_demo: bool) -> float:
+def rebond_lot(main_lot: float, params: dict, is_demo: bool) -> float:
     """Calcule le lot du rebond : lot principal × lot_multiplicateur_rebond (configurable),
     plafonné par le plafond de compte configuré (demo_lot_cap / real_lot_cap)."""
     sym_params = params.get("symbols", {}).get("XAUUSD", {})
@@ -2399,10 +2398,21 @@ def should_open_rebond(
     symbol: str,
     positions: list[dict],
     analysis: dict,
-    zones: list[dict],
     params: dict,
 ) -> tuple[bool, str, dict | None]:
     """Décide si on doit ouvrir une position contra-tendance de rebond.
+
+    Refonte du 17/07/2026 (demande de Louis, suite à l'incident où des
+    positions plongeaient fortement sans qu'aucun rebond ne se déclenche) :
+    la décision se base désormais sur la PERTE EN COURS de la position
+    principale et un retracement détecté en temps réel (score contra/RSI
+    extrême, déjà des indicateurs instantanés) — plus sur une zone
+    offre/demande préexistante. L'ancienne exigence de zone échouait
+    précisément pendant les mouvements frais et rapides, exactement quand un
+    rebond est le plus nécessaire (le niveau opposé n'a pas encore eu le
+    temps de se former). Objectif explicite : entrer vite pour capter le
+    retracement qui se forme, puis fermer rapidement (voir
+    check_close_rebond, cible/stop/durée max, inchangé).
     Retourne (ok, raison, info_rebond_ou_None)."""
     global REBOND_STATES, REBOND_META
     rebond_max = int(params.get("rebond_max_active", 3))
@@ -2413,9 +2423,6 @@ def should_open_rebond(
     sym_meta = REBOND_META.get(symbol_key, {"last_rebond_at": 0.0})
     if time.time() - float(sym_meta.get("last_rebond_at", 0)) < cooldown:
         return False, "Cooldown rebond en cours.", None
-    # Pas de zones identifiées
-    if not zones:
-        return False, "Aucune zone S&D détectée.", None
     # Chercher une position principale ouverte par le bot (exclure les rebonds)
     rebond_t_check = {int(s.get("ticket") or 0) for s in REBOND_STATES}
     bot_positions = [p for p in positions if p.get("symbol_key") == symbol_key
@@ -2427,6 +2434,13 @@ def should_open_rebond(
     main_dir = str(main_pos.get("direction", ""))
     if main_dir not in ("BUY", "SELL"):
         return False, "Direction principale inconnue.", None
+    # Se baser sur la perte EN COURS de la position principale — avant cette
+    # refonte, rien ne liait le déclenchement du rebond au P&L réel de la
+    # position qu'il est censé aider.
+    main_profit = float(main_pos.get("profit") or 0)
+    min_loss_trigger = abs(float(params.get("rebond_min_loss_trigger", 2.0)))
+    if main_profit > -min_loss_trigger:
+        return False, f"Position principale pas encore assez en perte ({main_profit:.2f}$ < seuil {min_loss_trigger:.2f}$).", None
     # La contra-direction est l'opposé de la position principale
     contra_dir = "BUY" if main_dir == "SELL" else "SELL"
     # Vérifier que l'analyse multi-TF confirme un rebond contra probable
@@ -2453,7 +2467,7 @@ def should_open_rebond(
             "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
             "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
             "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-            "zone_count": len(zones), "zone_strength": None,
+            "main_profit": round(main_profit, 2),
         })
         return False, reason_reject, None
     # Obtenir le prix actuel via le nom MT5 résolu
@@ -2461,61 +2475,23 @@ def should_open_rebond(
     if tick is None:
         return False, "Prix actuel indisponible.", None
     current_price = float(tick.bid if contra_dir == "SELL" else tick.ask)
-    obstacle = nearest_obstacle(current_price, contra_dir, zones)
-    if obstacle is None:
-        reason_reject = f"Aucune zone obstacle trouvée en {contra_dir}."
-        append_jsonl("rebond_log.jsonl", {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
-            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
-            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-            "zone_count": len(zones), "zone_strength": None,
-        })
-        return False, reason_reject, None
-    zone = obstacle["zone"]
-    target = obstacle["target_price"]
-    pip_potential = abs(target - current_price)
-    # Bloquer si une zone identique est déjà couverte par un rebond actif (même direction, cible proche)
-    zone_tolerance = max(1.0, pip_potential * 0.3)
-    for rs in REBOND_STATES:
-        if rs.get("direction") == contra_dir and abs(float(rs.get("target_price", 0)) - target) < zone_tolerance:
-            return False, f"Zone déjà couverte par rebond actif (ticket #{rs.get('ticket')}).", None
-    # Le potentiel de pip doit valoir le coup (minimum 8 pips pour XAU)
-    if pip_potential < 0.80:
-        reason_reject = f"Potentiel rebond trop faible ({pip_potential:.2f} pts)."
-        append_jsonl("rebond_log.jsonl", {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
-            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
-            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-            "zone_count": len(zones), "zone_strength": zone["strength"],
-        })
-        return False, reason_reject, None
-    # Zone suffisamment forte
-    if zone["strength"] < float(params.get("rebond_min_zone_strength", 28)):
-        reason_reject = f"Zone trop faible (force {zone['strength']})."
-        append_jsonl("rebond_log.jsonl", {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
-            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
-            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-            "zone_count": len(zones), "zone_strength": zone["strength"],
-        })
-        return False, reason_reject, None
+    # Cible rapprochée calculée en temps réel (distance fixe configurable) —
+    # plus d'attente d'une ancienne zone S&D : on vise à capter vite le
+    # retracement en cours, pas un niveau structurel lointain.
+    target_pips = max(0.10, float(params.get("rebond_target_pips", 1.50)))
+    target = current_price + target_pips if contra_dir == "BUY" else current_price - target_pips
     append_jsonl("rebond_log.jsonl", {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "symbol": symbol_key, "result": "OK", "reason": "Rebond autorisé.",
+        "symbol": symbol_key, "result": "OK", "reason": "Rebond autorisé (perte en cours + retracement détecté).",
         "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
         "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-        "zone_count": len(zones), "zone_strength": zone["strength"],
-        "contra_dir": contra_dir, "pip_potential": round(pip_potential, 3),
+        "main_profit": round(main_profit, 2), "contra_dir": contra_dir,
+        "target_price": round(target, 5),
     })
     return True, "Rebond autorisé.", {
         "direction": contra_dir,
         "target_price": target,
-        "zone": zone,
         "current_price": current_price,
-        "pip_potential": pip_potential,
     }
 
 
@@ -2611,25 +2587,21 @@ def auto_rebond_step(
             rs["peak_profit"] = max(float(rs.get("peak_profit", 0)), curr_profit)
 
         if promoted and rebond_pos:
-            # Promu en position normale: trailing (paliers partagés) + stop de sécurité uniquement
+            # Promu en position normale: cible profit (pos_params.profit_target,
+            # partagée) + stop de sécurité uniquement. Refonte du 17/07/2026 :
+            # l'ancien trailing par paliers est retiré (Palier n'existe plus),
+            # la cible de profit gère déjà la sortie sur profit — cf. demande
+            # de Louis, "on a déjà la cible de profit qui gère cela".
             if not rs.get("promoted"):
                 rs["promoted"] = True
-                log(f"[REBOND] Ticket #{ticket} promu en position normale (trailing actif).", "INFO")
-            peak = float(rs.get("peak_profit", 0))
+                log(f"[REBOND] Ticket #{ticket} promu en position normale (cible profit active).", "INFO")
             curr_profit = float(rebond_pos.get("profit", 0))
             sym_params_r = params.get("symbols", {}).get(symbol_key, {})
-            trail_steps_r = [
-                (float(sym_params_r.get("trail_l1_above", 0.0)), float(sym_params_r.get("trail_l1_pct", 0.0))),
-                (float(sym_params_r.get("trail_l2_above", 0.0)), float(sym_params_r.get("trail_l2_pct", 0.0))),
-            ]
-            trail_pct_r = 0.0
-            for threshold_r, pct_r in trail_steps_r:
-                if threshold_r > 0 and peak >= threshold_r:
-                    trail_pct_r = pct_r
+            promoted_target = float(sym_params_r.get("profit_target", 0.0) or 0)
             should_close, close_reason = False, ""
-            if trail_pct_r > 0 and curr_profit <= peak - peak * trail_pct_r:
+            if promoted_target > 0 and curr_profit >= promoted_target:
                 should_close = True
-                close_reason = f"Rebond promu — trailing (peak +{peak:.2f}$)"
+                close_reason = f"Rebond promu — cible profit atteinte (+{curr_profit:.2f}$)"
             elif mt5:
                 tick_r = mt5.symbol_info_tick(symbol)
                 if tick_r:
@@ -2674,32 +2646,25 @@ def auto_rebond_step(
             still_active.append(rs)
     REBOND_STATES[:] = still_active
 
-    # ── 2. Scan des zones S&D (toutes les 30 secondes) ─────────────────────────
-    now = time.time()
-    sym_meta_r = REBOND_META.setdefault(symbol_key, {"zones": [], "last_scan": 0.0, "last_rebond_at": 0.0})
-    if now - float(sym_meta_r.get("last_scan", 0)) >= 30:
-        sym_meta_r["zones"] = detect_sd_zones(symbol, ["M5", "M15", "M30", "H1"])
-        sym_meta_r["last_scan"] = now
-    zones = sym_meta_r.get("zones", [])
-
-    # ── 3. Décision d'ouverture ─────────────────────────────────────────────────
-    ok, reason, rebond_info = should_open_rebond(symbol_key, symbol, positions, analysis, zones, params)
+    # ── 2. Décision d'ouverture ──────────────────────────────────────────────────
+    # Refonte du 17/07/2026 : plus de scan de zones S&D, should_open_rebond()
+    # décide désormais à partir de la perte en cours de la position principale
+    # et d'un retracement en temps réel (voir son docstring).
+    ok, reason, rebond_info = should_open_rebond(symbol_key, symbol, positions, analysis, params)
     if not ok:
         return {
             "rebond_active": len(REBOND_STATES) > 0,
             "rebond_count": len(REBOND_STATES),
-            "zones_count": len(zones),
             "reason": reason,
         }
 
-    # ── 4. Calcul du lot dynamique ──────────────────────────────────────────────
+    # ── 3. Calcul du lot dynamique ──────────────────────────────────────────────
     sym_params = params.get("symbols", {}).get(symbol_key, {})
     main_lot = float(sym_params.get("lot", 0.05))
-    zone_strength = int(rebond_info["zone"]["strength"])
-    lot = rebond_lot(main_lot, zone_strength, params, is_demo)
-    lot_info_rebond = {"effective_lot": lot, "reason": f"Rebond contra-tendance, force zone {zone_strength}"}
+    lot = rebond_lot(main_lot, params, is_demo)
+    lot_info_rebond = {"effective_lot": lot, "reason": "Rebond contra-tendance (perte en cours + retracement)"}
 
-    # ── 5. Ouverture ────────────────────────────────────────────────────────────
+    # ── 4. Ouverture ────────────────────────────────────────────────────────────
     direction = str(rebond_info["direction"])
     target_price = float(rebond_info["target_price"])
     ok_open, msg_open, event = open_position(
@@ -2730,8 +2695,7 @@ def auto_rebond_step(
         REBOND_META[symbol_key]["last_rebond_at"] = time.time()
         log(
             f"[REBOND] {direction} {lot:.3f} ouvert @ {rebond_info['current_price']:.2f} "
-            f"| Cible: {target_price:.2f} | Zone {rebond_info['zone']['type']} "
-            f"force {zone_strength} ({rebond_info['zone']['timeframe']}) "
+            f"| Cible: {target_price:.2f} "
             f"| Rebonds actifs: {len(REBOND_STATES)}/{params.get('rebond_max_active', 3)}",
             "SUCCESS",
         )
@@ -2742,7 +2706,6 @@ def auto_rebond_step(
             "lot": lot,
             "open_price": rebond_info["current_price"],
             "target_price": target_price,
-            "zone_strength": zone_strength,
             "last_action": msg_open,
         }
     else:
@@ -2984,8 +2947,8 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
     # plus un second moteur d'exécution parallèle — c'est désormais une
     # source de signal alternative (KB1-KB7 décide BUY/SELL/WAIT) qui passe
     # par exactement le même pipeline qu'AlphaTrade AI (lot_safety_state déjà
-    # calculé plus haut dans lot_info, open_position sans TP par paliers
-    # séparé, partial_tp_step/position_exit_reason partagés sans exception).
+    # calculé plus haut dans lot_info, open_position sans TP dédié séparé,
+    # take_profit_step/position_exit_reason partagés sans exception).
     # L'ancien calcul de lot dédié (KB8, kb8_position_plan) et la gestion de
     # sortie dédiée (kb1000_manage_positions) sont retirés de l'exécution en
     # direct : ils dupliquaient un système déjà éprouvé et en ont repris les
@@ -3629,7 +3592,8 @@ def main() -> int:
             auto_state["allowed"] = is_demo_account(mt5.account_info())
             auto_state["reason"] = "Mode test --once: aucun ordre envoye."
         else:
-            partial_tp_step(positions, params, symbol_names)
+            fast_breakeven_step(positions, params, symbol_names)
+            take_profit_step(positions, params, symbol_names)
             auto_state = auto_trade_step(params, symbol_names, payload, positions)
             positions = live_positions(symbol_names, params)
             payload = status_payload(params, symbol_names, trades, positions)
