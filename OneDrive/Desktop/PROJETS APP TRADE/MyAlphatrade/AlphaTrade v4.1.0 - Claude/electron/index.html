@@ -185,36 +185,6 @@
           </div>
         </article>
 
-        <article class="panel full-analysis">
-          <div class="panel-title">🔍 Analyse complète de la décision</div>
-          <p class="mini-help">Le détail complet du calcul qui a produit la décision affichée en haut — pas juste RSI/EMA/MACD. Ajouté le 17/07/2026. Change selon le moteur actif (Paramètres → Moteur IA actif).</p>
-          <div id="faEngineLabel" class="mini-help" style="color:var(--green-soft, #8fd8ab); font-weight:600;">Moteur : —</div>
-
-          <div id="fullAnalysisAlphaTrade">
-            <div class="kv"><span>Signal brut (avant filtres)</span><b id="faRawSignal">-</b></div>
-            <div class="kv"><span>Confiance brute</span><b id="faRawConfidence">-</b></div>
-            <div class="kv"><span>Seuil requis</span><b id="faConfidenceMin">-</b></div>
-            <div class="kv"><span>Biais multi-timeframe</span><b id="faMtfBias">-</b></div>
-            <div class="kv"><span>Écart BUY/SELL calculé</span><b id="faScoreGap">-</b></div>
-            <div class="kv"><span>Écart minimum requis</span><b id="faMinScoreGap">-</b></div>
-            <div class="kv"><span>Signal rapide (confirmation)</span><b id="faFastSignal">-</b></div>
-            <div class="kv"><span>Dérogation signal fort</span><b id="faFastOverride">-</b></div>
-            <div class="kv"><span>Dérogation RSI</span><b id="faRsiOverride">-</b></div>
-            <div class="kv"><span>Retournement appliqué</span><b id="faReversalApplied">-</b></div>
-            <div class="kv"><span>Seuil de retournement</span><b id="faReversalMin">-</b></div>
-            <div class="kv"><span>Entrée éligible</span><b id="faEligible">-</b></div>
-          </div>
-
-          <div id="fullAnalysisKB1000" style="display:none">
-            <div class="kv"><span>Grade du setup (KB7)</span><b id="faGrade">-</b></div>
-            <div class="kv"><span>Probabilité BUY</span><b id="faProbaBuy">-</b></div>
-            <div class="kv"><span>Probabilité SELL</span><b id="faProbaSell">-</b></div>
-            <div class="kv"><span>Entrée éligible</span><b id="faKbEligible">-</b></div>
-            <p class="mini-help">Sous-scores KB1-KB6 (pondérés dans le score final KB7) :</p>
-            <div id="faSubscores" class="analysis-grid"></div>
-          </div>
-        </article>
-
         <article class="panel quality">
           <div class="panel-title">Qualité du compte MT5</div>
           <p class="mini-help">Vue globale de toutes les origines. Les évaluations AlphaTrade, IA externe et manuelle restent séparées dans Sessions IA.</p>

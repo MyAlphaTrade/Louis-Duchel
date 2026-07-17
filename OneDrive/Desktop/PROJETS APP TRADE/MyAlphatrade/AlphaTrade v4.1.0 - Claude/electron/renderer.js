@@ -799,50 +799,7 @@ function renderStatus(s) {
   renderCalendar();
   renderActiveMarket();
   renderMicrostructurePage();
-  renderFullAnalysis(s);
   if (currentLanguage === 'en') translateStatic('en');
-}
-
-function renderFullAnalysis(s) {
-  const decision = (s && s.simulated_decision) || {};
-  const engine = decision.engine || params?.active_engine || 'alphatrade_ai';
-  const yesNo = value => value === true ? 'Oui' : value === false ? 'Non' : '-';
-  const pct = value => value === undefined || value === null ? '-' : `${Number(value).toFixed(1)}%`;
-  if (!$('faEngineLabel')) return;
-
-  if (engine === 'kb1000_gold_ai') {
-    $('faEngineLabel').textContent = 'Moteur : KB1000 Gold AI (KB1-KB7)';
-    if ($('fullAnalysisAlphaTrade')) $('fullAnalysisAlphaTrade').style.display = 'none';
-    if ($('fullAnalysisKB1000')) $('fullAnalysisKB1000').style.display = '';
-    if ($('faGrade')) $('faGrade').textContent = decision.grade || '-';
-    if ($('faProbaBuy')) $('faProbaBuy').textContent = pct(decision.probability_buy_pct);
-    if ($('faProbaSell')) $('faProbaSell').textContent = pct(decision.probability_sell_pct);
-    if ($('faKbEligible')) $('faKbEligible').textContent = yesNo(decision.eligible);
-    const subEl = $('faSubscores');
-    if (subEl) {
-      const subscores = decision.subscores || {};
-      const keys = Object.keys(subscores);
-      subEl.innerHTML = keys.length
-        ? keys.map(key => `<span>${key} <b>${Number(subscores[key]).toFixed(1)}</b></span>`).join('')
-        : '<span>Aucun sous-score disponible</span>';
-    }
-  } else {
-    $('faEngineLabel').textContent = 'Moteur : AlphaTrade AI';
-    if ($('fullAnalysisAlphaTrade')) $('fullAnalysisAlphaTrade').style.display = '';
-    if ($('fullAnalysisKB1000')) $('fullAnalysisKB1000').style.display = 'none';
-    if ($('faRawSignal')) $('faRawSignal').textContent = decision.raw_signal || '-';
-    if ($('faRawConfidence')) $('faRawConfidence').textContent = pct(decision.raw_confidence);
-    if ($('faConfidenceMin')) $('faConfidenceMin').textContent = pct(decision.confidence_min);
-    if ($('faMtfBias')) $('faMtfBias').textContent = decision.multi_timeframe_bias || '-';
-    if ($('faScoreGap')) $('faScoreGap').textContent = decision.score_gap != null ? Number(decision.score_gap).toFixed(1) : '-';
-    if ($('faMinScoreGap')) $('faMinScoreGap').textContent = decision.min_score_gap != null ? Number(decision.min_score_gap).toFixed(1) : '-';
-    if ($('faFastSignal')) $('faFastSignal').textContent = decision.fast_signal || '-';
-    if ($('faFastOverride')) $('faFastOverride').textContent = yesNo(decision.fast_override);
-    if ($('faRsiOverride')) $('faRsiOverride').textContent = yesNo(decision.rsi_override);
-    if ($('faReversalApplied')) $('faReversalApplied').textContent = yesNo(decision.reversal_applied);
-    if ($('faReversalMin')) $('faReversalMin').textContent = pct(decision.reversal_min);
-    if ($('faEligible')) $('faEligible').textContent = yesNo(decision.eligible);
-  }
 }
 
 function renderMicrostructurePage() {
