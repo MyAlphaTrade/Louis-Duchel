@@ -50,7 +50,6 @@ SYMBOLS = {
 DEFAULT_PARAMS = {
     "mt5_path": r"C:\Program Files\MetaTrader 5\terminal64.exe",
     "active_symbol": "XAUUSD",
-    "mode": "monitor",
     "strategy_mode": "scalping_fast",
     "active_engine": "alphatrade_ai",
     "kb1000_entry_threshold": 70.0,
@@ -63,8 +62,6 @@ DEFAULT_PARAMS = {
         {"name": "AVA Assistant", "type": "EXTERNAL_AI", "magic_numbers": [AVA_MAGIC],
          "comment_keywords": ["ava", "bridge"], "enabled": True},
     ],
-    "trading_enabled": False,
-    "demo_only": False,
     "capital_min": 0.0,
     "auto_max_positions": 2,
     "session_target": 25.0,
@@ -73,16 +70,10 @@ DEFAULT_PARAMS = {
     "giveback": 100.0,
     "profit_protection_enabled": True,
     "profit_drawdown_pct": 30.0,
-    "profit_drawdown_min": 10.0,
     "profit_warning_ratio": 0.75,
     "risk_pct": 0.35,
     "real_lot_cap": 0.10,
     "demo_lot_cap": 0.10,
-    "max_trades_hour": 300,
-    "cadence_sec": 30,
-    "max_hold_sec": 45,
-    "position_review_sec": 120,
-    "confidence_min": 62,
     "anti_top_bottom": True,
     "lookback_candles": 200,
     "edge_zone_pct": 20,
@@ -112,7 +103,6 @@ DEFAULT_PARAMS = {
         "XAUUSD": {
             "lot": 0.05,
             "lot_min": 0.01,
-            "lot_max": 0.10,
             "max_positions": 5,
             "max_position_loss": 20,
             "max_floating_loss": 50,
@@ -123,12 +113,8 @@ DEFAULT_PARAMS = {
             "max_hold_sec": 3600,
             "position_review_sec": 300,
             "profit_target": 5.00,
-            "profit_lock_trigger": 0.50,
-            "profit_lock_drawdown": 0.20,
             "trail_l1_above": 0.50,  "trail_l1_pct": 0.20,
-            "trail_l2_above": 5.00,  "trail_l2_pct": 0.15,
-            "trail_l3_above": 10.00, "trail_l3_pct": 0.10,
-            "trail_l4_above": 25.00, "trail_l4_pct": 0.07,
+            "trail_l2_above": 25.00, "trail_l2_pct": 0.07,
             "momentum_exit_score": 55,
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
@@ -143,7 +129,6 @@ DEFAULT_PARAMS = {
             "partial_tp_close_pct": 25,
             "partial_tp_move_be": True,
             "lot_multiplicateur_renfort": 1.0,
-            "renfort_high_confidence_min": 75,
             "lot_multiplicateur_rebond": 3.0,
         },
     },
@@ -1590,10 +1575,8 @@ def protection_state(params: dict, daily: dict, account_login: int | None) -> di
     enabled = bool(params.get("profit_protection_enabled", True))
     activation = max(0.0, float(params.get("daily_target", 50)) * 0.5)
     pct = max(0.0, float(params.get("profit_drawdown_pct", 30)))
-    pct_allowance = daily_peak * pct / 100
-    min_allowance = max(0.0, float(params.get("profit_drawdown_min", 10)))
+    allowance = daily_peak * pct / 100
     max_allowance = max(0.0, float(params.get("giveback", 100)))
-    allowance = max(min_allowance, pct_allowance)
     if max_allowance:
         allowance = min(allowance, max_allowance)
     floor = max(activation, daily_peak - allowance) if daily_peak >= activation else 0.0
@@ -1671,7 +1654,6 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
     result = {}
     for key, symbol_params in params.get("symbols", {}).items():
         configured = max(0.0, float(symbol_params.get("lot", 0)))
-        symbol_cap = max(0.0, float(symbol_params.get("lot_max", configured)))
         requested_min = max(0.0, float(symbol_params.get("lot_min", 0)))
         name = symbol_names.get(key)
         info = mt5.symbol_info(name) if mt5 and name else None
@@ -1708,7 +1690,7 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             loss_per_lot = abs(float(estimated or 0))
             if loss_per_lot > 0 and risk_budget > 0:
                 risk_lot_cap = risk_budget / loss_per_lot
-        caps = [value for value in (account_cap, symbol_cap, risk_lot_cap) if value > 0]
+        caps = [value for value in (account_cap, risk_lot_cap) if value > 0]
         cap = min(caps) if caps else 0.0
         effective = min(configured, cap) if cap > 0 else 0.0
         if broker_step > 0:
@@ -1716,8 +1698,8 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         effective = round(effective, 8)
         # Si le cap global est inférieur au lot minimum du broker mais que le lot configuré
         # le couvre, on utilise le lot configuré (cas des synthétiques Deriv min 0.20)
-        if effective < broker_min and broker_min <= configured and (symbol_cap <= 0 or broker_min <= symbol_cap):
-            effective = min(configured, symbol_cap) if symbol_cap > 0 else configured
+        if effective < broker_min and broker_min <= configured:
+            effective = configured
             if broker_step > 0:
                 effective = math.floor((effective + 1e-12) / broker_step) * broker_step
             effective = round(effective, 8)
@@ -1725,7 +1707,6 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         result[key] = {
             "configured_lot": configured,
             "account_cap": account_cap,
-            "symbol_cap": symbol_cap,
             "broker_min": broker_min,
             "broker_step": broker_step,
             "effective_lot": 0.0 if rejected else effective,
@@ -2262,8 +2243,6 @@ def position_exit_reason(
     trail_steps = [
         (float(pos_params.get("trail_l1_above", 0.0)), float(pos_params.get("trail_l1_pct", 0.0))),
         (float(pos_params.get("trail_l2_above", 0.0)), float(pos_params.get("trail_l2_pct", 0.0))),
-        (float(pos_params.get("trail_l3_above", 0.0)), float(pos_params.get("trail_l3_pct", 0.0))),
-        (float(pos_params.get("trail_l4_above", 0.0)), float(pos_params.get("trail_l4_pct", 0.0))),
     ]
     trail_pct = 0.0
     for threshold, pct in trail_steps:
@@ -2271,10 +2250,6 @@ def position_exit_reason(
             trail_pct = pct
     if trail_pct > 0:
         if profit > 0 and profit <= peak - peak * trail_pct:
-            return "PROFIT_TRAIL"
-    elif peak >= float(pos_params.get("profit_lock_trigger", 0.30)):
-        drawdown = float(pos_params.get("profit_lock_drawdown", 0.12))
-        if profit > 0 and profit <= peak - drawdown:
             return "PROFIT_TRAIL"
     min_positive_exit = max(0.0, float(pos_params.get("min_positive_exit", 0.05)))
     # Sortie sur perte de momentum — actif même quand rebond_enabled=True
@@ -2406,15 +2381,14 @@ def nearest_obstacle(current_price: float, direction: str, zones: list[dict]) ->
 
 def rebond_lot(main_lot: float, zone_strength: int, params: dict, is_demo: bool) -> float:
     """Calcule le lot du rebond : lot principal × lot_multiplicateur_rebond (configurable),
-    plafonné par lot_max et le plafond de compte configuré (demo_lot_cap / real_lot_cap)."""
+    plafonné par le plafond de compte configuré (demo_lot_cap / real_lot_cap)."""
     sym_params = params.get("symbols", {}).get("XAUUSD", {})
     lot_min = float(sym_params.get("lot_min", 0.01))
-    lot_max = float(sym_params.get("lot_max", 0.10))
     account_cap = float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10))
     mult_rebond = float(sym_params.get("lot_multiplicateur_rebond", 1.0))
     lot = main_lot * max(0.0, mult_rebond)
-    caps = [c for c in (lot_max, account_cap) if c > 0]
-    lot = max(lot_min, min(lot, *caps)) if caps else max(lot_min, lot)
+    lot = min(lot, account_cap) if account_cap > 0 else lot
+    lot = max(lot_min, lot)
     # Arrondir au step 0.01
     lot = round(round(lot / 0.01) * 0.01, 3)
     return lot
@@ -2637,19 +2611,25 @@ def auto_rebond_step(
             rs["peak_profit"] = max(float(rs.get("peak_profit", 0)), curr_profit)
 
         if promoted and rebond_pos:
-            # Promu en position normale: profit_lock trailing + stop de sécurité uniquement
+            # Promu en position normale: trailing (paliers partagés) + stop de sécurité uniquement
             if not rs.get("promoted"):
                 rs["promoted"] = True
-                log(f"[REBOND] Ticket #{ticket} promu en position normale (profit_lock actif).", "INFO")
+                log(f"[REBOND] Ticket #{ticket} promu en position normale (trailing actif).", "INFO")
             peak = float(rs.get("peak_profit", 0))
             curr_profit = float(rebond_pos.get("profit", 0))
             sym_params_r = params.get("symbols", {}).get(symbol_key, {})
-            lock_trigger = float(sym_params_r.get("profit_lock_trigger", 0.30))
-            lock_dd = float(sym_params_r.get("profit_lock_drawdown", 0.12))
+            trail_steps_r = [
+                (float(sym_params_r.get("trail_l1_above", 0.0)), float(sym_params_r.get("trail_l1_pct", 0.0))),
+                (float(sym_params_r.get("trail_l2_above", 0.0)), float(sym_params_r.get("trail_l2_pct", 0.0))),
+            ]
+            trail_pct_r = 0.0
+            for threshold_r, pct_r in trail_steps_r:
+                if threshold_r > 0 and peak >= threshold_r:
+                    trail_pct_r = pct_r
             should_close, close_reason = False, ""
-            if peak >= lock_trigger and curr_profit <= peak - lock_dd:
+            if trail_pct_r > 0 and curr_profit <= peak - peak * trail_pct_r:
                 should_close = True
-                close_reason = f"Rebond promu — profit_lock (peak +{peak:.2f}$)"
+                close_reason = f"Rebond promu — trailing (peak +{peak:.2f}$)"
             elif mt5:
                 tick_r = mt5.symbol_info_tick(symbol)
                 if tick_r:
@@ -2983,17 +2963,19 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             pass
     lot_info = payload.get("lot_safety", {}).get(active, {})
     # Renfort: lot de base par défaut. lot_multiplicateur_renfort s'applique
-    # uniquement si la confiance IA dépasse un seuil élevé (configurable).
+    # uniquement si la confiance IA dépasse le seuil + la même marge de
+    # confiance que le renfort en négatif (reinforcement_min_confidence_margin,
+    # désormais partagée entre les deux gates — fusion du 17/07/2026).
     if symbol_main_positions:
         mult_renfort = float(symbol_params.get("lot_multiplicateur_renfort", 1.0))
         if mult_renfort > 1.0:
             conf_renfort = float(analysis.get("confidence") or 0)
             thresh_renfort = float(analysis.get("learned_threshold") or symbol_params.get("confidence_min", 62))
-            high_conf_min = float(symbol_params.get("renfort_high_confidence_min", thresh_renfort + 15))
+            high_conf_min = thresh_renfort + margin
             if conf_renfort >= high_conf_min:
                 base = float(lot_info.get("effective_lot", 0))
-                lot_max = float(symbol_params.get("lot_max", base))
-                renfort_lot = round(min(base * mult_renfort, lot_max), 8)
+                account_cap_r = float(lot_info.get("account_cap", 0) or base)
+                renfort_lot = round(min(base * mult_renfort, account_cap_r), 8)
                 broker_min = float(lot_info.get("broker_min", 0))
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}

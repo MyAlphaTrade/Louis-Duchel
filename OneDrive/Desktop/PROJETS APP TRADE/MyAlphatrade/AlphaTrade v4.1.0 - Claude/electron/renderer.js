@@ -40,9 +40,6 @@ const defaults = {
     { name: 'AlphaTrade AI', type: 'INTERNAL_BOT', magic_numbers: [20260607], comment_keywords: ['alphatrade', 'alphakaris'], enabled: true },
     { name: 'AVA Assistant', type: 'EXTERNAL_AI', magic_numbers: [7525001], comment_keywords: ['ava', 'bridge'], enabled: true }
   ],
-  mode: 'monitor',
-  trading_enabled: false,
-  demo_only: false,
   auto_max_positions: 6,
   session_target: 50,
   daily_target: 500,
@@ -50,16 +47,10 @@ const defaults = {
   giveback: 100,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
-  profit_drawdown_min: 10,
   profit_warning_ratio: .75,
   risk_pct: 0.35,
   real_lot_cap: 0.20,
   demo_lot_cap: 0.20,
-  max_trades_hour: 300,
-  cadence_sec: 30,
-  max_hold_sec: 45,
-  position_review_sec: 120,
-  confidence_min: 70,
   anti_top_bottom: true,
   lookback_candles: 200,
   edge_zone_pct: 20,
@@ -89,20 +80,18 @@ const defaults = {
   hyperliquid_symbols: ['BTC', 'ETH'],
   symbols: {
     XAUUSD: {
-      lot: .03, lot_min: .01, lot_max: .20, max_positions: 6,
+      lot: .03, lot_min: .01, max_positions: 6,
       max_position_loss: 15, max_floating_loss: 50, timeframe: 'M1',
       confidence_min: 70, cadence_sec: 30, max_trades_hour: 120,
       max_hold_sec: 120, position_review_sec: 120,
-      profit_target: 1.5, profit_lock_trigger: 1.0, profit_lock_drawdown: 0.20,
+      profit_target: 1.5,
       trail_l1_above: 0.50, trail_l1_pct: 0.20,
-      trail_l2_above: 5.00, trail_l2_pct: 0.15,
-      trail_l3_above: 10.00, trail_l3_pct: 0.10,
-      trail_l4_above: 25.00, trail_l4_pct: 0.07,
+      trail_l2_above: 25.00, trail_l2_pct: 0.07,
       momentum_exit_score: 55,
       emergency_loss_limit: 15, min_positive_exit: .05,
       signal_reversal_margin: 7, cooldown_after_loss_sec: 60,
       session_filter_enabled: false, session_start_utc: 8, session_end_utc: 17, stop_before_end_min: 30,
-      lot_multiplicateur_renfort: 1.0, renfort_high_confidence_min: 75,
+      lot_multiplicateur_renfort: 1.0,
       lot_multiplicateur_rebond: 3.0,
       partial_tp_enabled: false, partial_tp_count: 3, partial_tp_close_pct: 25, partial_tp_move_be: true
     }
@@ -2043,11 +2032,9 @@ async function applyPlanParamsToEngine(planParams) {
   const sessionLoss = get('session_max_loss', 'seuil_perte_alerte');
   if (sessionLoss !== null) updated.session_max_loss = parseFloat(sessionLoss);
   const confMin = get('confidence_min', 'scalping_confidence_min');
-  if (confMin !== null) updated.confidence_min = parseFloat(confMin);
-  const lotMax = get('lot_max');
-  if (lotMax !== null) {
+  if (confMin !== null) {
     for (const sym of Object.keys(updated.symbols || {})) {
-      updated.symbols[sym].lot_max = parseFloat(lotMax);
+      updated.symbols[sym].confidence_min = parseFloat(confMin);
     }
   }
   const maxPos = get('max_positions');
@@ -2073,20 +2060,6 @@ async function doLogin() {
   btn.textContent = 'Connexion…';
   status.style.display = 'block';
   status.textContent = 'Vérification…';
-  // Bypass administrateur local (fonctionne sans API)
-  const ADMIN_EMAIL = 'admin@alphatrade.com';
-  const ADMIN_PASS  = 'admin1234';
-  if (email.toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASS) {
-    const adminUser = { id: 1, email: ADMIN_EMAIL, full_name: 'Administrateur', is_admin: true };
-    const adminPlan = { name: 'Elite', plan_key: 'elite', active: true, expires_at: null };
-    sessionStorage.setItem('at_token', 'local-admin');
-    sessionStorage.setItem('at_user', JSON.stringify(adminUser));
-    sessionStorage.setItem('at_plan', JSON.stringify(adminPlan));
-    hideLoginOverlay();
-    showPlanBadge(adminUser, adminPlan);
-    btn.disabled = false; btn.textContent = 'Se connecter'; status.style.display = 'none';
-    return;
-  }
   try {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
@@ -2182,7 +2155,7 @@ function showPlanBadge(user, plan) {
 
 async function loadFullProfile() {
   const token = sessionStorage.getItem('at_token');
-  if (!token || token === 'local-admin') return;
+  if (!token) return;
   try {
     const res = await fetch(`${API_BASE}/user/profile`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return;
@@ -2211,9 +2184,6 @@ async function saveProfile() {
   const newPwd = document.getElementById('acEditNewPwd')?.value;
   if (newPwd) { body.current_password = currentPwd; body.new_password = newPwd; }
 
-  if (token === 'local-admin') {
-    okEl.textContent = 'Profil administrateur — modifications locales uniquement.'; return;
-  }
   btn.disabled = true; btn.textContent = 'Enregistrement…';
   try {
     const res = await fetch(`${API_BASE}/user/profile`, {
