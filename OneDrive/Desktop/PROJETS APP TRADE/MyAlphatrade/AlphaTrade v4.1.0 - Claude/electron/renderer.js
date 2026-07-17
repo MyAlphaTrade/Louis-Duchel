@@ -10,6 +10,7 @@ const tone = (el, value) => {
 let currentStatus = null;
 let allTrades = [];
 let params = null;
+let planParamLocks = {}; // {param_key: true} -- verrous poussés par le forfait (17/07/2026)
 let activeSymbol = 'XAUUSD';
 let pendingActiveSymbol = null;
 let pendingActiveSymbolAt = 0;
@@ -1717,6 +1718,7 @@ function fillSettings(values) {
   selectEngine(params.active_engine || 'alphatrade_ai');
   renderOriginsTable();
   renderTakeProfitLevels();
+  applyParamLocksToUI();
 }
 
 const ORIGIN_TYPE_LABELS = {
@@ -1799,7 +1801,7 @@ document.getElementById('tradeOriginsBody')?.addEventListener('click', event => 
   }
 });
 
-const MAX_TAKE_PROFIT_LEVELS = 6;
+let PLAN_MAX_TP_LEVELS = 6; // plafonné par forfait via applyPlanParamsToEngine() (17/07/2026)
 
 function renderTakeProfitLevels() {
   const wrap = $('takeProfitLevels');
@@ -1817,9 +1819,9 @@ function renderTakeProfitLevels() {
   `).join('') : '<p class="mini-help">Aucun Take Profit configuré.</p>';
   const addBtn = $('addTakeProfitLevelBtn');
   if (addBtn) {
-    addBtn.disabled = levels.length >= MAX_TAKE_PROFIT_LEVELS;
-    addBtn.textContent = levels.length >= MAX_TAKE_PROFIT_LEVELS
-      ? `Maximum ${MAX_TAKE_PROFIT_LEVELS} Take Profit atteint`
+    addBtn.disabled = levels.length >= PLAN_MAX_TP_LEVELS;
+    addBtn.textContent = levels.length >= PLAN_MAX_TP_LEVELS
+      ? `Maximum ${PLAN_MAX_TP_LEVELS} Take Profit atteint`
       : '+ Ajouter un Take Profit';
   }
 }
@@ -1846,7 +1848,7 @@ $('addTakeProfitLevelBtn')?.addEventListener('click', () => {
   if (!params) return;
   const sym = params.symbols.XAUUSD;
   if (!sym.take_profit_levels) sym.take_profit_levels = [];
-  if (sym.take_profit_levels.length >= MAX_TAKE_PROFIT_LEVELS) return;
+  if (sym.take_profit_levels.length >= PLAN_MAX_TP_LEVELS) return;
   const last = sym.take_profit_levels[sym.take_profit_levels.length - 1] || { threshold: 0, pct: 20 };
   sym.take_profit_levels.push({ threshold: Math.round((last.threshold + 3.75) * 100) / 100, pct: 20 });
   renderTakeProfitLevels();
@@ -2093,34 +2095,63 @@ function hideLoginOverlay() {
   if (ol) ol.classList.add('hidden');
 }
 
+// Refonte du 17/07/2026 (demande de Louis, Phase 2) : applique TOUS les
+// paramètres poussés par le forfait (avant : 8 clés codées en dur), et
+// mémorise les verrous pour que la page Paramètres grise réellement les
+// champs correspondants (avant : la valeur n'était poussée qu'une fois au
+// login, sans verrou visuel — le client pouvait la remodifier aussitôt).
 async function applyPlanParamsToEngine(planParams) {
+  planParamLocks = {};
   if (!planParams || !alpha) return;
   const current = await alpha.loadParams();
   if (!current) return;
-  const get = (key, altKey) => {
-    const v = planParams[key]?.val ?? planParams[altKey]?.val;
-    return v !== undefined && v !== null && v !== '' ? v : null;
-  };
   const updated = JSON.parse(JSON.stringify(current));
-  const dailyTarget = get('daily_target', 'gain_daily');
-  if (dailyTarget !== null) updated.daily_target = parseFloat(dailyTarget);
-  const sessionLoss = get('session_max_loss', 'seuil_perte_alerte');
-  if (sessionLoss !== null) updated.session_max_loss = parseFloat(sessionLoss);
-  const confMin = get('confidence_min', 'scalping_confidence_min');
-  if (confMin !== null) {
-    for (const sym of Object.keys(updated.symbols || {})) {
-      updated.symbols[sym].confidence_min = parseFloat(confMin);
+  const symKey = updated.active_symbol || 'XAUUSD';
+  const sym = updated.symbols?.[symKey];
+
+  for (const [key, entry] of Object.entries(planParams)) {
+    const raw = entry?.val ?? entry;
+    const locked = entry?.is_locked ?? entry?.locked ?? false;
+    if (raw === undefined || raw === null || raw === '') continue;
+    if (locked) planParamLocks[key] = true;
+
+    if (key === 'take_profit_max_levels') {
+      const maxLevels = Math.max(1, Math.min(6, parseInt(raw) || 6));
+      PLAN_MAX_TP_LEVELS = maxLevels;
+      if (sym?.take_profit_levels?.length > maxLevels) {
+        sym.take_profit_levels = sym.take_profit_levels.slice(0, maxLevels);
+      }
+      continue;
+    }
+    const coerce = v => (v === 'true' || v === true) ? true : (v === 'false' || v === false) ? false
+      : (typeof v === 'string' && v.trim() !== '' && !isNaN(v)) ? parseFloat(v) : v;
+    if (Object.prototype.hasOwnProperty.call(updated, key)) {
+      updated[key] = coerce(raw);
+    } else if (sym && Object.prototype.hasOwnProperty.call(sym, key)) {
+      sym[key] = coerce(raw);
     }
   }
-  const maxPos = get('max_positions');
-  if (maxPos !== null) updated.auto_max_positions = parseInt(maxPos);
-  const rebondEnabled = get('rebond_enabled');
-  if (rebondEnabled !== null) updated.rebond_enabled = rebondEnabled === 'true' || rebondEnabled === true;
-  const rebondMax = get('rebond_max_active');
-  if (rebondMax !== null) updated.rebond_max_active = parseInt(rebondMax);
-  const capMin = get('capital_min');
-  if (capMin !== null) updated.capital_min = parseFloat(capMin);
   await alpha.saveParams(updated);
+  applyParamLocksToUI();
+}
+
+// Grise (disabled + style) les champs de la page Paramètres correspondant à
+// des paramètres verrouillés par le forfait actif. Visible mais non
+// modifiable (décision de Louis le 17/07/2026) -- jamais masqué.
+function applyParamLocksToUI() {
+  const form = $('settingsForm');
+  if (!form) return;
+  form.querySelectorAll('[name]').forEach(input => {
+    const locked = !!planParamLocks[input.name];
+    input.classList.toggle('plan-locked', locked);
+    input.disabled = locked;
+    input.title = locked ? 'Réservé aux forfaits supérieurs' : '';
+  });
+  const addBtn = $('addTakeProfitLevelBtn');
+  if (addBtn && planParamLocks['take_profit_max_levels']) {
+    addBtn.title = `Nombre de Take Profit limité par votre forfait (max ${PLAN_MAX_TP_LEVELS})`;
+  }
+  renderTakeProfitLevels();
 }
 
 async function doLogin() {

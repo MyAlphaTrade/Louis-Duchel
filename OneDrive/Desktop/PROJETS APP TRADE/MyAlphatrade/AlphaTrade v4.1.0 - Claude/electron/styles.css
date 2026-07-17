@@ -374,6 +374,12 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 .tp-level-remove { height: 30px; align-self: center; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: var(--red, #ff5c6c); cursor: pointer; }
 .tp-level-remove:hover { border-color: var(--red, #ff5c6c); }
 .tp-level-remove:disabled { opacity: .3; cursor: not-allowed; }
+
+/* Champ verrouillé par le forfait actif — visible mais non modifiable
+   (décision de Louis le 17/07/2026, Phase 2). */
+.settings-scroll input.plan-locked, .settings-scroll select.plan-locked {
+  opacity: .45; cursor: not-allowed; border-color: var(--red, #ff5c6c);
+}
 .strategy-toolbar-control {
   display: inline-flex;
   align-items: center;
