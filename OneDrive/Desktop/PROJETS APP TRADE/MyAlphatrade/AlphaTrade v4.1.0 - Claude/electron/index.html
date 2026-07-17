@@ -659,6 +659,7 @@
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title collapsible">🟦 Take Profit / BE<span class="acc-chevron">▶</span></div>
           <label class="check"><input data-sym="XAUUSD" name="take_profit_enabled" type="checkbox" id="takeProfitEnabledInput"> Activer la clôture par Take Profit <span class="info-dot" data-tip="Recréée le 17/07/2026 avec des niveaux TP explicites (seuil $ / % fermé) à la place de l'ancienne formule basée sur la cible profit. Si désactivé, c'est la carte 'Cible profit & Protection' qui gère la sortie.">ⓘ</span></label>
+          <p class="mini-help">Le % de chaque niveau porte sur le lot ENCORE OUVERT à ce moment (pas sur le lot initial) — les volumes fermés diminuent donc à chaque TP atteint.</p>
           <div id="takeProfitLevels"></div>
           <button id="addTakeProfitLevelBtn" type="button" class="add-origin-btn">+ Ajouter un Take Profit</button>
           <p class="mini-help">Break-Even</p>

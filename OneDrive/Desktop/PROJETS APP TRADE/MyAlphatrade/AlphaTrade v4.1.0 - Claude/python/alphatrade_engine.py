@@ -184,7 +184,7 @@ AI_SERVER_STATE = {
 }
 AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
-TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {orig_vol, tp_done, be_applied}}
+TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {tp_done, be_applied}}
 FAST_BE_STATE: dict[int, bool] = {}  # {ticket: True} une fois le Break-Even rapide appliqué (fast_breakeven_step)
 
 # Symboles déjà abonnés au vrai carnet d'ordres MT5 (Depth of Market) — évite de
@@ -2126,7 +2126,11 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
     Take Profit (seuil $ / % fermé), défini par l'utilisateur — jusqu'à 6
     niveaux (take_profit_levels). Remplace le 17/07/2026 l'ancien calcul par
     formule (profit_target * palier * 0.25), source de confusion avec le
-    "Palier" du trail dynamique (retiré à la même date, voir position_exit_reason)."""
+    "Palier" du trail dynamique (retiré à la même date, voir position_exit_reason).
+    Le % de chaque niveau porte sur le lot ENCORE OUVERT au moment où ce
+    niveau se déclenche (pas sur le lot initial) — décision explicite de
+    Louis le 17/07/2026 : les volumes fermés diminuent à chaque palier
+    puisque la base se réduit à chaque clôture partielle précédente."""
     global TAKE_PROFIT_STATE
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     open_tickets = {int(p.get("ticket", 0)) for p in bot_positions}
@@ -2148,10 +2152,9 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
         current_vol = float(position.get("lot") or 0)
         move_be = bool(pos_params.get("take_profit_move_be", True))
         if ticket not in TAKE_PROFIT_STATE:
-            TAKE_PROFIT_STATE[ticket] = {"orig_vol": current_vol, "tp_done": 0, "be_applied": False}
+            TAKE_PROFIT_STATE[ticket] = {"tp_done": 0, "be_applied": False}
         state = TAKE_PROFIT_STATE[ticket]
         tp_done = int(state.get("tp_done", 0))
-        orig_vol = float(state.get("orig_vol", current_vol))
         if tp_done >= len(levels):
             continue
         next_tp = tp_done + 1
@@ -2168,7 +2171,7 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
             continue
         lot_step = float(sym_info.volume_step)
         lot_min = float(sym_info.volume_min)
-        raw_vol = orig_vol * close_pct
+        raw_vol = current_vol * close_pct
         vol_to_close = round(raw_vol / lot_step) * lot_step
         vol_to_close = max(lot_min, min(vol_to_close, current_vol))
         if vol_to_close < lot_min:

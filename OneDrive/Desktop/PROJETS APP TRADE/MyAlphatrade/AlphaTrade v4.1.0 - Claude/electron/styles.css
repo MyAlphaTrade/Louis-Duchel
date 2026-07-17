@@ -224,6 +224,7 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 .positive { color: var(--green) !important; }
 .negative { color: var(--red) !important; }
 .analysis-live { flex: 0 0 42%; overflow: auto; }
+.full-analysis { flex: 0 0 220px; overflow: auto; }
 .mini-help { margin: -3px 0 9px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .signal { padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 7px; text-align: center; font-weight: 800; }
 .signal.buy { color: var(--green); border-color: var(--green); }
@@ -806,7 +807,7 @@ table.origins-table tr:hover td { background: var(--panel2); }
 }
 .settings-scroll .panel { max-height: 900px; }
 /* Certains panneaux ont un contenu géré par flex interne (chart, tableaux) — resize horizontal indésirable, on garde vertical uniquement */
-.market-panel, .tradingview-full, .recent, .positions-panel, .analysis-live, .quality { resize: vertical; }
+.market-panel, .tradingview-full, .recent, .positions-panel, .analysis-live, .quality, .full-analysis { resize: vertical; }
 
 /* Layout page trades */
 /* Layout page trades - seulement quand active */
