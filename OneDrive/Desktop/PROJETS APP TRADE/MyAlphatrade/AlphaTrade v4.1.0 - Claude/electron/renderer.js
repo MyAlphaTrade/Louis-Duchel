@@ -2185,6 +2185,7 @@ async function doLogin() {
     showPlanBadge(data.user, data.plan);
     if (data.plan && data.plan.params) applyPlanParamsToEngine(data.plan.params).catch(() => {});
     loadFullProfile();
+    loadReferral();
   } catch (e) {
     errEl.textContent = 'Impossible de contacter le serveur. Vérifiez votre connexion.';
   } finally {
@@ -2278,6 +2279,48 @@ async function loadFullProfile() {
     if (el('acInfoPhone')) el('acInfoPhone').textContent = data.phone || '—';
     if (el('acInfoCountry')) el('acInfoCountry').textContent = data.country || '—';
   } catch (_) {}
+}
+
+let acReferralLink = '';
+
+async function loadReferral() {
+  const token = sessionStorage.getItem('at_token');
+  if (!token) return;
+  try {
+    const res = await fetch(`${API_BASE}/client/referral-code`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = id => document.getElementById(id);
+    if (el('acRefCode')) el('acRefCode').textContent = data.code;
+    acReferralLink = data.share_url;
+    if (el('acRefLink')) el('acRefLink').value = acReferralLink;
+    if (el('acRefStatTotal')) el('acRefStatTotal').textContent = data.stats.total;
+    if (el('acRefStatPending')) el('acRefStatPending').textContent = Math.max(0, data.stats.total - data.stats.rewarded);
+    if (el('acRefStatRewarded')) el('acRefStatRewarded').textContent = data.stats.rewarded;
+    const qrBox = el('acRefQR');
+    if (qrBox && typeof QRCode !== 'undefined') {
+      qrBox.innerHTML = '';
+      new QRCode(qrBox, { text: acReferralLink, width: 104, height: 104, colorDark: '#111111', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }
+  } catch (_) {}
+}
+
+function flashCopyBtn(btn) {
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.textContent = '✓ Copié';
+  setTimeout(() => { btn.textContent = original; }, 1500);
+}
+
+function copyReferralCode(ev) {
+  const code = document.getElementById('acRefCode')?.textContent;
+  if (!code || code === '—') return;
+  navigator.clipboard.writeText(code).then(() => flashCopyBtn(ev && ev.target));
+}
+
+function copyReferralLink(ev) {
+  if (!acReferralLink) return;
+  navigator.clipboard.writeText(acReferralLink).then(() => flashCopyBtn(ev && ev.target));
 }
 
 async function saveProfile() {
@@ -2407,6 +2450,7 @@ async function initAuth() {
           const user = JSON.parse(sessionStorage.getItem('at_user') || '{}');
           showPlanBadge(user, data.plan);
           loadFullProfile();
+          loadReferral();
           return;
         }
       }

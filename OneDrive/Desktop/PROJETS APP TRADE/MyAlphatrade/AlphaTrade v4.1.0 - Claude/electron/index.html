@@ -840,6 +840,32 @@
           <p class="mini-help" style="margin-top:10px">Pour changer de plan, contactez le support à <strong>alphatrade.com</strong></p>
         </article>
 
+        <article class="panel account-referral-panel">
+          <div class="panel-title">🎁 Parrainez, gagnez du temps gratuit</div>
+          <p class="mini-help" style="margin:-4px 0 12px">Chaque personne qui s'inscrit avec votre code et effectue un paiement vous rapporte une récompense — validée manuellement par l'équipe AlphaTrade.</p>
+          <div class="account-referral-grid">
+            <div>
+              <div class="referral-code-box">
+                <span class="code" id="acRefCode">—</span>
+                <button class="btn-copy" onclick="copyReferralCode(event)">📋 Copier le code</button>
+              </div>
+              <div class="referral-link-row">
+                <input type="text" id="acRefLink" readonly value="">
+                <button class="btn-copy" onclick="copyReferralLink(event)">Copier le lien</button>
+              </div>
+              <div class="referral-stats">
+                <div class="referral-stat"><div class="val" id="acRefStatTotal">0</div><div class="lbl">Filleuls inscrits</div></div>
+                <div class="referral-stat"><div class="val" id="acRefStatPending">0</div><div class="lbl">En attente</div></div>
+                <div class="referral-stat"><div class="val" id="acRefStatRewarded">0</div><div class="lbl">Récompenses reçues</div></div>
+              </div>
+            </div>
+            <div class="referral-qr-wrap">
+              <div class="qr-box" id="acRefQR"></div>
+              <div class="qr-caption">Scanner pour s'inscrire</div>
+            </div>
+          </div>
+        </article>
+
         <article class="panel account-edit-panel">
           <div class="panel-title">Modifier le profil</div>
           <label class="ac-label">Nom complet</label>
@@ -885,6 +911,7 @@
       </div>
     </section>
   </main>
+  <script src="qrcode.min.js"></script>
   <script src="renderer.js"></script>
 
 <!-- ── ÉCRAN DE CONNEXION ──────────────────────────────────────────── -->
