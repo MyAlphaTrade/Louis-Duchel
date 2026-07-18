@@ -2271,6 +2271,12 @@ async function loadFullProfile() {
     if (el('acEditEmail')) el('acEditEmail').value = data.email || '';
     if (el('acEditPhone')) el('acEditPhone').value = data.phone || '';
     if (el('acEditCountry')) el('acEditCountry').value = data.country || '';
+    // Corrigé le 17/07/2026 : ces infos n'apparaissaient nulle part en
+    // lecture seule (seulement dans le formulaire d'édition, invisible tant
+    // qu'on ne l'ouvrait pas).
+    if (el('acInfoName')) el('acInfoName').textContent = data.full_name || '—';
+    if (el('acInfoPhone')) el('acInfoPhone').textContent = data.phone || '—';
+    if (el('acInfoCountry')) el('acInfoCountry').textContent = data.country || '—';
   } catch (_) {}
 }
 
@@ -2302,13 +2308,16 @@ async function saveProfile() {
     okEl.textContent = 'Profil enregistré avec succès.';
     // Mettre à jour la carte gauche et les infos héros
     const user = JSON.parse(sessionStorage.getItem('at_user') || '{}');
-    Object.assign(user, { full_name: data.user.full_name, email: data.user.email });
+    Object.assign(user, { full_name: data.user.full_name, email: data.user.email, phone: data.user.phone, country: data.user.country });
     sessionStorage.setItem('at_user', JSON.stringify(user));
     const el = id => document.getElementById(id);
     if (el('acHeroName')) el('acHeroName').textContent = data.user.full_name || data.user.email;
     if (el('acHeroEmail')) el('acHeroEmail').textContent = data.user.email;
     if (el('acEmail')) el('acEmail').textContent = data.user.email;
     if (el('acInfoEmail')) el('acInfoEmail').textContent = data.user.email;
+    if (el('acInfoName')) el('acInfoName').textContent = data.user.full_name || '—';
+    if (el('acInfoPhone')) el('acInfoPhone').textContent = data.user.phone || '—';
+    if (el('acInfoCountry')) el('acInfoCountry').textContent = data.user.country || '—';
     if (el('acEditCurrentPwd')) el('acEditCurrentPwd').value = '';
     if (el('acEditNewPwd')) el('acEditNewPwd').value = '';
   } catch (_) {
