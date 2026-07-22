@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAISettings } from "@/lib/AISettingsContext";
+import { useAlphaTradeConnection } from "@/lib/AlphaTradeConnectionContext";
 import { getAllProviders, getProvider, AI_PARAM_DEFAULTS } from "@/lib/aiProviders";
 import {
   Settings as SettingsIcon,
@@ -10,6 +11,8 @@ import {
   CheckCircle2,
   XCircle,
   Save,
+  Link2,
+  Unlink,
 } from "lucide-react";
 
 const inputCls =
@@ -23,6 +26,97 @@ function Field({ label, hint, children }) {
         {hint && <span className="text-slate-600 ml-1">{hint}</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+function AlphaTradeConnectionCard() {
+  const { connected, connectedEmail, connecting, connect, disconnect } = useAlphaTradeConnection();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+
+  const handleConnect = async (e) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await connect(email, password);
+      setPassword("");
+    } catch (err) {
+      setError(err.message || "Connexion à AlphaTrade impossible.");
+    }
+  };
+
+  return (
+    <div className="mt-6 rounded-2xl bg-[#0d1220] border border-[#1a2332] p-6 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          {connected ? <Link2 className="w-4 h-4 text-emerald-400" /> : <Link2 className="w-4 h-4 text-slate-500" />}
+          Connexion AlphaTrade
+        </h3>
+        <p className="mt-1 text-xs text-slate-400 max-w-xl">
+          Requise pour exporter des signaux depuis Export Signaux. Utilisez le même email et
+          mot de passe que sur l'application AlphaTrade — ils ne transitent que le temps de
+          cette connexion et ne sont jamais conservés ici, seul un jeton d'accès l'est.
+        </p>
+      </div>
+
+      {connected ? (
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+          <div className="flex items-center gap-2 text-xs text-emerald-400">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+            Connecté en tant que {connectedEmail}
+          </div>
+          <button
+            type="button"
+            onClick={disconnect}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0a0e17] border border-[#1a2332] text-slate-300 text-xs font-medium hover:border-[#2a3548] transition-colors"
+          >
+            <Unlink className="w-3.5 h-3.5" />
+            Se déconnecter
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleConnect} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Email AlphaTrade">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="vous@exemple.com"
+                className={inputCls}
+                autoComplete="off"
+                required
+              />
+            </Field>
+            <Field label="Mot de passe AlphaTrade">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputCls}
+                autoComplete="off"
+                required
+              />
+            </Field>
+          </div>
+          {error && (
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border text-xs bg-red-500/5 border-red-500/20 text-red-400">
+              <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={connecting || !email || !password}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-[#0a0e17] font-semibold text-sm hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 transition-all"
+          >
+            {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+            {connecting ? "Connexion…" : "Se connecter à AlphaTrade"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -257,6 +351,8 @@ export default function Settings() {
           {saved && <span className="text-xs text-emerald-400">Paramètres enregistrés.</span>}
         </div>
       </div>
+
+      <AlphaTradeConnectionCard />
     </div>
   );
 }

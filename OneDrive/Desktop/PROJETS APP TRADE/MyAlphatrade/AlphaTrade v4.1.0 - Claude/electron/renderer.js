@@ -37,6 +37,7 @@ const defaults = {
   kb1000_coherence_min_pct: 60,
   kb1000_min_confirmations: 3,
   kb1000_entry_threshold: 70,
+  external_signals_allow_real: false,
   trade_origins: [
     { name: 'AlphaTrade AI', type: 'INTERNAL_BOT', magic_numbers: [20260607], comment_keywords: ['alphatrade', 'alphakaris'], enabled: true },
     { name: 'AVA Assistant', type: 'EXTERNAL_AI', magic_numbers: [7525001], comment_keywords: ['ava', 'bridge'], enabled: true }
@@ -1814,6 +1815,7 @@ function renderTakeProfitLevels() {
       <span class="tp-level-num">TP${i + 1}</span>
       <label>Seuil $<input type="number" step="0.05" min="0.05" value="${lvl.threshold}" data-tp-field="threshold" data-tp-index="${i}"></label>
       <label>% fermé<input type="number" step="5" min="5" max="100" value="${lvl.pct}" data-tp-field="pct" data-tp-index="${i}"></label>
+      <label>Trailing $<input type="number" step="0.05" min="0" value="${lvl.trailing || 0}" data-tp-field="trailing" data-tp-index="${i}" title="Ferme ce palier si le profit retombe de ce montant depuis son pic, avant même d'atteindre le seuil. 0 = désactivé, Break-Even reste alors le seul filet de secours."></label>
       <button type="button" class="tp-level-remove" data-tp-remove="${i}" ${levels.length <= 1 ? 'disabled' : ''}>✕</button>
     </div>
   `).join('') : '<p class="mini-help">Aucun Take Profit configuré.</p>';
@@ -1849,8 +1851,8 @@ $('addTakeProfitLevelBtn')?.addEventListener('click', () => {
   const sym = params.symbols.XAUUSD;
   if (!sym.take_profit_levels) sym.take_profit_levels = [];
   if (sym.take_profit_levels.length >= PLAN_MAX_TP_LEVELS) return;
-  const last = sym.take_profit_levels[sym.take_profit_levels.length - 1] || { threshold: 0, pct: 20 };
-  sym.take_profit_levels.push({ threshold: Math.round((last.threshold + 3.75) * 100) / 100, pct: 20 });
+  const last = sym.take_profit_levels[sym.take_profit_levels.length - 1] || { threshold: 0, pct: 20, trailing: 0 };
+  sym.take_profit_levels.push({ threshold: Math.round((last.threshold + 3.75) * 100) / 100, pct: 20, trailing: 0 });
   renderTakeProfitLevels();
 });
 
@@ -1882,6 +1884,7 @@ function selectEngine(engine) {
     panel.style.display = engine === 'alphatrade_ai' ? '' : 'none';
   });
   if ($('kb1000Panel')) $('kb1000Panel').style.display = engine === 'kb1000_gold_ai' ? '' : 'none';
+  if ($('externalSignalPanel')) $('externalSignalPanel').style.display = engine === 'external_signal' ? '' : 'none';
   if (params) params.active_engine = engine;
 }
 
@@ -2181,6 +2184,7 @@ async function doLogin() {
     sessionStorage.setItem('at_token', data.token);
     sessionStorage.setItem('at_user', JSON.stringify(data.user));
     sessionStorage.setItem('at_plan', JSON.stringify(data.plan));
+    if (typeof alpha.sendSessionToken === 'function') alpha.sendSessionToken(data.token);
     hideLoginOverlay();
     showPlanBadge(data.user, data.plan);
     if (data.plan && data.plan.params) applyPlanParamsToEngine(data.plan.params).catch(() => {});
@@ -2376,6 +2380,7 @@ function doLogout() {
   sessionStorage.removeItem('at_token');
   sessionStorage.removeItem('at_user');
   sessionStorage.removeItem('at_plan');
+  if (typeof alpha.sendSessionToken === 'function') alpha.sendSessionToken(null);
   const card = document.getElementById('accountCard');
   if (card) card.style.display = 'none';
   const tbCard = document.getElementById('tbAccountCard');
@@ -2449,6 +2454,7 @@ async function initAuth() {
           hideLoginOverlay();
           const user = JSON.parse(sessionStorage.getItem('at_user') || '{}');
           showPlanBadge(user, data.plan);
+          if (typeof alpha.sendSessionToken === 'function') alpha.sendSessionToken(token);
           loadFullProfile();
           loadReferral();
           return;

@@ -46,6 +46,20 @@ CORS_ORIGINS = [
 
 PORT = int(os.environ.get("PORT", 8010))
 
+# Pont Export Signaux (Module 5) vers le backend AlphaTrade reel -- seule
+# exception deliberee a l'isolation de Strategy Lab. Aucun mot de passe ni
+# jeton AlphaTrade n'est jamais stocke ici : /alphatrade/login relaie
+# l'authentification a la volee (meme principe BYOK que /ai/generate) et
+# /alphatrade/send-signal relaie chaque envoi avec le jeton fourni par le
+# frontend a chaque appel (garde en localStorage cote client, jamais en DB).
+ALPHATRADE_API_URL = os.environ.get(
+    "ALPHATRADE_API_URL", "https://web-production-9312ae.up.railway.app"
+)
+ALPHATRADE_REQUEST_TIMEOUT = 15
+# Doit rester en phase avec ce que le backend AlphaTrade accepte reellement
+# pour la commande EXTERNAL_SIGNAL (4 - Backend API/alphatrade-backend/main.py).
+ALPHATRADE_SIGNAL_SYMBOLS = {"XAUUSD"}
+
 # Pont prix live MT5 (Module 4 / Paper Trading, mode Live). Paquet Windows
 # uniquement, et ne fonctionne que si un terminal MetaTrader 5 est installe
 # ET ouvert sur cette meme machine. L'import est protege par un try/except
@@ -823,6 +837,98 @@ def ai_generate(req: AIGenerateRequest, user=Depends(get_current_user)):
         raise HTTPException(502, "Le fournisseur IA n'a pas repondu.")
     except (KeyError, ValueError, TypeError):
         raise HTTPException(502, "Reponse inattendue du fournisseur IA.")
+
+
+# ── Export Signaux vers AlphaTrade (Module 5) ───────────────────────────────
+# Strategy Lab et AlphaTrade sont deux backends/comptes entierement separes --
+# ce proxy est le seul pont entre les deux. /alphatrade/login relaie une
+# authentification a la volee (le mot de passe ne transite que dans cet appel,
+# jamais stocke ni journalise ici) pour obtenir le jeton AlphaTrade ; le
+# frontend le garde en localStorage et le renvoie a chaque envoi de signal.
+class AlphaTradeLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AlphaTradeSendSignalRequest(BaseModel):
+    alphatrade_token: str
+    symbol: str
+    action: str  # "BUY" | "SELL" -- WAIT n'a rien a envoyer
+    entry_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    confidence: Optional[float] = None
+    strategy_name: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+def _alphatrade_error_message(status_code: Optional[int]) -> str:
+    if status_code == 401:
+        return "Connexion AlphaTrade expiree ou invalide. Reconnectez-vous depuis Parametres."
+    if status_code == 400:
+        return "AlphaTrade a refuse le signal (parametres invalides)."
+    if status_code is not None and status_code >= 500:
+        return "AlphaTrade rencontre un probleme cote serveur. Reessayez plus tard."
+    return "AlphaTrade n'a pas accepte la requete."
+
+
+@app.post("/alphatrade/login")
+def alphatrade_login(req: AlphaTradeLoginRequest, user=Depends(get_current_user)):
+    try:
+        resp = requests.post(
+            f"{ALPHATRADE_API_URL}/auth/login",
+            json={"email": req.email, "password": req.password},
+            timeout=ALPHATRADE_REQUEST_TIMEOUT,
+        )
+    except requests.RequestException:
+        raise HTTPException(502, "Impossible de joindre AlphaTrade. Reessayez plus tard.")
+
+    if not resp.ok:
+        raise HTTPException(
+            401 if resp.status_code == 401 else 502,
+            "Email ou mot de passe AlphaTrade incorrect." if resp.status_code == 401
+            else _alphatrade_error_message(resp.status_code),
+        )
+    data = resp.json()
+    return {"token": data.get("token"), "user": data.get("user")}
+
+
+@app.post("/alphatrade/send-signal")
+def alphatrade_send_signal(req: AlphaTradeSendSignalRequest, user=Depends(get_current_user)):
+    if req.action not in ("BUY", "SELL"):
+        raise HTTPException(400, "Seuls les signaux BUY ou SELL peuvent etre exportes.")
+    if req.symbol not in ALPHATRADE_SIGNAL_SYMBOLS:
+        raise HTTPException(400, f"Symbole non pris en charge par AlphaTrade : {req.symbol}")
+    if not req.alphatrade_token:
+        raise HTTPException(400, "Non connecte a AlphaTrade -- reconnectez-vous depuis Parametres.")
+
+    payload = {
+        "symbol": req.symbol,
+        "action": req.action,
+        "entry_price": req.entry_price,
+        "stop_loss": req.stop_loss,
+        "take_profit": req.take_profit,
+        "confidence": req.confidence,
+        "source": "strategy_lab",
+        "strategy_name": req.strategy_name or "",
+        "notes": req.notes or "",
+    }
+    try:
+        resp = requests.post(
+            f"{ALPHATRADE_API_URL}/device/command",
+            headers={"Authorization": f"Bearer {req.alphatrade_token}"},
+            json={"cmd": "EXTERNAL_SIGNAL", "payload": payload},
+            timeout=ALPHATRADE_REQUEST_TIMEOUT,
+        )
+    except requests.RequestException:
+        raise HTTPException(502, "Impossible de joindre AlphaTrade. Reessayez plus tard.")
+
+    if not resp.ok:
+        raise HTTPException(
+            401 if resp.status_code == 401 else 400 if resp.status_code == 400 else 502,
+            _alphatrade_error_message(resp.status_code),
+        )
+    return resp.json()
 
 
 if __name__ == "__main__":

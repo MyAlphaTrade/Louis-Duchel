@@ -26,6 +26,7 @@ import AssetManagement from '@/pages/AssetManagement';
 import AIDesigner from '@/pages/AIDesigner';
 import Settings from '@/pages/Settings';
 import { AISettingsProvider } from '@/lib/AISettingsContext';
+import { AlphaTradeConnectionProvider } from '@/lib/AlphaTradeConnectionContext';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -80,7 +81,9 @@ function App() {
           <ScrollToTop />
           <AssetProvider>
             <AISettingsProvider>
-              <AuthenticatedApp />
+              <AlphaTradeConnectionProvider>
+                <AuthenticatedApp />
+              </AlphaTradeConnectionProvider>
             </AISettingsProvider>
           </AssetProvider>
         </Router>

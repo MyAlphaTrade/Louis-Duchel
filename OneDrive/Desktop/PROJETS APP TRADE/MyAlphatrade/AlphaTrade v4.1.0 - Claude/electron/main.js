@@ -18,6 +18,91 @@ const DATA_DIR    = process.env.ALPHATRADE_DATA_DIR || path.join(os.homedir(), '
 let win    = null;
 let engine = null;
 let engineStarting = false;
+let sessionToken = null;
+
+// Appli mobile compagnon (18/07/2026) -- doit rester identique a API_BASE dans
+// renderer.js. Le process principal n'a pas acces au sessionStorage du renderer
+// (contextIsolation), d'ou le canal IPC 'session-token' qui transmet le JWT ici.
+const MOBILE_API_BASE = 'https://web-production-9312ae.up.railway.app';
+
+// Onglet Parametres mobile (19/07/2026) -- miroir de REMOTE_PARAM_ALLOWLIST cote
+// backend (4 - Backend API/alphatrade-backend/main.py). Sert a extraire le sous-
+// ensemble a envoyer dans le heartbeat et a revalider localement avant ecriture
+// (defense en profondeur -- le backend valide deja, mais on ne fait pas confiance
+// uniquement au serveur avant de toucher params.json).
+// session_max_loss est saisi en negatif (index.html:566, input max="-1") -- une
+// perte, jamais un montant positif. session_target est le vrai equivalent desktop
+// de "Objectif de session" (index.html:567) ; daily_target (:568, "Objectif
+// journalier") est un declencheur distinct, pas expose ici.
+const REMOTE_PARAM_ALLOWLIST = {
+  'session_max_loss': { type: 'float', min: -100000, max: -1 },
+  'session_target': { type: 'float', min: 1, max: 100000 },
+  'symbols.XAUUSD.take_profit_enabled': { type: 'bool' },
+  'symbols.XAUUSD.take_profit_move_be': { type: 'bool' },
+  'symbols.XAUUSD.take_profit_levels': { type: 'tp_levels', maxLevels: 6 },
+  'symbols.XAUUSD.profit_trailing_giveback': { type: 'float', min: 0, max: 100000 },
+};
+
+// Valeurs par defaut du moteur Python (python/alphatrade_engine.py:51-138,
+// DEFAULT_PARAMS) -- params.json sur disque ne contient que ce que l'utilisateur a
+// explicitement modifie via l'UI ; sans ce miroir, un champ jamais touche localement
+// remonterait "vide" au mobile alors qu'une vraie valeur par defaut est bel et bien
+// active cote moteur. Seuls les champs de REMOTE_PARAM_ALLOWLIST sont dupliques ici.
+const ALPHATRADE_DEFAULT_PARAMS = {
+  session_max_loss: -150.0,
+  session_target: 25.0,
+  symbols: {
+    XAUUSD: {
+      take_profit_enabled: false,
+      take_profit_move_be: true,
+      take_profit_levels: [
+        { threshold: 3.75, pct: 25, trailing: 0.0 },
+        { threshold: 7.50, pct: 25, trailing: 0.0 },
+        { threshold: 11.25, pct: 25, trailing: 0.0 },
+      ],
+      profit_trailing_giveback: 0.0,
+    },
+  },
+};
+
+function deepMerge(base, override) {
+  const out = { ...base };
+  for (const k of Object.keys(override || {})) {
+    if (override[k] && typeof override[k] === 'object' && !Array.isArray(override[k]) && typeof out[k] === 'object') {
+      out[k] = deepMerge(out[k], override[k]);
+    } else {
+      out[k] = override[k];
+    }
+  }
+  return out;
+}
+
+function getPath(obj, path) {
+  return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (typeof cur[keys[i]] !== 'object' || cur[keys[i]] === null) cur[keys[i]] = {};
+    cur = cur[keys[i]];
+  }
+  cur[keys[keys.length - 1]] = value;
+}
+
+function validateRemoteParam(key, value) {
+  const spec = REMOTE_PARAM_ALLOWLIST[key];
+  if (!spec) return false;
+  if (spec.type === 'bool') return typeof value === 'boolean';
+  if (spec.type === 'float') return typeof value === 'number' && value >= spec.min && value <= spec.max;
+  if (spec.type === 'tp_levels') {
+    return Array.isArray(value) && value.length <= spec.maxLevels &&
+      value.every(lvl => lvl && typeof lvl.threshold === 'number' && lvl.threshold > 0 &&
+        typeof lvl.pct === 'number' && lvl.pct >= 0 && lvl.pct <= 100);
+  }
+  return false;
+}
 
 /* ── Utilitaires ──────────────────────────────────── */
 
@@ -57,7 +142,9 @@ function flattenBaskets(data) {
 function translateStatus(s) {
   if (!s) return {};
   // Le moteur v4 écrit déjà simulated_decision/analysis/protection — retour direct
-  if (s.simulated_decision && s.analysis && s.protection) return s;
+  // (le champ "version" du moteur Python est une constante figée à part, jamais
+  // synchronisée avec package.json -- on l'écrase toujours par la vraie version Electron)
+  if (s.simulated_decision && s.analysis && s.protection) return { ...s, version: APP_VERSION };
 
   // Fallback pour états sans structure complète (warmup initial, erreur)
   const state   = s.state || 'disconnected';
@@ -206,6 +293,102 @@ function startEngine() {
   engineStarting = false;
 }
 
+/* Heartbeat vers le backend (appli mobile compagnon) -- pousse le statut local et
+   recoit en retour la prochaine commande a distance en attente, s'il y en a une.
+   Ne fait rien tant qu'aucun utilisateur n'est connecte (sessionToken null). */
+async function syncDeviceStatus() {
+  if (!sessionToken) return;
+  const status = readJSON('status.json', null);
+  if (!status) return;
+  // Le champ "version" de status.json vient du moteur Python (constante figee, jamais
+  // synchronisee avec package.json) -- on l'ecrase par la vraie version Electron avant
+  // de synchroniser vers le mobile, meme correction que translateStatus() cote UI desktop.
+  status.version = APP_VERSION;
+  // Calendrier mobile (19/07/2026) -- pas de nouvel endpoint : le backend traite deja
+  // "status" comme un blob opaque (device_status.status_json), donc on y ajoute le
+  // resume calendrier tel quel plutot que d'inventer une 3e synchro.
+  status.calendar = readJSON('calendar_data.json', { daily: {}, alltime: {} });
+  const currentParams = deepMerge(ALPHATRADE_DEFAULT_PARAMS, readJSON('params.json', {}) || {});
+  const params = {};
+  for (const key of Object.keys(REMOTE_PARAM_ALLOWLIST)) {
+    const v = getPath(currentParams, key);
+    if (v !== undefined) params[key] = v;
+  }
+  let res;
+  try {
+    res = await fetch(`${MOBILE_API_BASE}/device/heartbeat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ product: 'alphatrade', machine_id: os.hostname(), status, params }),
+    });
+  } catch { return; }
+  if (!res.ok) return;
+  const data = await res.json().catch(() => null);
+  const cmd = data?.pending_command;
+  if (!cmd) return;
+
+  if (cmd.cmd === 'START') startEngine();
+  if (cmd.cmd === 'STOP') {
+    try { engine?.kill(); } catch {}
+    engine = null;
+    win?.webContents.send('status-update', { state: 'disconnected', version: APP_VERSION });
+  }
+  // SET_MODE n'a pas d'equivalent direct cote AlphaTrade (ENABLE_TRADING/DISABLE_TRADING
+  // gerent deja le demo/reel localement) -- seul START/STOP est honore a distance ici.
+  if (cmd.cmd === 'SET_PARAM') {
+    const { key, value } = cmd.payload || {};
+    if (key && validateRemoteParam(key, value)) {
+      const merged = readJSON('params.json', {}) || {};
+      setPath(merged, key, value);
+      writeJSON('params.json', merged);
+    }
+  }
+  // Export Signaux (Strategy Lab, 22/07/2026) -- depose le signal tel quel pour
+  // que le moteur Python le consomme au prochain tick (external_signal_entry_decision,
+  // python/alphatrade_engine.py). Le desktop ne decide jamais lui-meme d'ouvrir une
+  // position ici : il ne fait que transmettre, exactement comme pour SET_PARAM.
+  // La validation du contenu (symbole/action/prix) a deja ete faite par le backend
+  // AlphaTrade avant d'accepter la commande -- pas de revalidation necessaire ici.
+  if (cmd.cmd === 'EXTERNAL_SIGNAL' && cmd.payload && cmd.payload.symbol && cmd.payload.action) {
+    writeJSON('external_signal.json', {
+      ...cmd.payload,
+      received_at: Date.now(),
+      consumed: false,
+    });
+  }
+
+  try {
+    await fetch(`${MOBILE_API_BASE}/device/command/ack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ command_id: cmd.id }),
+    });
+  } catch {}
+}
+
+/* Historique des trades vers le backend (appli mobile compagnon) -- trades.json n'est
+   jamais lu par le heartbeat (trop volumineux) ; on pousse seulement les dernieres
+   clotures a un rythme plus lent. Dedup geree cote serveur (UNIQUE user_id/product/
+   trade_key), pas besoin de suivre un curseur ici. */
+async function syncTradeHistory() {
+  if (!sessionToken) return;
+  const data = readJSON('trades.json', { trades: [] });
+  const closed = (data.trades || []).filter(t => t.status === 'CLOSED').slice(-20);
+  if (!closed.length) return;
+  const trades = closed.map(t => ({
+    trade_key: String(t.id ?? t.ticket ?? ''),
+    closed_at: t.close_time || '',
+    ...t,
+  }));
+  try {
+    await fetch(`${MOBILE_API_BASE}/device/trades`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ product: 'alphatrade', trades }),
+    });
+  } catch {}
+}
+
 function disableTradingOnExit() {
   const state = readJSON('trading_state.json', {}) || {};
   writeJSON('trading_state.json', {
@@ -233,6 +416,9 @@ function createWindow() {
     }
   });
   win.loadFile(path.join(__dirname, 'index.html'));
+  win.webContents.on('did-finish-load', () => {
+    win?.webContents.send('status-update', { version: APP_VERSION });
+  });
 }
 
 /* ── Surveillance fichiers data ───────────────────── */
@@ -298,6 +484,12 @@ ipcMain.on('open-external',   (_, url) => { if (url && url.startsWith('https://'
 ipcMain.on('update-download', ()      => { autoUpdater?.downloadUpdate().catch(() => {}); });
 ipcMain.on('update-install',  ()      => { autoUpdater?.quitAndInstall(); });
 
+ipcMain.on('session-token', (_, token) => {
+  sessionToken = token || null;
+  if (sessionToken) writeJSON('session.json', { token: sessionToken });
+  else { try { fs.unlinkSync(path.join(DATA_DIR, 'session.json')); } catch {} }
+});
+
 ipcMain.on('alpha-command', (_, msg) => {
   ensureDir(DATA_DIR);
   if (msg.cmd === 'START_MONITOR') startEngine();
@@ -339,6 +531,9 @@ app.whenReady().then(() => {
   ensureDir(DATA_DIR);
   disableTradingOnExit();
   writeJSON('command.json', { command: 'NONE', payload: {}, timestamp: 0 });
+  sessionToken = readJSON('session.json', {})?.token || null;
+  setInterval(() => syncDeviceStatus().catch(() => {}), 20000);
+  setInterval(() => syncTradeHistory().catch(() => {}), 60000);
 
   const staleStatus = readJSON('status.json', null);
   if (staleStatus?.version && staleStatus.version !== APP_VERSION) {

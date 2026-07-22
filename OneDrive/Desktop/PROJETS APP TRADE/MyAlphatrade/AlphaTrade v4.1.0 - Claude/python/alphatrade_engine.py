@@ -29,6 +29,7 @@ from market_smart_money import (
 )
 from market_confirmations import confirmations as kb6_confirmations_check
 from market_decision import decision_score
+import calendar_tracker
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
@@ -56,6 +57,14 @@ DEFAULT_PARAMS = {
     "kb1000_candles_per_level": 160,
     "kb1000_coherence_min_pct": 60.0,
     "kb1000_min_confirmations": 3,
+    # Export Signaux (Strategy Lab, 22/07/2026) -- desactive par defaut, et
+    # jamais expose dans REMOTE_PARAM_ALLOWLIST (electron/main.js) : ne peut
+    # etre change que localement, depuis Parametres sur ce PC. Sans ce garde-
+    # fou, un signal externe pourrait ouvrir une position REELLE des que
+    # active_engine="external_signal" est choisi -- meme si Strategy Lab ou
+    # le pont d'authentification etaient un jour compromis.
+    "external_signals_allow_real": False,
+    "external_signal_max_age_sec": 180,
     "trade_origins": [
         {"name": "AlphaTrade AI", "type": "INTERNAL_BOT", "magic_numbers": [MAGIC],
          "comment_keywords": ["alphatrade", "alphakaris"], "enabled": True},
@@ -118,6 +127,7 @@ DEFAULT_PARAMS = {
             "momentum_exit_score": 55,
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
+            "profit_trailing_giveback": 0.0,
             "signal_reversal_margin": 99,
             "cooldown_after_loss_sec": 30,
             "session_filter_enabled": False,
@@ -126,9 +136,9 @@ DEFAULT_PARAMS = {
             "stop_before_end_min": 10,
             "take_profit_enabled": False,
             "take_profit_levels": [
-                {"threshold": 3.75, "pct": 25},
-                {"threshold": 7.50, "pct": 25},
-                {"threshold": 11.25, "pct": 25},
+                {"threshold": 3.75, "pct": 25, "trailing": 0.0},
+                {"threshold": 7.50, "pct": 25, "trailing": 0.0},
+                {"threshold": 11.25, "pct": 25, "trailing": 0.0},
             ],
             "take_profit_move_be": True,
             "lot_multiplicateur_renfort": 1.0,
@@ -1030,6 +1040,58 @@ def kb1000_gold_ai_entry_decision(symbol: str, symbol_key: str, params: dict) ->
     }
 
 
+def external_signal_entry_decision(symbol_key: str, params: dict) -> dict:
+    """Construit une decision compatible avec le format 'simulated_decision'
+    a partir du dernier signal recu de Strategy Lab (electron/main.js ecrit
+    external_signal.json quand une commande EXTERNAL_SIGNAL arrive au
+    heartbeat). Un signal est consomme une seule fois (marque consumed=True
+    apres lecture) pour ne pas rouvrir/re-fermer une position a chaque tick
+    tant qu'aucun nouveau signal n'arrive -- WAIT entre deux signaux."""
+    empty = {
+        "symbol": symbol_key, "signal": "WAIT", "confidence": 0, "eligible": False,
+        "reason": "Aucun signal externe recent de Strategy Lab.", "engine": "external_signal",
+    }
+    data = read_json("external_signal.json", None)
+    if not data or data.get("consumed"):
+        return empty
+
+    max_age = float(params.get("external_signal_max_age_sec", 180))
+    received_at = data.get("received_at")
+    age_sec = (time.time() * 1000 - received_at) / 1000 if received_at else max_age + 1
+    if age_sec > max_age:
+        return {**empty, "reason": f"Signal externe trop ancien ({age_sec:.0f}s), ignore."}
+
+    if data.get("symbol") != symbol_key:
+        return {**empty, "reason": f"Signal externe pour {data.get('symbol')}, symbole actif {symbol_key}."}
+
+    action = data.get("action")
+    if action not in ("BUY", "SELL"):
+        return empty
+
+    # Un seul declenchement par signal recu : on le marque consomme
+    # immediatement, y compris si le mode REEL le neutralise plus haut dans
+    # status_payload() -- sinon un signal REEL ignore une fois reviendrait
+    # WAIT->BUY->WAIT en boucle a chaque tick tant qu'aucun nouveau signal
+    # n'arrive, au lieu de rester WAIT proprement.
+    write_json("external_signal.json", {**data, "consumed": True})
+
+    confidence = data.get("confidence")
+    confidence = float(confidence) if isinstance(confidence, (int, float)) else 100.0
+    strategy_name = data.get("strategy_name") or "Strategy Lab"
+    # entry_price/stop_loss/take_profit sont conserves pour affichage/journalisation
+    # uniquement -- comme pour KB1000 Gold AI, la decision d'entree ne fait que
+    # choisir la direction (BUY/SELL) ; le lot, le stop-loss et le take-profit
+    # reels restent entierement calcules par le pipeline commun existant
+    # (lot_info, symbol_params), jamais par la source du signal.
+    return {
+        "symbol": symbol_key, "signal": action, "confidence": confidence,
+        "eligible": True, "engine": "external_signal",
+        "reason": f"Signal externe Strategy Lab: {strategy_name} ({confidence:.0f}%).",
+        "entry_price": data.get("entry_price"), "stop_loss": data.get("stop_loss"),
+        "take_profit": data.get("take_profit"),
+    }
+
+
 ENGINE_REGISTRY = {
     "alphatrade_ai": {
         "label": "AlphaTrade AI",
@@ -1047,6 +1109,15 @@ ENGINE_REGISTRY = {
             "multi_timeframe": True, "ema_rsi_macd": True, "smart_money": True,
             "fibonacci": True, "zones_institutionnelles": True, "ia_locale": True,
             "ia_cloud": True, "memoire": False, "lot_auto": True, "tp_paliers": True, "break_even_reel": True,
+        },
+    },
+    "external_signal": {
+        "label": "Strategy Lab (signaux externes)",
+        "description": "Decision d'entree pilotee par les signaux BUY/SELL exportes depuis AlphaTrade Strategy Lab. En mode REEL, n'ouvre une position que si \"Accepter les signaux externes en mode reel\" est active dans Parametres.",
+        "capabilities": {
+            "multi_timeframe": False, "ema_rsi_macd": False, "smart_money": False,
+            "fibonacci": False, "zones_institutionnelles": False, "ia_locale": False,
+            "ia_cloud": False, "memoire": False, "lot_auto": False, "tp_paliers": False, "break_even_reel": False,
         },
     },
 }
@@ -1393,6 +1464,14 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params:
             "status": "CLOSED",
             "move": round((close_price - entry["open_price"]) if entry["direction"] == "BUY" else (entry["open_price"] - close_price), 2),
         }
+        # Calendrier (Dashboard mobile + Calendrier desktop) : sync_history() rescanne
+        # jusqu'a `days` jours de deals MT5 a CHAQUE tick (pas un flux d'evenements
+        # "nouveau trade"), donc sans ce garde-fou un meme trade serait recompte a
+        # chaque re-scan. On ne verifie/enregistre qu'AVANT l'upsert -- si la ligne
+        # existe deja, ce trade a deja ete compte dans calendar_data.json.
+        already_recorded = conn.execute("SELECT 1 FROM trades WHERE id=?", (trade["id"],)).fetchone()
+        if not already_recorded:
+            calendar_tracker.record_trade(trade["symbol_key"], trade["profit"])
         conn.execute(
             """
             INSERT OR REPLACE INTO trades
@@ -2158,7 +2237,7 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
         current_vol = float(position.get("lot") or 0)
         move_be = bool(pos_params.get("take_profit_move_be", True))
         if ticket not in TAKE_PROFIT_STATE:
-            TAKE_PROFIT_STATE[ticket] = {"tp_done": 0, "be_applied": False}
+            TAKE_PROFIT_STATE[ticket] = {"tp_done": 0, "be_applied": False, "level_peak": 0.0}
         state = TAKE_PROFIT_STATE[ticket]
         tp_done = int(state.get("tp_done", 0))
         if tp_done >= len(levels):
@@ -2167,7 +2246,27 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
         level = levels[tp_done]
         trigger = float(level.get("threshold", 0) or 0)
         close_pct = max(0.0, min(100.0, float(level.get("pct", 0) or 0))) / 100.0
-        if trigger <= 0 or close_pct <= 0 or profit < trigger:
+        if trigger <= 0 or close_pct <= 0:
+            continue
+        # Trailing par palier (22/07/2026, demande de Louis) : suit le pic de
+        # profit atteint AVANT que ce palier ne soit touché (level_peak, remis
+        # à zéro à chaque palier franchi — pas le pic de toute la position,
+        # qui inclurait les paliers déjà fermés) et ferme le même % que ce
+        # palier aurait fermé si le profit retombe de "trailing" $ depuis ce
+        # pic, sans attendre le seuil complet. Le Break-Even (BE rapide ou
+        # après 1er TP) reste le filet de secours : il ne sert que si aucun
+        # trailing n'a été configuré sur ce palier ou si le retournement va
+        # plus vite que la vérification (tick suivant).
+        level_trailing = max(0.0, float(level.get("trailing", 0) or 0))
+        level_peak = max(float(state.get("level_peak", 0) or 0), profit)
+        state["level_peak"] = level_peak
+        hit_threshold = profit >= trigger
+        hit_trailing = (
+            level_trailing > 0
+            and 0 < level_peak < trigger
+            and profit <= level_peak - level_trailing
+        )
+        if not hit_threshold and not hit_trailing:
             continue
         symbol = symbol_names.get(symbol_key)
         if not symbol:
@@ -2183,6 +2282,7 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
         if vol_to_close < lot_min:
             log(f"[TP{next_tp}] Volume {vol_to_close:.2f} < minimum {lot_min}, TP ignoré.", "WARNING")
             state["tp_done"] = next_tp
+            state["level_peak"] = 0.0
             continue
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
@@ -2206,9 +2306,11 @@ def take_profit_step(positions: list[dict], params: dict, symbol_names: dict[str
         }
         if ok:
             state["tp_done"] = next_tp
+            state["level_peak"] = 0.0
+            trigger_note = "trailing" if hit_trailing and not hit_threshold else f"seuil {trigger:.2f}$"
             log(
                 f"[TP{next_tp}/{len(levels)}] Fermeture partielle {int(close_pct*100)}%"
-                f" ({vol_to_close:.2f} lot) à +{profit:.2f}$ | {symbol_key}",
+                f" ({vol_to_close:.2f} lot) à +{profit:.2f}$ ({trigger_note}) | {symbol_key}",
                 "SUCCESS",
             )
             if next_tp == 1 and move_be and not state.get("be_applied"):
@@ -2373,6 +2475,18 @@ def position_exit_reason(
     # profit, cf. carte "Cible profit & Protection" : "Cible profit $" ne
     # sert de cible broker que si Take Profit est désactivé).
     if not bool(pos_params.get("take_profit_enabled", False)):
+        # Trailing de la cible de profit (22/07/2026, demande de Louis) : sans
+        # cela, une position qui devient positive sans jamais atteindre
+        # "Cible profit $" continue de courir jusqu'au retournement complet,
+        # rien ne la ferme entre-temps. Dès que le pic (peak, position entière)
+        # a dépassé "Profit min. sortie $", on suit ce pic ; si le profit
+        # retombe de "profit_trailing_giveback" $ depuis ce pic, on ferme
+        # immédiatement — sans attendre max_hold_sec, contrairement à TARGET
+        # ci-dessous, puisqu'il s'agit ici de sécuriser un profit déjà acquis,
+        # pas d'attendre que la cible complète soit atteinte.
+        trailing_giveback = max(0.0, float(pos_params.get("profit_trailing_giveback", 0) or 0))
+        if trailing_giveback > 0 and peak >= min_positive_exit and profit <= peak - trailing_giveback:
+            return "PROFIT_TRAILING"
         if age >= max(review_sec, int(pos_params.get("max_hold_sec", 45))) and profit >= float(
             pos_params.get("profit_target", 0.50)
         ):
@@ -3297,6 +3411,24 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         # bascule entièrement sur KB1000 Gold AI — aucune ligne du bloc AlphaTrade AI
         # n'est modifiée, seule la décision finale utilisée par auto_trade_step change.
         simulated_decision = kb1000_gold_ai_entry_decision(symbol_names.get(active, ""), active, params)
+    elif active_engine == "external_signal":
+        # Garde-fou valide avec Louis (22/07/2026) : un signal externe ne peut
+        # ouvrir une vraie position en mode REEL que si external_signals_allow_real
+        # est actif -- ce parametre n'est jamais dans REMOTE_PARAM_ALLOWLIST
+        # (electron/main.js), donc uniquement modifiable localement sur ce PC.
+        is_real_mode = bool(account) and not ("demo" in str(account.server).lower() or int(account.trade_mode) == 0)
+        if is_real_mode and not bool(params.get("external_signals_allow_real", False)):
+            # Consomme quand meme le signal en attente (sinon il resterait en
+            # file et se declencherait plus tard si le parametre est active),
+            # mais ne l'utilise jamais pour decider une entree en mode REEL.
+            external_signal_entry_decision(active, params)
+            simulated_decision = {
+                "symbol": active, "signal": "WAIT", "confidence": 0, "eligible": False,
+                "reason": "Signaux externes desactives en mode reel (activez-le dans Parametres).",
+                "engine": "external_signal",
+            }
+        else:
+            simulated_decision = external_signal_entry_decision(active, params)
     return {
         "version": VERSION,
         "state": "connected" if account else "disconnected",

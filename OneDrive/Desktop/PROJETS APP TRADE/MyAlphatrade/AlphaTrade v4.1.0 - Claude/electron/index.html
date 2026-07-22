@@ -52,19 +52,27 @@
     </div>
   </header>
 
-  <!-- Bannière mise à jour automatique -->
+  <!-- Notification mise à jour automatique — superposée par-dessus tout, y compris l'écran de connexion (demande de Louis le 22/07/2026 : visible dès le lancement, avant même de se connecter) -->
   <div id="updateBanner" class="update-banner" style="display:none">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-    <span id="updateBannerText">Mise à jour disponible</span>
-    <div id="updateProgressWrap" class="update-progress-wrap" style="display:none">
-      <div id="updateProgressFill" class="update-progress-fill"></div>
+    <div class="update-banner-card">
+      <div class="update-banner-head">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" style="flex-shrink:0"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        <strong>Mise à jour disponible</strong>
+        <button class="update-dismiss-btn" onclick="document.getElementById('updateBanner').style.display='none'" title="Ignorer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p id="updateBannerText" class="update-banner-desc">Mise à jour disponible</p>
+      <div id="updateProgressWrap" class="update-progress-wrap" style="display:none">
+        <div id="updateProgressFill" class="update-progress-fill"></div>
+      </div>
+      <span id="updateProgressPct" style="display:none;font-size:11px;color:var(--muted);margin:0 0 10px;display:block">0%</span>
+      <div class="update-banner-actions">
+        <button id="updateDownloadBtn" class="update-action-btn" onclick="window.startUpdateDownload()">Télécharger la mise à jour</button>
+        <button id="updateInstallBtn" class="update-action-btn update-install-btn" style="display:none" onclick="window.installUpdate()">Redémarrer et installer</button>
+        <button class="update-dismiss-secondary" onclick="document.getElementById('updateBanner').style.display='none'">Plus tard</button>
+      </div>
     </div>
-    <span id="updateProgressPct" style="display:none;font-size:11px;color:#a0b0c0;min-width:30px">0%</span>
-    <button id="updateDownloadBtn" class="update-action-btn" onclick="window.startUpdateDownload()">Télécharger</button>
-    <button id="updateInstallBtn" class="update-action-btn update-install-btn" style="display:none" onclick="window.installUpdate()">Redémarrer et installer</button>
-    <button class="update-dismiss-btn" onclick="document.getElementById('updateBanner').style.display='none'" title="Ignorer">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
   </div>
 
   <section class="metrics">
@@ -486,6 +494,7 @@
           <select name="active_engine" id="activeEngineSelect" class="visually-hidden" tabindex="-1" aria-hidden="true">
             <option value="alphatrade_ai">AlphaTrade AI</option>
             <option value="kb1000_gold_ai">KB1000 Gold AI</option>
+            <option value="external_signal">Strategy Lab (signaux externes)</option>
           </select>
           <div class="engine-cards">
             <div class="engine-card" data-engine="alphatrade_ai">
@@ -502,6 +511,13 @@
               <div class="chips">
                 <span class="chip on">Multi-TF D1→M1</span><span class="chip on">Smart Money</span><span class="chip on">Fibonacci</span>
                 <span class="chip on">Zones</span>
+              </div>
+            </div>
+            <div class="engine-card" data-engine="external_signal">
+              <div class="en-name">⭐ Strategy Lab (signaux externes)</div>
+              <div class="en-desc">Direction d'entrée pilotée par les signaux BUY/SELL exportés depuis AlphaTrade Strategy Lab. Lot, stop-loss et take-profit restent calculés par AlphaTrade, comme pour les deux autres moteurs.</div>
+              <div class="chips">
+                <span class="chip on">Signaux externes</span>
               </div>
             </div>
             <div class="engine-card future">
@@ -625,6 +641,13 @@
           <p class="mini-help">Simplification du 16/07/2026 : KB1000 (KB1-KB7) n'est plus qu'une source de signal — une fois BUY/SELL décidé ici, le lot, le TP, le trailing et les protections sont exactement les mêmes qu'AlphaTrade AI (blocs ci-dessus/dessous, désormais partagés). L'ancienne gestion de sortie dédiée (KB8) est retirée de l'exécution.</p>
         </article>
 
+        <!-- 🟦 Strategy Lab (signaux externes) — Réglages (génération du signal seulement, l'exécution est partagée) -->
+        <article class="panel settings-full-width risk-session-panel" id="externalSignalPanel" style="display:none;">
+          <div class="panel-title collapsible">🟦 Strategy Lab (signaux externes) — Réglages<span class="acc-chevron">▶</span></div>
+          <label class="check"><input name="external_signals_allow_real" type="checkbox"> Accepter les signaux externes en mode réel <span class="info-dot" data-tip="Désactivé par défaut. Tant que cette case est décochée, un signal reçu de Strategy Lab n'ouvre jamais de position en compte réel (il reste sans effet) — seuls les comptes démo/observation en tiennent compte. Ce réglage n'est modifiable que depuis cet ordinateur, jamais à distance.">ⓘ</span></label>
+          <p class="mini-help">Le signal (BUY/SELL) ne fait que choisir la direction d'entrée — le lot, le stop-loss et le take-profit réels restent entièrement calculés par AlphaTrade, exactement comme pour AlphaTrade AI et KB1000 Gold AI. Un signal expire de lui-même après quelques minutes s'il n'est pas consommé.</p>
+        </article>
+
         <!-- 🟦 Take Profit / BE (recréée le 17/07/2026 — remplace l'ancien "Palier", qui n'était pas des Take Profit et prêtait à confusion) -->
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title collapsible">🟦 Take Profit / BE<span class="acc-chevron">▶</span></div>
@@ -646,6 +669,7 @@
           <label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil — dernier filet de sécurité universel, partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Profit min. sortie $ <span class="info-dot" data-tip="Profit minimum requis pour autoriser une sortie sur signal inversé — universel.">ⓘ</span><input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Score momentum sortie <span class="info-dot" data-tip="Sort la position si le score du sens opposé dépasse ce seuil — universel.">ⓘ</span><input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
+          <label>Trailing profit $ <span class="info-dot" data-tip="Actif uniquement si Take Profit est désactivé (carte ci-dessus). Dès que le pic de profit dépasse 'Profit min. sortie $', suit ce pic ; ferme immédiatement si le profit retombe de ce montant depuis le pic — sans attendre 'Cible profit $' ni 'Max hold'. 0 = désactivé (comportement précédent).">ⓘ</span><input data-sym="XAUUSD" name="profit_trailing_giveback" type="number" min="0" step="0.01"></label>
           <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Ce bloc est partagé entre les deux moteurs — quelle que soit la source du signal d'entrée (AlphaTrade AI ou KB1000), la sortie suit exactement les mêmes règles.</p>
         </article>
         </div>

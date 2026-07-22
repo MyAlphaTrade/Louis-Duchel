@@ -201,6 +201,56 @@ const marketData = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Pont AlphaTrade (Export Signaux, Module 5) -- seule exception deliberee a
+// l'isolation de Strategy Lab. Le jeton AlphaTrade est garde en localStorage
+// (jamais envoye ailleurs qu'a notre propre backend, qui le relaie tel quel)
+// exactement comme la cle API IA dans AISettingsContext -- meme principe BYOK,
+// rien n'est jamais stocke cote serveur Strategy Lab.
+// ---------------------------------------------------------------------------
+
+const ALPHATRADE_TOKEN_KEY = 'strategylab_alphatrade_token';
+
+function getAlphaTradeToken() {
+  try {
+    return localStorage.getItem(ALPHATRADE_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setAlphaTradeToken(token) {
+  try {
+    if (token) localStorage.setItem(ALPHATRADE_TOKEN_KEY, token);
+    else localStorage.removeItem(ALPHATRADE_TOKEN_KEY);
+  } catch {
+    // localStorage indisponible -- on ignore.
+  }
+}
+
+const alphatrade = {
+  isConnected: () => !!getAlphaTradeToken(),
+  disconnect: () => setAlphaTradeToken(null),
+  async login(email, password) {
+    const data = await apiFetch('/alphatrade/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (data?.token) setAlphaTradeToken(data.token);
+    return data?.user ?? null;
+  },
+  async sendSignal(signal) {
+    const alphatrade_token = getAlphaTradeToken();
+    if (!alphatrade_token) {
+      throw apiError(401, null, "Non connecte a AlphaTrade -- reconnectez-vous depuis Parametres.");
+    }
+    return apiFetch('/alphatrade/send-signal', {
+      method: 'POST',
+      body: JSON.stringify({ ...signal, alphatrade_token }),
+    });
+  },
+};
+
 export const base44 = {
   auth: {
     me,
@@ -217,6 +267,7 @@ export const base44 = {
     hasToken: () => !!getToken(),
   },
   marketData,
+  alphatrade,
   entities: {
     TradingAsset: makeEntityClient('TradingAsset'),
     Strategy: makeEntityClient('Strategy'),
