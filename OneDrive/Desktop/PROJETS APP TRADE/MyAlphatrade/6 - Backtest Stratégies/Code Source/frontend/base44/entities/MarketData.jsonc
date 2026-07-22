@@ -1,0 +1,45 @@
+{
+  "name": "MarketData",
+  "type": "object",
+  "properties": {
+    "symbol": {
+      "type": "string",
+      "default": "XAUUSD"
+    },
+    "timeframe": {
+      "type": "string",
+      "enum": [
+        "M1",
+        "M5",
+        "M15",
+        "H1",
+        "H4",
+        "D1"
+      ]
+    },
+    "open": {
+      "type": "number"
+    },
+    "high": {
+      "type": "number"
+    },
+    "low": {
+      "type": "number"
+    },
+    "close": {
+      "type": "number"
+    },
+    "volume": {
+      "type": "number"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "symbol",
+    "timeframe",
+    "timestamp"
+  ]
+}

@@ -1,0 +1,188 @@
+// Asset metadata registry — styles, icons, categories, timeframes.
+// Assets themselves are stored in the TradingAsset entity (database).
+// To add a new asset, use the "Gestion des actifs" page — no code changes needed.
+
+import {
+  CandlestickChart,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  DollarSign,
+  Coins,
+  Bitcoin,
+  LineChart,
+  BarChart3,
+  Globe,
+  Zap,
+  Flame,
+  Gem,
+  Banknote,
+  Percent,
+  ArrowUpDown,
+  Layers,
+  CircleDollarSign,
+} from "lucide-react";
+
+export const ASSET_CATEGORIES = [
+  "Métaux",
+  "Forex",
+  "Indices synthétiques",
+  "Indices boursiers",
+  "Indices de volatilité",
+  "Crypto-monnaies",
+  "Matières premières",
+  "Actions",
+];
+
+export const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
+
+export const ASSET_ICONS = {
+  CandlestickChart,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  DollarSign,
+  Coins,
+  Bitcoin,
+  LineChart,
+  BarChart3,
+  Globe,
+  Zap,
+  Flame,
+  Gem,
+  Banknote,
+  Percent,
+  ArrowUpDown,
+  Layers,
+  CircleDollarSign,
+};
+
+export const getAssetIcon = (name) => ASSET_ICONS[name] || TrendingUp;
+
+export const ASSET_COLORS = [
+  "amber",
+  "emerald",
+  "rose",
+  "violet",
+  "blue",
+  "cyan",
+  "orange",
+  "pink",
+  "indigo",
+  "teal",
+  "lime",
+  "fuchsia",
+];
+
+export const ASSET_STYLES = {
+  amber: {
+    dot: "bg-amber-400",
+    text: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    ring: "ring-amber-500/30",
+    gradient: "from-amber-500/20 to-amber-600/5",
+    solid: "bg-amber-500 text-[#0a0e17]",
+  },
+  emerald: {
+    dot: "bg-emerald-400",
+    text: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/20",
+    ring: "ring-emerald-500/30",
+    gradient: "from-emerald-500/20 to-emerald-600/5",
+    solid: "bg-emerald-500 text-[#0a0e17]",
+  },
+  rose: {
+    dot: "bg-rose-400",
+    text: "text-rose-400",
+    bg: "bg-rose-500/10",
+    border: "border-rose-500/20",
+    ring: "ring-rose-500/30",
+    gradient: "from-rose-500/20 to-rose-600/5",
+    solid: "bg-rose-500 text-[#0a0e17]",
+  },
+  violet: {
+    dot: "bg-violet-400",
+    text: "text-violet-400",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/20",
+    ring: "ring-violet-500/30",
+    gradient: "from-violet-500/20 to-violet-600/5",
+    solid: "bg-violet-500 text-[#0a0e17]",
+  },
+  blue: {
+    dot: "bg-blue-400",
+    text: "text-blue-400",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/20",
+    ring: "ring-blue-500/30",
+    gradient: "from-blue-500/20 to-blue-600/5",
+    solid: "bg-blue-500 text-[#0a0e17]",
+  },
+  cyan: {
+    dot: "bg-cyan-400",
+    text: "text-cyan-400",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/20",
+    ring: "ring-cyan-500/30",
+    gradient: "from-cyan-500/20 to-cyan-600/5",
+    solid: "bg-cyan-500 text-[#0a0e17]",
+  },
+  orange: {
+    dot: "bg-orange-400",
+    text: "text-orange-400",
+    bg: "bg-orange-500/10",
+    border: "border-orange-500/20",
+    ring: "ring-orange-500/30",
+    gradient: "from-orange-500/20 to-orange-600/5",
+    solid: "bg-orange-500 text-[#0a0e17]",
+  },
+  pink: {
+    dot: "bg-pink-400",
+    text: "text-pink-400",
+    bg: "bg-pink-500/10",
+    border: "border-pink-500/20",
+    ring: "ring-pink-500/30",
+    gradient: "from-pink-500/20 to-pink-600/5",
+    solid: "bg-pink-500 text-[#0a0e17]",
+  },
+  indigo: {
+    dot: "bg-indigo-400",
+    text: "text-indigo-400",
+    bg: "bg-indigo-500/10",
+    border: "border-indigo-500/20",
+    ring: "ring-indigo-500/30",
+    gradient: "from-indigo-500/20 to-indigo-600/5",
+    solid: "bg-indigo-500 text-[#0a0e17]",
+  },
+  teal: {
+    dot: "bg-teal-400",
+    text: "text-teal-400",
+    bg: "bg-teal-500/10",
+    border: "border-teal-500/20",
+    ring: "ring-teal-500/30",
+    gradient: "from-teal-500/20 to-teal-600/5",
+    solid: "bg-teal-500 text-[#0a0e17]",
+  },
+  lime: {
+    dot: "bg-lime-400",
+    text: "text-lime-400",
+    bg: "bg-lime-500/10",
+    border: "border-lime-500/20",
+    ring: "ring-lime-500/30",
+    gradient: "from-lime-500/20 to-lime-600/5",
+    solid: "bg-lime-500 text-[#0a0e17]",
+  },
+  fuchsia: {
+    dot: "bg-fuchsia-400",
+    text: "text-fuchsia-400",
+    bg: "bg-fuchsia-500/10",
+    border: "border-fuchsia-500/20",
+    ring: "ring-fuchsia-500/30",
+    gradient: "from-fuchsia-500/20 to-fuchsia-600/5",
+    solid: "bg-fuchsia-500 text-[#0a0e17]",
+  },
+};
+
+export const getAssetStyle = (color) => ASSET_STYLES[color] || ASSET_STYLES.amber;

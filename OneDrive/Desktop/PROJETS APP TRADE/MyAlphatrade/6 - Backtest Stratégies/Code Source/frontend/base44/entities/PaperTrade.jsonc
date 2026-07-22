@@ -1,0 +1,60 @@
+{
+  "name": "PaperTrade",
+  "type": "object",
+  "properties": {
+    "strategy_id": {
+      "type": "string"
+    },
+    "symbol": {
+      "type": "string",
+      "default": "XAUUSD"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "BUY",
+        "SELL"
+      ]
+    },
+    "entry_price": {
+      "type": "number"
+    },
+    "exit_price": {
+      "type": "number"
+    },
+    "stop_loss": {
+      "type": "number"
+    },
+    "take_profit": {
+      "type": "number"
+    },
+    "lot_size": {
+      "type": "number"
+    },
+    "profit_loss": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed",
+        "cancelled"
+      ],
+      "default": "open"
+    },
+    "opened_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "closed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "strategy_id",
+    "direction",
+    "entry_price"
+  ]
+}

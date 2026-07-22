@@ -1,0 +1,48 @@
+{
+  "name": "Signal",
+  "type": "object",
+  "properties": {
+    "strategy_id": {
+      "type": "string"
+    },
+    "symbol": {
+      "type": "string",
+      "default": "XAUUSD"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "BUY",
+        "SELL",
+        "WAIT"
+      ]
+    },
+    "entry_price": {
+      "type": "number"
+    },
+    "stop_loss": {
+      "type": "number"
+    },
+    "take_profit": {
+      "type": "number"
+    },
+    "confidence": {
+      "type": "number"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "exported": {
+      "type": "boolean",
+      "default": false
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "strategy_id",
+    "action"
+  ]
+}

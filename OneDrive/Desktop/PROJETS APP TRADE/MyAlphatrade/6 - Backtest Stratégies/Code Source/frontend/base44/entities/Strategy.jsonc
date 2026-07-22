@@ -1,0 +1,366 @@
+{
+  "name": "Strategy",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nom de la strat\u00e9gie"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description d\u00e9taill\u00e9e"
+    },
+    "author": {
+      "type": "string",
+      "description": "Auteur (auto-g\u00e9n\u00e9r\u00e9 depuis l'utilisateur connect\u00e9)"
+    },
+    "version": {
+      "type": "string",
+      "default": "1.0",
+      "description": "Version s\u00e9mantique (1.0, 1.1, 2.0\u2026)"
+    },
+    "parent_version_id": {
+      "type": "string",
+      "description": "ID de la version parente (pour l'historique des versions)"
+    },
+    "asset_scope": {
+      "type": "string",
+      "enum": [
+        "specific",
+        "category",
+        "all"
+      ],
+      "default": "specific",
+      "description": "Port\u00e9e: actifs sp\u00e9cifiques, par cat\u00e9gorie, ou tous"
+    },
+    "asset_symbols": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Symboles cibl\u00e9s (si asset_scope = specific)"
+    },
+    "asset_category": {
+      "type": "string",
+      "description": "Cat\u00e9gorie cibl\u00e9e (si asset_scope = category)"
+    },
+    "primary_timeframe": {
+      "type": "string",
+      "enum": [
+        "M1",
+        "M5",
+        "M15",
+        "H1",
+        "H4",
+        "D1"
+      ],
+      "default": "M15"
+    },
+    "secondary_timeframes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "M1",
+          "M5",
+          "M15",
+          "H1",
+          "H4",
+          "D1"
+        ]
+      },
+      "description": "Timeframes secondaires (multi-TF optionnel)"
+    },
+    "market_profile": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "sydney",
+              "tokyo",
+              "london",
+              "new_york"
+            ]
+          }
+        },
+        "volatility": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "any"
+          ],
+          "default": "any"
+        },
+        "market_type": {
+          "type": "string",
+          "enum": [
+            "trend",
+            "range",
+            "breakout",
+            "any"
+          ],
+          "default": "any"
+        },
+        "ideal_conditions": {
+          "type": "string",
+          "description": "Description libre des conditions id\u00e9ales"
+        }
+      }
+    },
+    "entry_conditions": {
+      "type": "object",
+      "properties": {
+        "buy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "indicator": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "target_indicator": {
+                "type": "string"
+              },
+              "target_params": {
+                "type": "object"
+              },
+              "target_value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "indicator",
+              "operator"
+            ]
+          }
+        },
+        "sell": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "indicator": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "target_indicator": {
+                "type": "string"
+              },
+              "target_params": {
+                "type": "object"
+              },
+              "target_value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "indicator",
+              "operator"
+            ]
+          }
+        }
+      }
+    },
+    "exit_conditions": {
+      "type": "object",
+      "properties": {
+        "take_profit": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "pips",
+                "percent",
+                "atr",
+                "indicator"
+              ]
+            },
+            "value": {
+              "type": "number"
+            },
+            "params": {
+              "type": "object"
+            }
+          }
+        },
+        "stop_loss": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "pips",
+                "percent",
+                "atr",
+                "indicator"
+              ]
+            },
+            "value": {
+              "type": "number"
+            },
+            "params": {
+              "type": "object"
+            }
+          }
+        },
+        "break_even": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "trigger_pips": {
+              "type": "number"
+            },
+            "offset_pips": {
+              "type": "number",
+              "default": 0
+            }
+          }
+        },
+        "trailing_stop": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "pips",
+                "atr",
+                "percent"
+              ]
+            },
+            "distance": {
+              "type": "number"
+            }
+          }
+        },
+        "indicator_exit": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "rule": {
+              "type": "string"
+            }
+          }
+        },
+        "time_exit": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "max_bars": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "risk_management": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "percent",
+            "lots"
+          ],
+          "default": "percent"
+        },
+        "risk_value": {
+          "type": "number",
+          "default": 1
+        },
+        "min_rr": {
+          "type": "number",
+          "default": 2
+        },
+        "max_positions": {
+          "type": "number",
+          "default": 1
+        },
+        "max_drawdown": {
+          "type": "number",
+          "default": 5
+        }
+      }
+    },
+    "trading_hours_filter": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "start_hour": {
+          "type": "number"
+        },
+        "end_hour": {
+          "type": "number"
+        },
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "tested",
+        "active",
+        "archived"
+      ],
+      "default": "draft"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

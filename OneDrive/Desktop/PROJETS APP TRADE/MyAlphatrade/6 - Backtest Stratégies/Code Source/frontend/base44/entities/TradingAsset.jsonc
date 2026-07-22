@@ -1,0 +1,101 @@
+{
+  "name": "TradingAsset",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nom complet de l'actif"
+    },
+    "symbol": {
+      "type": "string",
+      "description": "Symbole de trading"
+    },
+    "category": {
+      "type": "string",
+      "description": "Cat\u00e9gorie (M\u00e9taux, Forex, Indices synth\u00e9tiques, etc.)"
+    },
+    "description": {
+      "type": "string"
+    },
+    "broker": {
+      "type": "string"
+    },
+    "market": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string",
+      "default": "amber",
+      "description": "Couleur d'affichage (cl\u00e9 du registre de styles)"
+    },
+    "icon": {
+      "type": "string",
+      "default": "TrendingUp",
+      "description": "Nom de l'ic\u00f4ne lucide-react"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active"
+    },
+    "digits": {
+      "type": "number",
+      "default": 2
+    },
+    "pip_size": {
+      "type": "number",
+      "default": 0.01
+    },
+    "min_lot": {
+      "type": "number",
+      "default": 0.01
+    },
+    "max_lot": {
+      "type": "number",
+      "default": 100
+    },
+    "lot_step": {
+      "type": "number",
+      "default": 0.01
+    },
+    "default_timeframe": {
+      "type": "string",
+      "default": "M15"
+    },
+    "avg_spread": {
+      "type": "number",
+      "description": "Spread moyen (optionnel)"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "UTC"
+    },
+    "trading_hours": {
+      "type": "string"
+    },
+    "data_source": {
+      "type": "string"
+    },
+    "tradingview_id": {
+      "type": "string"
+    },
+    "metatrader_id": {
+      "type": "string"
+    },
+    "deriv_id": {
+      "type": "string"
+    },
+    "order": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "name",
+    "symbol",
+    "category"
+  ]
+}
