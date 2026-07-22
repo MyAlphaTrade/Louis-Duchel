@@ -32,6 +32,78 @@ function clearToken() {
   setToken(null);
 }
 
+// ---------------------------------------------------------------------------
+// Temps reel (WebSocket) -- remplace le polling manuel : le backend diffuse
+// chaque creation/modification/suppression d'entite aux autres connexions
+// ouvertes du meme utilisateur (autres onglets/appareils). subscribe() etait
+// jusqu'ici un no-op ; ce socket unique, partage par tous les entity clients,
+// alimente desormais reellement les callbacks deja ecrits contre ce contrat
+// (Strategies.jsx, SavedBacktests.jsx, AssetContext.jsx).
+// ---------------------------------------------------------------------------
+
+const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
+const RECONNECT_DELAY_MS = 3000;
+
+let socket = null;
+let reconnectTimer = null;
+const subscribers = new Map(); // entityType -> Set<callback>
+
+function notifySubscribers(entityType, event) {
+  subscribers.get(entityType)?.forEach((cb) => {
+    try {
+      cb(event);
+    } catch {
+      // Une exception dans un callback abonne ne doit jamais casser le socket.
+    }
+  });
+}
+
+function connectSocket() {
+  const token = getToken();
+  if (!token) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+
+  socket = new WebSocket(`${WS_BASE_URL}/ws?token=${encodeURIComponent(token)}`);
+  socket.onmessage = (msg) => {
+    try {
+      const event = JSON.parse(msg.data);
+      if (event?.entity_type) notifySubscribers(event.entity_type, event);
+    } catch {
+      // Message malforme -- ignore, ne casse jamais le socket.
+    }
+  };
+  socket.onclose = (evt) => {
+    socket = null;
+    // 4401 = jeton invalide/expire cote serveur -- inutile de boucler dessus,
+    // une reconnexion suivra naturellement au prochain login() reussi.
+    if (evt.code === 4401) return;
+    if (getToken() && !reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectSocket();
+      }, RECONNECT_DELAY_MS);
+    }
+  };
+  socket.onerror = () => {
+    socket?.close();
+  };
+}
+
+function disconnectSocket() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket) {
+    socket.onclose = null;
+    socket.close();
+    socket = null;
+  }
+}
+
+// Reprend une session existante apres un rechargement de page.
+if (getToken()) connectSocket();
+
 function apiError(status, data, fallbackMessage) {
   const message = (data && (data.detail || data.message)) || fallbackMessage || `Erreur ${status}`;
   const error = new Error(message);
@@ -79,7 +151,10 @@ async function login(email, password) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  if (data?.token) setToken(data.token);
+  if (data?.token) {
+    setToken(data.token);
+    connectSocket();
+  }
   return data?.user ?? data;
 }
 
@@ -99,11 +174,15 @@ async function register(emailOrPayload, password, fullName) {
     method: 'POST',
     body: JSON.stringify({ email, password: payload.password, full_name }),
   });
-  if (data?.token) setToken(data.token);
+  if (data?.token) {
+    setToken(data.token);
+    connectSocket();
+  }
   return data?.user ?? data;
 }
 
 function logout(redirectUrl) {
+  disconnectSocket();
   clearToken();
   // Best-effort : on ne bloque pas sur la réponse du backend.
   apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
@@ -165,9 +244,13 @@ function makeEntityClient(entityType) {
         method: 'DELETE',
       });
     },
-    subscribe(_callback) {
-      // TODO: temps réel non implémenté, à faire plus tard si besoin
-      return () => {};
+    subscribe(callback) {
+      if (!subscribers.has(entityType)) subscribers.set(entityType, new Set());
+      subscribers.get(entityType).add(callback);
+      connectSocket();
+      return () => {
+        subscribers.get(entityType)?.delete(callback);
+      };
     },
   };
 }

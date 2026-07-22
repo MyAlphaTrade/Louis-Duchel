@@ -14,6 +14,7 @@ import json
 import secrets
 import sqlite3
 import uuid
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -23,7 +24,7 @@ import jwt
 import requests
 import resend
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
@@ -461,6 +462,58 @@ def _entity_to_dict(row: sqlite3.Row) -> dict:
     return data
 
 
+# ── Temps reel (WebSocket) ───────────────────────────────────────────────
+# Remplace le polling manuel : chaque creation/modification/suppression
+# d'entite est diffusee aux autres connexions ouvertes du meme utilisateur
+# (autres onglets/appareils), au format attendu par base44.entities.<Type>
+# .subscribe() cote frontend (deja ecrit contre ce contrat, jusqu'ici jamais
+# alimente -- subscribe() etait un no-op). Registre en memoire uniquement :
+# un seul process backend pour cet outil local mono-utilisateur, pas besoin
+# d'un bus de messages externe (Redis, etc.).
+ws_connections: dict[int, set] = defaultdict(set)
+
+
+async def broadcast_entity_event(
+    user_id: int, entity_type: str, event_type: str, data: Optional[dict] = None, entity_id: Optional[str] = None
+) -> None:
+    sockets = ws_connections.get(user_id)
+    if not sockets:
+        return
+    message = json.dumps({"entity_type": entity_type, "type": event_type, "data": data, "id": entity_id})
+    dead = set()
+    for ws in sockets:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            dead.add(ws)
+    sockets -= dead
+
+
+@app.websocket("/ws")
+async def entities_ws(websocket: WebSocket, token: str = Query(default="")):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if user_id is None:
+            raise ValueError("token sans user_id")
+    except Exception:
+        # 4401 (plage privee 4000-4999) plutot que 1008 generique -- permet
+        # au frontend de distinguer "jeton invalide, ne pas reessayer" d'une
+        # simple coupure reseau a reconnecter automatiquement.
+        await websocket.close(code=4401)
+        return
+
+    await websocket.accept()
+    ws_connections[user_id].add(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keepalive -- contenu ignore
+    except WebSocketDisconnect:
+        pass
+    finally:
+        ws_connections[user_id].discard(websocket)
+
+
 @app.get("/entities/{entity_type}")
 def list_entities(
     entity_type: str,
@@ -481,7 +534,7 @@ def list_entities(
 
 
 @app.post("/entities/{entity_type}")
-def create_entity(entity_type: str, payload: dict = Body(default={}), user=Depends(get_current_user)):
+async def create_entity(entity_type: str, payload: dict = Body(default={}), user=Depends(get_current_user)):
     _validate_entity_type(entity_type)
     entity_id = str(uuid.uuid4())
     timestamp = now_iso()
@@ -499,11 +552,12 @@ def create_entity(entity_type: str, payload: dict = Body(default={}), user=Depen
     result["id"] = entity_id
     result["created_date"] = timestamp
     result["updated_date"] = timestamp
+    await broadcast_entity_event(user["id"], entity_type, "create", data=result)
     return result
 
 
 @app.put("/entities/{entity_type}/{entity_id}")
-def update_entity(
+async def update_entity(
     entity_type: str,
     entity_id: str,
     payload: dict = Body(default={}),
@@ -533,11 +587,12 @@ def update_entity(
     result["id"] = entity_id
     result["created_date"] = row["created_date"]
     result["updated_date"] = timestamp
+    await broadcast_entity_event(user["id"], entity_type, "update", data=result)
     return result
 
 
 @app.delete("/entities/{entity_type}/{entity_id}")
-def delete_entity(entity_type: str, entity_id: str, user=Depends(get_current_user)):
+async def delete_entity(entity_type: str, entity_id: str, user=Depends(get_current_user)):
     _validate_entity_type(entity_type)
     with db_cursor(commit=True) as (conn, cur):
         cur.execute(
@@ -550,6 +605,7 @@ def delete_entity(entity_type: str, entity_id: str, user=Depends(get_current_use
             "DELETE FROM entities WHERE id = ? AND user_id = ? AND entity_type = ?",
             (entity_id, user["id"], entity_type),
         )
+    await broadcast_entity_event(user["id"], entity_type, "delete", entity_id=entity_id)
     return {"ok": True}
 
 
