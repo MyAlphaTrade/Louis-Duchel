@@ -176,17 +176,34 @@ export function computeIndicator(indicatorId, params, bars) {
       const { macdLine } = macd(closes, params.fast || 12, params.slow || 26, params.signal || 9);
       return macdLine;
     }
+    case "macd_signal": {
+      const { signalLine } = macd(closes, params.fast || 12, params.slow || 26, params.signal || 9);
+      return signalLine;
+    }
     case "atr": return atr(bars, params.period || 14);
     case "bollinger": {
       const { mid } = bollinger(closes, params.period || 20, params.std_dev || 2);
       return mid;
     }
+    case "bollinger_upper": {
+      const { upper } = bollinger(closes, params.period || 20, params.std_dev || 2);
+      return upper;
+    }
+    case "bollinger_lower": {
+      const { lower } = bollinger(closes, params.period || 20, params.std_dev || 2);
+      return lower;
+    }
     case "stochastic": {
       const { k } = stochastic(bars, params.k_period || 14, params.d_period || 3, params.smooth || 3);
       return k;
     }
+    case "stochastic_d": {
+      const { d } = stochastic(bars, params.k_period || 14, params.d_period || 3, params.smooth || 3);
+      return d;
+    }
     case "adx": return adx(bars, params.period || 14);
     case "volume": return sma(bars.map((b) => b.volume || 0), params.ma_period || 20);
+    case "price": return closes;
     case "breakout": {
       const lookback = params.lookback || 20;
       return closes.map((_, i) => {
@@ -194,6 +211,15 @@ export function computeIndicator(indicatorId, params, bars) {
         let hi = -Infinity;
         for (let j = i - lookback; j < i; j++) hi = Math.max(hi, bars[j].high);
         return hi;
+      });
+    }
+    case "breakout_low": {
+      const lookback = params.lookback || 20;
+      return closes.map((_, i) => {
+        if (i < lookback) return null;
+        let lo = Infinity;
+        for (let j = i - lookback; j < i; j++) lo = Math.min(lo, bars[j].low);
+        return lo;
       });
     }
     case "support_resistance": {

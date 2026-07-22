@@ -109,6 +109,19 @@ export function evalCondition(condition, series, bars, i) {
       return val < (condition.target_value ?? 0);
     case "equals":
       return Math.abs(val - (condition.target_value ?? 0)) < 0.01;
+    // Croisement contre un niveau fixe (ex: "RSI croise au-dessus de 30") plutot
+    // qu'un autre indicateur -- meme logique que crosses_above/below, mais la
+    // "cible" est une constante au lieu d'une deuxieme serie.
+    case "crosses_above_level": {
+      const level = condition.target_value;
+      if (level === null || level === undefined || prevVal === null || prevVal === undefined) return false;
+      return prevVal <= level && val > level;
+    }
+    case "crosses_below_level": {
+      const level = condition.target_value;
+      if (level === null || level === undefined || prevVal === null || prevVal === undefined) return false;
+      return prevVal >= level && val < level;
+    }
     default:
       return false;
   }

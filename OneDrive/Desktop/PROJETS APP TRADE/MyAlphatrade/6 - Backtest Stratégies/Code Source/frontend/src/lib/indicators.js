@@ -49,6 +49,19 @@ export const INDICATORS = [
     supports_cross: true,
   },
   {
+    id: "macd_signal",
+    name: "MACD Signal",
+    category: "Tendance",
+    description: "Ligne de signal du MACD — à utiliser comme cible d'un croisement avec MACD (le croisement MACD/Signal est le signal MACD classique).",
+    params: [
+      { key: "fast", label: "Période rapide", default: 12, type: "number", min: 1, max: 100 },
+      { key: "slow", label: "Période lente", default: 26, type: "number", min: 1, max: 200 },
+      { key: "signal", label: "Période signal", default: 9, type: "number", min: 1, max: 100 },
+    ],
+    supports_cross: true,
+    supports_value: true,
+  },
+  {
     id: "adx",
     name: "ADX",
     category: "Tendance",
@@ -86,9 +99,23 @@ export const INDICATORS = [
   },
   {
     id: "stochastic",
-    name: "Stochastic",
+    name: "Stochastic %K",
     category: "Oscillateur",
-    description: "Oscillateur stochastique",
+    description: "Oscillateur stochastique — ligne %K",
+    params: [
+      { key: "k_period", label: "%K", default: 14, type: "number", min: 1, max: 100 },
+      { key: "d_period", label: "%D", default: 3, type: "number", min: 1, max: 50 },
+      { key: "smooth", label: "Lissage", default: 3, type: "number", min: 1, max: 50 },
+    ],
+    supports_cross: true,
+    supports_zones: true,
+    zones: { overbought: 80, oversold: 20 },
+  },
+  {
+    id: "stochastic_d",
+    name: "Stochastic %D",
+    category: "Oscillateur",
+    description: "Oscillateur stochastique — ligne %D (moyenne de %K), à utiliser comme cible d'un croisement avec Stochastic %K.",
     params: [
       { key: "k_period", label: "%K", default: 14, type: "number", min: 1, max: 100 },
       { key: "d_period", label: "%D", default: 3, type: "number", min: 1, max: 50 },
@@ -112,9 +139,31 @@ export const INDICATORS = [
   },
   {
     id: "bollinger",
-    name: "Bollinger Bands",
+    name: "Bollinger — Bande médiane",
     category: "Volatilité",
-    description: "Bandes de Bollinger",
+    description: "Bandes de Bollinger — bande médiane (SMA)",
+    params: [
+      { key: "period", label: "Période", default: 20, type: "number", min: 1, max: 200 },
+      { key: "std_dev", label: "Écart-type", default: 2, type: "number", min: 0.5, max: 5, step: 0.1 },
+    ],
+    supports_cross: true,
+  },
+  {
+    id: "bollinger_upper",
+    name: "Bollinger — Bande haute",
+    category: "Volatilité",
+    description: "Bandes de Bollinger — bande supérieure, à croiser avec Prix pour détecter un breakout haussier.",
+    params: [
+      { key: "period", label: "Période", default: 20, type: "number", min: 1, max: 200 },
+      { key: "std_dev", label: "Écart-type", default: 2, type: "number", min: 0.5, max: 5, step: 0.1 },
+    ],
+    supports_cross: true,
+  },
+  {
+    id: "bollinger_lower",
+    name: "Bollinger — Bande basse",
+    category: "Volatilité",
+    description: "Bandes de Bollinger — bande inférieure, à croiser avec Prix pour détecter un breakout baissier.",
     params: [
       { key: "period", label: "Période", default: 20, type: "number", min: 1, max: 200 },
       { key: "std_dev", label: "Écart-type", default: 2, type: "number", min: 0.5, max: 5, step: 0.1 },
@@ -136,6 +185,15 @@ export const INDICATORS = [
 
   // ── Price Action ──
   {
+    id: "price",
+    name: "Prix (clôture)",
+    category: "Price Action",
+    description: "Prix de clôture — utile pour croiser avec une moyenne mobile ou une bande (ex: Prix croise au-dessus de Bollinger haute).",
+    params: [],
+    supports_cross: true,
+    supports_value: true,
+  },
+  {
     id: "support_resistance",
     name: "Support / Résistance",
     category: "Price Action",
@@ -148,13 +206,24 @@ export const INDICATORS = [
   },
   {
     id: "breakout",
-    name: "Breakout",
+    name: "Breakout — Plus haut",
     category: "Price Action",
-    description: "Cassure de niveau",
+    description: "Plus haut sur la période de référence (canal de Donchian, borne haute) — à croiser avec Prix pour détecter une cassure haussière.",
     params: [
       { key: "lookback", label: "Période de référence", default: 20, type: "number", min: 5, max: 500 },
-      { key: "direction", label: "Direction", default: "both", type: "select", options: ["both", "up", "down"] },
     ],
+    supports_cross: true,
+    supports_value: true,
+  },
+  {
+    id: "breakout_low",
+    name: "Breakout — Plus bas",
+    category: "Price Action",
+    description: "Plus bas sur la période de référence (canal de Donchian, borne basse) — à croiser avec Prix pour détecter une cassure baissière.",
+    params: [
+      { key: "lookback", label: "Période de référence", default: 20, type: "number", min: 5, max: 500 },
+    ],
+    supports_cross: true,
     supports_value: true,
   },
 
@@ -189,13 +258,13 @@ export const INDICATORS = [
 ];
 
 export const OPERATORS = [
-  { id: "crosses_above", label: "Croise au-dessus de", requires_target: "indicator" },
-  { id: "crosses_below", label: "Croise en-dessous de", requires_target: "indicator" },
+  { id: "crosses_above", label: "Croise au-dessus de (indicateur)", requires_target: "indicator" },
+  { id: "crosses_below", label: "Croise en-dessous de (indicateur)", requires_target: "indicator" },
+  { id: "crosses_above_level", label: "Croise au-dessus du niveau", requires_target: "value" },
+  { id: "crosses_below_level", label: "Croise en-dessous du niveau", requires_target: "value" },
   { id: "greater_than", label: "Supérieur à", requires_target: "value" },
   { id: "less_than", label: "Inférieur à", requires_target: "value" },
   { id: "equals", label: "Égal à", requires_target: "value" },
-  { id: "in_zone", label: "Dans la zone", requires_target: "none" },
-  { id: "out_zone", label: "Hors de la zone", requires_target: "none" },
 ];
 
 export const TRADING_SESSIONS = [
