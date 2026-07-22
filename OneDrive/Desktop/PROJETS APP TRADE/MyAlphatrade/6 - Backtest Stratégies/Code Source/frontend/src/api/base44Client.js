@@ -191,6 +191,14 @@ const marketData = {
   async summary() {
     return apiFetch('/market-data/summary');
   },
+  // Dernier prix bid/ask reel, lu par le backend directement depuis le
+  // terminal MT5 installe sur la machine de l'utilisateur (Module 4 / Paper
+  // Trading, mode Live). Peut echouer (503) si MT5 n'est pas ouvert -- les
+  // appelants doivent toujours gerer ce cas plutot que de le laisser
+  // remonter en erreur non traitee.
+  async getLive(symbol) {
+    return apiFetch(`/market-data/live?${new URLSearchParams({ symbol }).toString()}`);
+  },
 };
 
 export const base44 = {

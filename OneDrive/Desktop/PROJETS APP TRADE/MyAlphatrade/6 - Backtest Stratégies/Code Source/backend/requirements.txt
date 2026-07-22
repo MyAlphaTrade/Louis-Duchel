@@ -7,3 +7,15 @@ python-multipart==0.0.20
 pydantic==2.10.4
 resend==2.4.0
 requests==2.32.3
+# Paquet Windows uniquement (pont prix live, Module 4 / Paper Trading).
+# Necessite un terminal MetaTrader 5 installe et ouvert sur la meme machine
+# que ce backend. Sur toute autre plateforme (ou si le terminal n'est pas
+# installe), l'import echoue proprement -- voir main.py (endpoint
+# /market-data/live), qui ne plante jamais le serveur meme si ce package
+# est absent ou indisponible.
+MetaTrader5==5.0.45; sys_platform == "win32"
+# MetaTrader5 est compile contre l'ABI NumPy 1.x -- sans cette epingle, pip
+# installe NumPy 2.x (aucune autre dependance ne le contraint), ce qui casse
+# l'import de MetaTrader5 (AttributeError: _ARRAY_API not found) meme sur une
+# machine Windows avec MT5 installe. Decouvert en verifiant le pont live.
+numpy<2; sys_platform == "win32"

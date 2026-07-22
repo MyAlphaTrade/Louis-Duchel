@@ -46,6 +46,28 @@ CORS_ORIGINS = [
 
 PORT = int(os.environ.get("PORT", 8010))
 
+# Pont prix live MT5 (Module 4 / Paper Trading, mode Live). Paquet Windows
+# uniquement, et ne fonctionne que si un terminal MetaTrader 5 est installe
+# ET ouvert sur cette meme machine. L'import est protege par un try/except
+# (meme pattern que AlphaTrade v4.1.0 - Claude/python/alphatrade_engine.py,
+# code de reference en lecture seule, non copie) pour que l'absence du
+# package ne fasse jamais planter le demarrage du serveur -- seul l'appel a
+# /market-data/live echouera, proprement, avec un message clair.
+try:
+    import MetaTrader5 as mt5  # type: ignore
+except Exception as exc:  # pragma: no cover - depend de l'OS/l'installation
+    mt5 = None
+    MT5_IMPORT_ERROR = str(exc)
+else:
+    MT5_IMPORT_ERROR = ""
+
+# Chemins d'installation courants essayes si mt5.initialize() sans argument
+# echoue (terminal ferme au demarrage silencieux, ou installe hors PATH).
+MT5_PATH_CANDIDATES = [
+    r"C:\Program Files\MetaTrader 5\terminal64.exe",
+    r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe",
+]
+
 # Reinitialisation de mot de passe par email -- meme prestataire (Resend) et
 # meme pattern (lien + token expirant en DB) que le backend AlphaTrade
 # existant. Si RESEND_API_KEY est absente (dev sans cle configuree), l'envoi
@@ -617,6 +639,78 @@ def market_data_summary(user=Depends(get_current_user)):
         )
         rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Pont prix live MT5 (Module 4 / Paper Trading, mode Live) ───────────────
+def _initialize_mt5() -> bool:
+    """Tente mt5.initialize() sans argument (terminal deja detecte
+    automatiquement), puis quelques chemins d'installation courants.
+    Retourne False sans lever si tout echoue -- l'appelant transforme ca en
+    HTTPException 503 avec un message clair."""
+    if mt5.initialize():
+        return True
+    for candidate in MT5_PATH_CANDIDATES:
+        if os.path.exists(candidate) and mt5.initialize(path=candidate):
+            return True
+    return False
+
+
+@app.get("/market-data/live")
+def live_market_data(symbol: str = Query(...), user=Depends(get_current_user)):
+    """Dernier prix bid/ask reel, lu directement depuis le terminal MT5
+    installe sur cette machine (lecture seule -- aucun ordre n'est jamais
+    envoye). Utilise par le mode Live du Paper Trading pour evaluer les
+    conditions de strategie sur des prix reels en direct."""
+    if mt5 is None:
+        raise HTTPException(
+            503,
+            "Le module MetaTrader5 n'est pas disponible sur ce serveur "
+            f"({MT5_IMPORT_ERROR or 'package non installe'}). Le mode live "
+            "necessite le paquet Python MetaTrader5, disponible uniquement "
+            "sous Windows.",
+        )
+
+    try:
+        if not _initialize_mt5():
+            raise HTTPException(
+                503,
+                "Terminal MetaTrader 5 introuvable ou ferme. Ouvrez MT5 sur "
+                "cette machine pour utiliser le mode live.",
+            )
+
+        # Rend le symbole visible dans le Market Watch si necessaire --
+        # sinon symbol_info_tick peut renvoyer None meme pour un symbole
+        # valide chez le broker.
+        mt5.symbol_select(symbol, True)
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            raise HTTPException(
+                404,
+                f"Symbole introuvable dans MT5 : {symbol}. Verifiez qu'il "
+                "est disponible chez votre broker et correctement orthographie.",
+            )
+
+        return {
+            "symbol": symbol,
+            "bid": tick.bid,
+            "ask": tick.ask,
+            "timestamp": datetime.fromtimestamp(tick.time, tz=timezone.utc).isoformat(),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Ne jamais laisser une erreur MT5 inattendue (deconnexion, IPC,
+        # etc.) faire planter la requete sans message exploitable.
+        raise HTTPException(503, f"Erreur de communication avec MetaTrader 5 : {exc}")
+    finally:
+        # Liberation systematique de la connexion IPC -- ce endpoint est
+        # appele en polling (toutes les 15-30s) depuis le frontend, pas en
+        # connexion permanente comme un service arriere-plan.
+        if mt5 is not None:
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
 
 
 # ── AI proxy (AI Strategy Designer, Module 6) ───────────────────────────────
