@@ -73,6 +73,20 @@ export function computeAllIndicators(bars, entryConditions) {
     }
   };
   all.forEach(collect);
+
+  // computeEntryOrder() lit toujours series["atr" + JSON.stringify({period:14})]
+  // pour les sorties SL/TP de type "atr" (voir plus bas), meme si aucune
+  // condition d'ENTREE ne reference l'ATR. Sans cette ligne, cette cle
+  // n'existait dans `series` que par coincidence (si une condition d'entree
+  // utilisait aussi l'ATR) -- sinon le lookup silencieux retombait sur
+  // pipSize*10 (0.1 sur XAUUSD), un stop minuscule sans rapport avec l'ATR
+  // reel. Bug trouve en constatant qu'une conversion pips -> atr sur 5
+  // strategies ne changeait absolument rien aux resultats de backtest.
+  const atrKey = "atr" + JSON.stringify({ period: 14 });
+  if (!series[atrKey]) {
+    series[atrKey] = computeIndicator("atr", { period: 14 }, bars);
+  }
+
   return series;
 }
 

@@ -13,11 +13,27 @@ function formatDuration(minutes) {
   return `${h}h${m > 0 ? m : ""}`;
 }
 
+// Recharts (SVG) rend chaque point comme un noeud du chemin -- au-dela de
+// quelques milliers de points, le calcul de la geometrie peut geler l'onglet
+// (constate en pratique sur un an de bougies M15, ~23 500 points). La courbe
+// reste visuellement identique bien en dessous de cette resolution, donc on
+// sous-echantillonne par pas fixe plutot que de tout tracer -- le dernier
+// point est toujours garde pour ne pas tronquer le solde final affiche.
+const MAX_CHART_POINTS = 1200;
+function downsample(points, maxPoints) {
+  if (points.length <= maxPoints) return points;
+  const stride = Math.ceil(points.length / maxPoints);
+  const sampled = points.filter((_, i) => i % stride === 0);
+  const last = points[points.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+  return sampled;
+}
+
 export default function EquityCurve({ equityCurve, initialCapital }) {
   const [showDrawdown, setShowDrawdown] = useState(false);
 
   const data = useMemo(() =>
-    equityCurve.map((p) => ({
+    downsample(equityCurve, MAX_CHART_POINTS).map((p) => ({
       bar: p.bar,
       equity: p.equity,
       balance: p.balance,
@@ -26,11 +42,11 @@ export default function EquityCurve({ equityCurve, initialCapital }) {
     })),
   [equityCurve]);
 
-  const minEquity = Math.min(...data.map((d) => d.equity), initialCapital);
-  const maxEquity = Math.max(...data.map((d) => d.equity), initialCapital);
+  const minEquity = data.reduce((m, d) => Math.min(m, d.equity), initialCapital);
+  const maxEquity = data.reduce((m, d) => Math.max(m, d.equity), initialCapital);
   const padding = (maxEquity - minEquity) * 0.1 || 100;
 
-  const maxDrawdown = Math.max(...data.map((d) => d.drawdown), 0);
+  const maxDrawdown = data.reduce((m, d) => Math.max(m, d.drawdown), 0);
   const finalEquity = data.length > 0 ? data[data.length - 1].equity : initialCapital;
   const isProfit = finalEquity >= initialCapital;
   const lineColor = isProfit ? "#34d399" : "#f43f5e";
@@ -46,7 +62,7 @@ export default function EquityCurve({ equityCurve, initialCapital }) {
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-white">Courbe de capital</h3>
           <span className="text-[10px] text-slate-600 uppercase tracking-wider">
-            {data.length} bars
+            {equityCurve.length} bars{data.length < equityCurve.length ? ` (${data.length} affichées)` : ""}
           </span>
         </div>
         <div className="flex items-center gap-2">

@@ -150,11 +150,18 @@ export function adx(bars, period) {
     return Math.max(b.high - b.low, Math.abs(b.high - pc), Math.abs(b.low - pc));
   });
   const atrArr = ema(tr, period);
+  // ema(plusDM, period) et ema(minusDM, period) etaient recalcules a chaque
+  // index dans les .map() ci-dessous (O(n) par bougie -> O(n^2) au total) --
+  // sur un historique d'un an en M15 (~23 500 bougies) ca depasse le
+  // milliard d'operations et fige durablement l'onglet. Calcules une seule
+  // fois ici, resultat identique.
+  const plusDMEma = ema(plusDM, period);
+  const minusDMEma = ema(minusDM, period);
   const plusDI = plusDM.map((v, i) =>
-    atrArr[i] !== null ? (ema(plusDM, period)[i] / atrArr[i]) * 100 : null
+    atrArr[i] !== null ? (plusDMEma[i] / atrArr[i]) * 100 : null
   );
   const minusDI = minusDM.map((v, i) =>
-    atrArr[i] !== null ? (ema(minusDM, period)[i] / atrArr[i]) * 100 : null
+    atrArr[i] !== null ? (minusDMEma[i] / atrArr[i]) * 100 : null
   );
   const dx = plusDM.map((_, i) => {
     if (plusDI[i] === null || minusDI[i] === null) return null;
