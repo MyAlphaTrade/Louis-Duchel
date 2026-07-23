@@ -45,9 +45,20 @@ export default function Backtesting() {
     base44.entities.Strategy.list("-created_date", 500)
       .then((data) => setStrategies(data.filter((s) => s.status !== "archived")))
       .catch(() => {});
+
+    const unsubscribe = base44.entities.Strategy.subscribe((event) => {
+      if (event.type === "create") {
+        setStrategies((prev) => (prev.some((s) => s.id === event.data.id) ? prev : [event.data, ...prev]));
+      } else if (event.type === "update") {
+        setStrategies((prev) => prev.map((s) => (s.id === event.data.id ? event.data : s)));
+      } else if (event.type === "delete") {
+        setStrategies((prev) => prev.filter((s) => s.id !== event.id));
+      }
+    });
+    return unsubscribe;
   }, []);
 
-  const handleRun = async (runConfig = config) => {
+  const handleRun = async (runConfig = config, strategyOverride = null) => {
     setRunning(true);
     setResults(null);
     setSaved(false);
@@ -55,7 +66,7 @@ export default function Backtesting() {
     await new Promise((r) => setTimeout(r, 300));
 
     try {
-      const strategy = strategies.find((s) => s.id === runConfig.strategyId);
+      const strategy = strategyOverride || strategies.find((s) => s.id === runConfig.strategyId);
       const asset = assets.find((a) => a.symbol === runConfig.assetSymbol);
       if (!strategy || !asset) return;
 
@@ -140,6 +151,7 @@ export default function Backtesting() {
         config={config}
         setConfig={setConfig}
         onAutoRun={handleRun}
+        onStrategyCreated={(created) => setStrategies((prev) => [created, ...prev])}
       />
 
       {/* Config */}
