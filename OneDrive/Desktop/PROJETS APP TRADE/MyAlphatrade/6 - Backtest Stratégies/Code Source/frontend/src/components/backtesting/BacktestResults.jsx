@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import SummaryStats from "@/components/backtesting/SummaryStats";
 import BacktestDiagnostic from "@/components/backtesting/BacktestDiagnostic";
+import { computeDiagnostic } from "@/lib/backtestDiagnostic";
 import EquityCurve from "@/components/backtesting/EquityCurve";
 import TradeJournal from "@/components/backtesting/TradeJournal";
 import Optimizer from "@/components/backtesting/Optimizer";
@@ -19,7 +20,8 @@ export default function BacktestResults({ results, strategy, asset, config, onSa
   const handleExportPDF = async () => {
     setExporting(true);
     try {
-      await exportBacktestPDF(results, strategy, asset, config);
+      const diagnostic = computeDiagnostic(results, strategy, config);
+      await exportBacktestPDF(results, strategy, asset, config, diagnostic);
     } catch (err) {
       console.error(err);
     } finally {

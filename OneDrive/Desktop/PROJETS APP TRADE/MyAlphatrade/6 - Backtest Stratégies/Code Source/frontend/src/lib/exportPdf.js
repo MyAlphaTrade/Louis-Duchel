@@ -13,7 +13,7 @@ function formatDateTime(d) {
   });
 }
 
-export async function exportBacktestPDF(results, strategy, asset, config) {
+export async function exportBacktestPDF(results, strategy, asset, config, diagnostic) {
   const m = results.metrics;
   const trades = results.trades;
   const pdf = new jsPDF("p", "mm", "a4");
@@ -110,6 +110,67 @@ export async function exportBacktestPDF(results, strategy, asset, config) {
     pdf.text(metric[1], x + colW - 30, rowY);
   });
   y += 48;
+
+  // ── Diagnostic (verdict + pistes d'ajustement) ──
+  if (diagnostic) {
+    const contentW = pageW - margin * 2 - 8;
+    const verdictLines = pdf.splitTextToSize(diagnostic.verdict, contentW);
+    const suggestionLines = (diagnostic.suggestions || []).flatMap((s) =>
+      pdf.splitTextToSize(`- ${s}`, contentW - 4)
+    );
+    const statLines = diagnostic.exitBreakdown
+      ? [
+          `Sorties SL: ${diagnostic.exitBreakdown.SL}  |  Sorties TP: ${diagnostic.exitBreakdown.TP}`,
+          `Seuil de rentabilite: ${diagnostic.breakevenWinRate !== null ? diagnostic.breakevenWinRate.toFixed(1) + "%" : "-"}` +
+            `  |  Pertes consecutives max: ${diagnostic.maxLosingStreak ?? "-"}`,
+        ]
+      : [];
+    const boxH = 14 + verdictLines.length * 5 + statLines.length * 5 + 4 + suggestionLines.length * 5 + 6;
+
+    if (y + boxH > pageH - 20) {
+      pdf.addPage();
+      y = margin;
+    }
+
+    pdf.setDrawColor(226, 232, 240);
+    pdf.setFillColor(248, 250, 252);
+    pdf.roundedRect(margin, y, pageW - margin * 2, boxH, 2, 2, "F");
+    pdf.setFontSize(11);
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(30, 41, 59);
+    pdf.text("Diagnostic", margin + 4, y + 6);
+    y += 12;
+
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "bold");
+    const verdictColor =
+      diagnostic.verdictTone === "good" ? [5, 150, 105] : diagnostic.verdictTone === "danger" ? [220, 38, 38] : [180, 130, 20];
+    pdf.setTextColor(...verdictColor);
+    verdictLines.forEach((line) => {
+      pdf.text(line, margin + 4, y);
+      y += 5;
+    });
+
+    if (statLines.length) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 116, 139);
+      statLines.forEach((line) => {
+        pdf.text(line, margin + 4, y);
+        y += 5;
+      });
+    }
+    y += 4;
+
+    pdf.setFontSize(8);
+    pdf.setFont("helvetica", "normal");
+    pdf.setTextColor(51, 65, 85);
+    suggestionLines.forEach((line) => {
+      pdf.text(line, margin + 4, y);
+      y += 5;
+    });
+    y += 6;
+  }
 
   // ── Trade table ──
   y += 6;
