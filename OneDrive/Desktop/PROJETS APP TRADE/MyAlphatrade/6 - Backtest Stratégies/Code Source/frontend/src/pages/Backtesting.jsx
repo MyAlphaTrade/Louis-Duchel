@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useAsset } from "@/lib/AssetContext";
 import { useToast } from "@/components/ui/use-toast";
 import BacktestConfig from "@/components/backtesting/BacktestConfig";
+import AIBacktestConfigurator from "@/components/backtesting/AIBacktestConfigurator";
 import BacktestResults from "@/components/backtesting/BacktestResults";
 import SavedBacktests from "@/components/backtesting/SavedBacktests";
 import { runBacktest } from "@/lib/backtestEngine";
@@ -46,7 +47,7 @@ export default function Backtesting() {
       .catch(() => {});
   }, []);
 
-  const handleRun = async () => {
+  const handleRun = async (runConfig = config) => {
     setRunning(true);
     setResults(null);
     setSaved(false);
@@ -54,15 +55,15 @@ export default function Backtesting() {
     await new Promise((r) => setTimeout(r, 300));
 
     try {
-      const strategy = strategies.find((s) => s.id === config.strategyId);
-      const asset = assets.find((a) => a.symbol === config.assetSymbol);
+      const strategy = strategies.find((s) => s.id === runConfig.strategyId);
+      const asset = assets.find((a) => a.symbol === runConfig.assetSymbol);
       if (!strategy || !asset) return;
 
       const periodDays = Math.max(1, Math.ceil(
-        (new Date(config.endDate) - new Date(config.startDate)) / 86400000
+        (new Date(runConfig.endDate) - new Date(runConfig.startDate)) / 86400000
       ));
 
-      const res = await runBacktest(strategy, asset, { ...config, periodDays });
+      const res = await runBacktest(strategy, asset, { ...runConfig, periodDays });
       setResults({ ...res, strategy, asset });
     } catch (err) {
       toast({
@@ -133,12 +134,20 @@ export default function Backtesting() {
         </p>
       </div>
 
+      {/* Configuration par IA (optionnelle) */}
+      <AIBacktestConfigurator
+        strategies={strategies}
+        config={config}
+        setConfig={setConfig}
+        onAutoRun={handleRun}
+      />
+
       {/* Config */}
       <BacktestConfig
         strategies={strategies}
         config={config}
         setConfig={setConfig}
-        onRun={handleRun}
+        onRun={() => handleRun()}
         running={running}
       />
 
