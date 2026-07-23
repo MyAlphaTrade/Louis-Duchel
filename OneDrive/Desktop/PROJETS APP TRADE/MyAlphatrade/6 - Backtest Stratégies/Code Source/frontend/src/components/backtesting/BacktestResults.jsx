@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import SummaryStats from "@/components/backtesting/SummaryStats";
+import BacktestDiagnostic from "@/components/backtesting/BacktestDiagnostic";
 import EquityCurve from "@/components/backtesting/EquityCurve";
 import TradeJournal from "@/components/backtesting/TradeJournal";
 import Optimizer from "@/components/backtesting/Optimizer";
@@ -108,6 +109,9 @@ export default function BacktestResults({ results, strategy, asset, config, onSa
 
       {/* Summary stats */}
       <SummaryStats metrics={{ ...metrics, bars }} />
+
+      {/* Diagnostic — verdict + pistes d'ajustement, toujours disponible */}
+      <BacktestDiagnostic results={results} strategy={strategy} config={config} />
 
       {/* Equity curve */}
       <EquityCurve equityCurve={equityCurve} initialCapital={config.initialCapital} />
