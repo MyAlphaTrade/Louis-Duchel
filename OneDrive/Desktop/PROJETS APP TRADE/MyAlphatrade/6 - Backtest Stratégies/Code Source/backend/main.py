@@ -94,6 +94,50 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", "AlphaTrade Strategy Lab <noreply@myal
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 RESET_TOKEN_EXPIRE_MINUTES = 30
 
+# Actifs crees automatiquement pour tout nouveau compte (register) -- avant
+# ca, un compte fraichement cree n'avait litteralement aucun actif ni bouton
+# visible pour en ajouter facilement (le bouton existe, mais uniquement sur
+# la page Gestion des actifs, pas sur Donnees de marche). Donnees reelles
+# de Louis, deja utilisees tout au long de cette session -- jamais inventees.
+# L'utilisateur reste libre de les supprimer (Gestion des actifs) ou d'en
+# ajouter d'autres ensuite, ce sont juste des valeurs de depart.
+DEFAULT_ASSETS = [
+    {
+        "name": "Gold Spot", "symbol": "XAUUSD", "category": "Métaux",
+        "description": "Or au comptant face au dollar américain",
+        "broker": "Multiple", "color": "amber", "icon": "Coins",
+        "status": "active", "digits": 2, "pip_size": 0.01, "default_timeframe": "M15",
+    },
+    {
+        "name": "Boom 1000 Index", "symbol": "BOOM1000", "category": "Indices synthétiques",
+        "description": "Index synthétique avec pics haussiers occasionnels",
+        "broker": "Deriv", "color": "emerald", "icon": "TrendingUp",
+        "status": "active", "digits": 2, "pip_size": 0.001, "default_timeframe": "M1",
+    },
+    {
+        "name": "Crash 1000 Index", "symbol": "CRASH1000", "category": "Indices synthétiques",
+        "description": "Index synthétique avec chutes occasionnelles",
+        "broker": "Deriv", "color": "rose", "icon": "TrendingDown",
+        "status": "active", "digits": 2, "pip_size": 0.001, "default_timeframe": "M1",
+    },
+    {
+        "name": "VIX 75 Index", "symbol": "VIX75", "category": "Indices de volatilité",
+        "description": "Index de volatilité basé sur 75 composantes",
+        "broker": "Multiple", "color": "violet", "icon": "Activity",
+        "status": "active", "digits": 2, "pip_size": 0.01, "default_timeframe": "M5",
+    },
+]
+
+
+def seed_default_assets(cur, user_id: int) -> None:
+    now = now_iso()
+    for asset in DEFAULT_ASSETS:
+        cur.execute(
+            "INSERT INTO entities (id, user_id, entity_type, data, created_date, updated_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), user_id, "TradingAsset", json.dumps(asset), now, now),
+        )
+
+
 # Les 7 "entities" Base44 : User est couvert par la table `users` (auth
 # dediee) ; les 6 autres sont stockees generiquement dans `entities`,
 # scopees par utilisateur.
@@ -360,6 +404,7 @@ def register(req: RegisterRequest):
             (email, hash_password(req.password), req.full_name or "", created_at),
         )
         user_id = cur.lastrowid
+        seed_default_assets(cur, user_id)
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         user = row_to_dict(cur.fetchone())
 
