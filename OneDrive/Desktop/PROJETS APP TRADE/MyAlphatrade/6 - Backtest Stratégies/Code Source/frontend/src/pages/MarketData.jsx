@@ -4,6 +4,7 @@ import { getAssetStyle, TIMEFRAMES } from "@/lib/assets";
 import { parseMt5Csv } from "@/lib/csvImport";
 import { base44 } from "@/api/base44Client";
 import AssetCard from "@/components/AssetCard";
+import CandleChart from "@/components/CandleChart";
 import {
   Upload,
   Layers,
@@ -316,6 +317,13 @@ export default function MarketData() {
         </div>
       </div>
 
+      {/* Bougies multi-timeframe */}
+      {selectedAsset && (
+        <div className="mt-8">
+          <CandleChart symbol={selectedAsset.symbol} timeframe={selectedAsset.default_timeframe} />
+        </div>
+      )}
+
       {/* Features */}
       <div className="mt-8">
         <h3 className="text-sm font-semibold text-white mb-4">Fonctionnalités</h3>
@@ -361,9 +369,9 @@ export default function MarketData() {
               Visualisation des bougies M1, M5, M15, H1, H4 et D1 avec filtrage avancé par actif.
             </p>
             <div className="mt-4">
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wider uppercase px-2.5 py-1 rounded-full bg-white/5 text-slate-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-                Bientôt disponible
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium tracking-wider uppercase px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                Disponible
               </span>
             </div>
           </div>
