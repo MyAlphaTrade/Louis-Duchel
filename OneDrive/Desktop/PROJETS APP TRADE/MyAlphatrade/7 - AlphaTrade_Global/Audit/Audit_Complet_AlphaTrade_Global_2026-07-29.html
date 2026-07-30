@@ -1,0 +1,507 @@
+<content>
+<title>Audit technique — AlphaTrade Global</title>
+
+<style>
+  :root{
+    --paper:#eef0ec;
+    --paper-raised:#e2e6df;
+    --paper-sunken:#e6e9e2;
+    --ink:#1a1f1e;
+    --ink-soft:#454e4a;
+    --hairline:#c7ccc2;
+    --hairline-strong:#a9b0a2;
+    --accent:#2c6b6f;
+    --accent-soft:#dbe6e4;
+    --critical:#a8392f;
+    --critical-soft:#f1ddd8;
+    --warning:#9a6c22;
+    --warning-soft:#f0e4cd;
+    --good:#3f7a52;
+    --good-soft:#dfeadf;
+    --mono-bg:#e4e7e0;
+    --shadow: 0 1px 2px rgba(20,24,20,0.06);
+    --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,"Times New Roman",serif;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono: ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#12161b;
+      --paper-raised:#1b212a;
+      --paper-sunken:#171c22;
+      --ink:#e4e7e1;
+      --ink-soft:#a9b2ac;
+      --hairline:#2b333a;
+      --hairline-strong:#3a444c;
+      --accent:#67b6ba;
+      --accent-soft:#1c2d2e;
+      --critical:#e0685a;
+      --critical-soft:#301f1c;
+      --warning:#d9a35c;
+      --warning-soft:#2f2818;
+      --good:#7ac194;
+      --good-soft:#1c2a20;
+      --mono-bg:#1c222a;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12161b; --paper-raised:#1b212a; --paper-sunken:#171c22;
+    --ink:#e4e7e1; --ink-soft:#a9b2ac; --hairline:#2b333a; --hairline-strong:#3a444c;
+    --accent:#67b6ba; --accent-soft:#1c2d2e;
+    --critical:#e0685a; --critical-soft:#301f1c;
+    --warning:#d9a35c; --warning-soft:#2f2818;
+    --good:#7ac194; --good-soft:#1c2a20;
+    --mono-bg:#1c222a; --shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  :root[data-theme="light"]{
+    --paper:#eef0ec; --paper-raised:#e2e6df; --paper-sunken:#e6e9e2;
+    --ink:#1a1f1e; --ink-soft:#454e4a; --hairline:#c7ccc2; --hairline-strong:#a9b0a2;
+    --accent:#2c6b6f; --accent-soft:#dbe6e4;
+    --critical:#a8392f; --critical-soft:#f1ddd8;
+    --warning:#9a6c22; --warning-soft:#f0e4cd;
+    --good:#3f7a52; --good-soft:#dfeadf;
+    --mono-bg:#e4e7e0; --shadow: 0 1px 2px rgba(20,24,20,0.06);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.6;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--accent-soft);}
+  a{color:var(--accent);}
+  a:focus-visible, button:focus-visible, summary:focus-visible{
+    outline:2px solid var(--accent); outline-offset:2px;
+  }
+
+  .sheet{
+    max-width:760px;
+    margin:0 auto;
+    padding:56px 24px 120px;
+  }
+
+  /* ── Letterhead ───────────────────────────────────────── */
+  .letterhead{
+    border-bottom:2px solid var(--ink);
+    padding-bottom:22px;
+    margin-bottom:36px;
+  }
+  .letterhead .kicker{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .letterhead h1{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:2.15rem;
+    line-height:1.15;
+    margin:.3em 0 .2em;
+    text-wrap:balance;
+  }
+  .letterhead .sub{
+    font-size:1.02rem;
+    color:var(--ink-soft);
+    max-width:56ch;
+  }
+  .meta-row{
+    display:flex; flex-wrap:wrap; gap:6px 22px;
+    margin-top:18px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--ink-soft);
+  }
+  .meta-row b{color:var(--ink); font-weight:600;}
+
+  /* ── Nav ──────────────────────────────────────────────── */
+  nav.toc{
+    position:sticky; top:0; z-index:5;
+    background:var(--paper);
+    border-bottom:1px solid var(--hairline);
+    margin:0 calc(-1 * 24px) 40px;
+    padding:10px 24px;
+    display:flex; gap:18px; overflow-x:auto;
+    font-family:var(--mono); font-size:12px; letter-spacing:.02em;
+    white-space:nowrap;
+  }
+  nav.toc a{color:var(--ink-soft); text-decoration:none; text-transform:uppercase;}
+  nav.toc a:hover{color:var(--accent);}
+
+  section{margin-bottom:52px; scroll-margin-top:52px;}
+  h2{
+    font-family:var(--serif);
+    font-size:1.5rem;
+    font-weight:600;
+    margin:0 0 6px;
+    text-wrap:balance;
+  }
+  .h2-num{
+    font-family:var(--mono); font-size:.8rem; color:var(--accent);
+    display:block; letter-spacing:.06em; margin-bottom:2px;
+  }
+  h3{
+    font-family:var(--sans); font-size:1.05rem; font-weight:700;
+    margin:1.6em 0 .5em;
+  }
+  p{margin:0 0 1em; max-width:66ch;}
+  .lede{font-size:1.08rem; color:var(--ink-soft); max-width:62ch;}
+  ul, ol{margin:0 0 1em; padding-left:1.3em; max-width:64ch;}
+  li{margin-bottom:.45em;}
+  .divider{border:none; border-top:1px solid var(--hairline); margin:44px 0;}
+
+  code, .mono{font-family:var(--mono); font-size:.88em;}
+  .filepath{
+    font-family:var(--mono); font-size:.82em;
+    background:var(--mono-bg); border-radius:3px;
+    padding:.1em .4em;
+  }
+
+  /* ── Verdict box ──────────────────────────────────────── */
+  .verdict{
+    background:var(--paper-raised);
+    border-left:3px solid var(--accent);
+    padding:20px 22px;
+    border-radius:2px;
+    margin:0 0 28px;
+  }
+  .verdict p{margin:0 0 .7em; max-width:none;}
+  .verdict p:last-child{margin-bottom:0;}
+
+  /* ── Stat row ─────────────────────────────────────────── */
+  .stat-grid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--hairline);
+    border:1px solid var(--hairline);
+    margin:22px 0;
+  }
+  .stat{
+    background:var(--paper); padding:16px 14px;
+  }
+  .stat .num{
+    font-family:var(--mono); font-variant-numeric:tabular-nums;
+    font-size:1.5rem; font-weight:600; color:var(--ink);
+    display:block; line-height:1.1;
+  }
+  .stat .num.neg{color:var(--critical);}
+  .stat .num.pos{color:var(--good);}
+  .stat .label{
+    font-size:.74rem; color:var(--ink-soft); text-transform:uppercase;
+    letter-spacing:.04em; margin-top:4px; display:block;
+  }
+  @media (max-width:640px){ .stat-grid{grid-template-columns:repeat(2,1fr);} }
+
+  /* ── Tables ───────────────────────────────────────────── */
+  .table-wrap{overflow-x:auto; margin:18px 0;}
+  table{border-collapse:collapse; width:100%; font-size:.92rem;}
+  th, td{
+    text-align:left; padding:9px 14px 9px 0;
+    border-bottom:1px solid var(--hairline);
+    white-space:nowrap;
+  }
+  th{
+    font-family:var(--mono); font-size:.72rem; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--ink-soft); font-weight:600;
+  }
+  td.num, th.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right;}
+  td.neg{color:var(--critical);}
+  td.pos{color:var(--good);}
+  tr:last-child td{border-bottom:none;}
+
+  /* ── Bar compare ──────────────────────────────────────── */
+  .bar-compare{margin:20px 0 8px;}
+  .bar-row{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .bar-row .bar-label{width:110px; flex:none; font-size:.85rem; color:var(--ink-soft);}
+  .bar-track{flex:1; background:var(--paper-sunken); border-radius:2px; height:22px; position:relative; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:2px;}
+  .bar-fill.win{background:var(--good);}
+  .bar-fill.loss{background:var(--critical);}
+  .bar-row .bar-val{
+    width:76px; flex:none; text-align:right;
+    font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:.85rem;
+  }
+
+  /* ── Finding cards ────────────────────────────────────── */
+  .finding{
+    border:1px solid var(--hairline);
+    border-left:4px solid var(--hairline-strong);
+    padding:20px 22px; margin-bottom:22px; background:var(--paper-raised);
+  }
+  .finding.critical{border-left-color:var(--critical);}
+  .finding.major{border-left-color:var(--warning);}
+  .finding.minor{border-left-color:var(--ink-soft);}
+  .finding-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;}
+  .finding-head h4{font-family:var(--serif); font-size:1.12rem; font-weight:600; margin:0;}
+  .chip{
+    font-family:var(--mono); font-size:.68rem; text-transform:uppercase;
+    letter-spacing:.05em; padding:2px 8px; border-radius:20px; font-weight:600;
+  }
+  .chip.critical{background:var(--critical-soft); color:var(--critical);}
+  .chip.major{background:var(--warning-soft); color:var(--warning);}
+  .chip.minor{background:var(--paper-sunken); color:var(--ink-soft);}
+  .finding .impact{
+    font-size:.82rem; color:var(--ink-soft); margin-bottom:12px; font-style:italic;
+  }
+  .finding p{margin-bottom:.8em;}
+  .evidence{
+    background:var(--mono-bg); border-radius:3px;
+    padding:12px 14px; font-family:var(--mono); font-size:.78rem;
+    line-height:1.65; overflow-x:auto; margin:10px 0;
+    color:var(--ink-soft);
+  }
+  .evidence b{color:var(--ink); font-weight:600;}
+  .evidence .path{color:var(--accent);}
+
+  /* ── Checklist / action plan ──────────────────────────── */
+  .phase{margin-bottom:30px;}
+  .phase .phase-label{
+    font-family:var(--mono); font-size:.75rem; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--accent); margin-bottom:8px; display:block;
+  }
+  .action{
+    display:flex; gap:14px; padding:14px 0;
+    border-top:1px solid var(--hairline);
+  }
+  .action:last-child{border-bottom:1px solid var(--hairline);}
+  .action .a-effort{
+    flex:none; width:64px; font-family:var(--mono); font-size:.68rem;
+    text-transform:uppercase; color:var(--ink-soft); padding-top:2px;
+  }
+  .action .a-body b{display:block; margin-bottom:2px;}
+  .action .a-body span{color:var(--ink-soft); font-size:.92rem;}
+
+  /* ── Good list ────────────────────────────────────────── */
+  .good-list{list-style:none; padding:0; margin:0;}
+  .good-list li{
+    padding-left:26px; position:relative; margin-bottom:.7em;
+  }
+  .good-list li::before{
+    content:"✓"; position:absolute; left:0; color:var(--good); font-weight:700;
+  }
+
+  footer{
+    margin-top:60px; padding-top:20px; border-top:1px solid var(--hairline);
+    font-size:.8rem; color:var(--ink-soft); font-family:var(--mono);
+  }
+
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto !important;} }
+</style>
+
+<div class="sheet">
+
+  <div class="letterhead">
+    <span class="kicker">Rapport d'audit technique — usage interne</span>
+    <h1>AlphaTrade Global — pourquoi le moteur perd de l'argent, et comment le rendre réellement plus intelligent</h1>
+    <p class="sub">Audit du code (frontend, fonctions backend Base44, pont MT5) croisé avec l'historique réel des trades exécutés sur le compte de démonstration.</p>
+    <div class="meta-row">
+      <span><b>Compte analysé</b> Deriv-Demo #201660817</span>
+      <span><b>Identifiant bot</b> magic 234000</span>
+      <span><b>Période</b> 27–29 juillet 2026</span>
+      <span><b>Échantillon</b> 53 positions clôturées</span>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <a href="#verdict">Verdict</a>
+    <a href="#chiffres">Chiffres réels</a>
+    <a href="#fonctionne">Ce qui tient</a>
+    <a href="#diagnostic">Diagnostic</a>
+    <a href="#plan">Plan d'action</a>
+    <a href="#conclusion">Conclusion</a>
+  </nav>
+
+  <section id="verdict">
+    <span class="h2-num">Résumé</span>
+    <h2>Le verdict en une minute</h2>
+    <div class="verdict">
+      <p><b>Le taux de perte n'est pas un problème de "moteurs pas assez intelligents"</b> — c'est un problème de plomberie. Deux bugs structurels précis expliquent l'essentiel du solde négatif, et sont corrigibles cette semaine sans toucher à un seul algorithme.</p>
+      <p>Le point plus sérieux, celui qui répond directement à ta question « pourquoi les moteurs restent bref » : <b>les 19 moteurs d'analyse ne regardent aucune donnée de marché réelle.</b> Ni bougies, ni indicateurs calculés, ni niveaux de prix — le Market Brain envoie un prompt texte à un LLM et lui demande de jouer le rôle de 19 experts. C'est de la mise en scène convaincante, pas de l'analyse quantitative.</p>
+    </div>
+  </section>
+
+  <section id="chiffres">
+    <span class="h2-num">01 · Données réelles</span>
+    <h2>Ce que le compte MT5 dit vraiment</h2>
+    <p class="lede">Extraction en lecture seule de l'historique MT5 (deals groupés par position, filtrés sur le magic number 234000 propre à AlphaTrade Global) — pas les chiffres auto-déclarés par l'app, les chiffres du broker.</p>
+
+    <div class="stat-grid">
+      <div class="stat"><span class="num">64,2%</span><span class="label">Taux de réussite</span></div>
+      <div class="stat"><span class="num neg">−279,59 $</span><span class="label">PnL net (53 trades)</span></div>
+      <div class="stat"><span class="num neg">0,32</span><span class="label">Profit factor</span></div>
+      <div class="stat"><span class="num">3 j</span><span class="label">Durée observée</span></div>
+    </div>
+
+    <p>Un profit factor de 0,32 avec 64 % de trades gagnants n'est pas une contradiction — c'est la signature exacte d'un système qui <b>coupe ses gains trop tôt et laisse courir ses pertes</b>.</p>
+
+    <div class="bar-compare">
+      <div class="bar-row">
+        <span class="bar-label">Gain moyen</span>
+        <div class="bar-track"><div class="bar-fill win" style="width:15%"></div></div>
+        <span class="bar-val pos">+3,84 $</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Perte moyenne</span>
+        <div class="bar-track"><div class="bar-fill loss" style="width:93%"></div></div>
+        <span class="bar-val neg">−23,86 $</span>
+      </div>
+    </div>
+    <p style="font-size:.85rem;color:var(--ink-soft)">Une perte moyenne coûte 6,2× ce que rapporte un gain moyen. Il faudrait un taux de réussite d'environ 87 % juste pour atteindre le seuil de rentabilité à ce ratio — le système en fait 64 %.</p>
+
+    <h3>Détail par actif</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Actif</th><th class="num">Trades</th><th class="num">Réussite</th><th class="num">PnL</th></tr></thead>
+        <tbody>
+          <tr><td>XAUUSD</td><td class="num">29</td><td class="num">82,8%</td><td class="num neg">−42,45 $</td></tr>
+          <tr><td>XAGUSD</td><td class="num">7</td><td class="num">42,9%</td><td class="num neg">−156,60 $</td></tr>
+          <tr><td>AUDUSD</td><td class="num">6</td><td class="num">16,7%</td><td class="num neg">−32,66 $</td></tr>
+          <tr><td>ETHUSD</td><td class="num">6</td><td class="num">66,7%</td><td class="num neg">−20,66 $</td></tr>
+          <tr><td>BTCUSD</td><td class="num">3</td><td class="num">0,0%</td><td class="num neg">−38,80 $</td></tr>
+          <tr><td>EURUSD</td><td class="num">2</td><td class="num">100,0%</td><td class="num pos">+16,23 $</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.85rem;color:var(--ink-soft)">XAUUSD a le meilleur taux de réussite (82,8%) mais reste perdant — cohérent avec le diagnostic profit factor : les gains XAUUSD sont systématiquement minuscules (+0,21 $ à +0,38 $ sur plusieurs positions), pendant qu'une poignée de pertes à −18/−28 $ effacent tout. XAGUSD est le vrai trou noir du compte.</p>
+  </section>
+
+  <section id="fonctionne">
+    <span class="h2-num">02 · Bilan honnête</span>
+    <h2>Ce qui tient déjà la route</h2>
+    <p class="lede">Un audit qui ne liste que des problèmes n'est pas fiable. Voici ce qui est du travail solide et ne doit pas être touché.</p>
+    <ul class="good-list">
+      <li><b>Le build passe proprement.</b> <span class="filepath">npm run build</span> compile sans erreur (2945 modules), <span class="filepath">npm run lint</span> ne remonte que 12 imports inutilisés — du code propre pour un projet de cette taille.</li>
+      <li><b>Le pont MT5 (<span class="filepath">alphatg_bridge.py</span>) est du travail sérieux</b> — retry automatique sur les modes de remplissage d'ordre (retcode 10030), décodage des codes d'erreur MT5 en messages exploitables, ajustement automatique SL/TP au minimum du broker, flux SSE temps réel (~200 ms) plutôt qu'un polling lent.</li>
+      <li><b>Le calcul de lot est correctement basé sur le risque</b> (<span class="filepath">alphatradeConnector.ts</span> — <code>lot = risque% × capital / distance-SL</code>), pas une taille fixe en dur.</li>
+      <li><b>L'architecture à 19 domaines est une bonne colonne vertébrale.</b> Séparer Structure de marché / Smart Money / Volume / Liquidité / Risque / Exécution en modules nommés et pondérés est la bonne façon de penser le problème — le défaut n'est pas la structure, c'est ce qui la remplit (section suivante).</li>
+      <li><b>10 pages fonctionnelles</b> couvrant tout le cycle (Analysis, StrategyTester, Journal, ValidationCenter, ClientSpace) — le socle produit existe déjà.</li>
+    </ul>
+  </section>
+
+  <section id="diagnostic">
+    <span class="h2-num">03 · Diagnostic</span>
+    <h2>Les causes racines, avec preuves</h2>
+
+    <div class="finding critical">
+      <div class="finding-head"><h4>1 — L'ancien moteur AlphaTrade tue les trades du nouveau</h4><span class="chip critical">Critique</span></div>
+      <div class="impact">Impact mesuré : environ 100 $ des 280 $ de perte nette (36 %) proviennent directement de ce bug.</div>
+      <p>L'ancien moteur (<span class="filepath">AlphaTrade v4.1.0/5.0.0</span>, magic 20260607) identifie l'origine d'une position par mot-clé dans le commentaire MT5 quand le magic ne correspond pas : sa règle <code>"AlphaTrade AI"</code> matche tout commentaire contenant <code>"alphatrade"</code>. Or AlphaTrade Global tague ses propres ordres avec le commentaire <code>"AlphaTrade Global"</code> — qui contient bien sûr le mot "alphatrade".</p>
+      <p>Résultat : l'ancien moteur <b>adopte les positions d'AlphaTrade Global comme les siennes</b> et leur applique sa propre logique de protection (MAX_FLOATING_LOSS, MAX_POSITION_LOSS, trailing) — avec des seuils qui n'ont rien à voir avec la stratégie d'AlphaTrade Global.</p>
+      <div class="evidence">
+<span class="path">alphatrade_engine.py:67-68</span> — règle de correspondance :
+{"name": "AlphaTrade AI", "magic_numbers": [MAGIC],
+ "comment_keywords": ["alphatrade", "alphakaris"]}
+
+<span class="path">data/trade_exits.jsonl</span> — 5 positions XAUUSD d'AlphaTrade Global
+forcées à la fermeture par l'ancien moteur le 27/07 à 23:21-23:24 :
+  <b>ticket 9735532848 → MAX_FLOATING_LOSS → -27,99 $</b>
+  <b>ticket 9735535459 → MAX_FLOATING_LOSS → -27,36 $</b>
+  <b>ticket 9735536554 → MAX_FLOATING_LOSS → -26,68 $</b>
+  <b>ticket 9735592444 → MAX_POSITION_LOSS  → -18,05 $</b>
+  <b>ticket 9735675507 → PROFIT_TRAILING   →  -0,58 $</b> (était à +0,16 $ juste avant)
+</div>
+      <p>Les deux moteurs tournaient donc <b>en même temps sur le même compte</b>, sans le savoir l'un de l'autre.</p>
+    </div>
+
+    <div class="finding critical">
+      <div class="finding-head"><h4>2 — Les 19 moteurs n'analysent aucune donnée de marché</h4><span class="chip critical">Critique</span></div>
+      <div class="impact">C'est la vraie raison pour laquelle les moteurs restent « bref ».</div>
+      <p><span class="filepath">base44/functions/marketBrain/entry.ts</span> — la fonction <code>buildPrompt()</code> — construit un unique prompt texte envoyé au LLM. Il contient : le nom du symbole, le timeframe, une description générique de chaque moteur ("Focus: EMA, SMA, VWAP, MACD, RSI…"), l'historique d'apprentissage, et l'état du compte. <b>Aucune bougie, aucun prix historique, aucun indicateur calculé n'y figure.</b></p>
+      <p>Le LLM reçoit littéralement l'instruction <code>"Analyse XAUUSD sur H1 maintenant"</code> et doit inventer les niveaux de Fibonacci, les Order Blocks, la structure de marché — sans avoir vu un seul prix. Le paramètre <code>add_context_from_internet</code> peut ramener un peu de contexte via une recherche web (et seulement pour le fournisseur Gemini — <span class="filepath">aiInvoke.ts:44</span> désactive cette option pour OpenAI/Anthropic), ce qui est beaucoup trop imprécis pour fixer un niveau d'entrée ou un Stop Loss au dollar près.</p>
+      <div class="evidence">
+<span class="path">marketBrain/entry.ts:125-153</span>
+function buildPrompt(symbol, timeframe, context) {
+  ... // noms de moteurs + descriptions statiques + contexte compte
+  // → zéro série de prix, zéro OHLC, zéro indicateur calculé
+}
+</div>
+      <p>Concrètement : le score de confiance, le Stop Loss, les Take Profit affichés sont game de rôle bien structuré, pas un calcul. C'est cohérent avec les résultats observés — de bonnes intuitions générales par moments, mais aucune précision fiable sur les niveaux de prix.</p>
+    </div>
+
+    <div class="finding major">
+      <div class="finding-head"><h4>3 — Le backtest et les tests de validation sont fabriqués, pas simulés</h4><span class="chip major">Majeur</span></div>
+      <div class="impact">Conséquence : impossible de valider une amélioration de stratégie avec les outils actuels.</div>
+      <p><span class="filepath">strategyTester/entry.ts:84-90</span> demande au LLM de <i>« simuler les trades qu'aurait pris un trader discipliné »</i> et de <i>« calculer »</i> profit factor, drawdown, gain moyen — le tout sans jeu de données historiques réel en entrée. Le résultat est un JSON plausible, pas un backtest reproductible : deux exécutions du même test sur la même période peuvent donner des chiffres différents, et rien ne garantit que les prix "simulés" aient existé.</p>
+      <p>Idem pour <span class="filepath">engineTest/entry.ts</span> (Centre de Validation) : chaque test de moteur est un unique appel LLM avec un prompt spécialisé — utile pour vérifier que le pipeline répond, inutile pour vérifier que l'analyse est juste.</p>
+    </div>
+
+    <div class="finding major">
+      <div class="finding-head"><h4>4 — Aucune gestion de position après l'ouverture</h4><span class="chip major">Majeur</span></div>
+      <div class="impact">Explique directement l'asymétrie gain/perte (0,32 profit factor).</div>
+      <p>Une fois un ordre envoyé (<span class="filepath">AnalysisSessionStore.jsx:61-90</span>), rien ne surveille plus la position côté AlphaTrade Global : pas de passage à break-even, pas de trailing stop, pas de sortie partielle au premier objectif. La position attend son Stop Loss ou son Take Profit fixe, point final — ce que le registre des moteurs appelle « Position Management » et « Autonomous Trading » n'existe que comme texte descriptif dans le prompt LLM (<span class="filepath">engineTest/entry.ts:34,41</span>), sans code qui l'exécute réellement sur MT5.</p>
+      <p>C'est cohérent avec les positions AUDUSD tenues 1 à 2 jours avant un Stop Loss, et avec les micro-gains XAUUSD (0,21-0,38 $) : sans gestion active, un take profit trop proche capture des miettes et un mouvement défavorable prend tout son temps pour toucher le stop.</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head"><h4>5 — Le trading « autonome » ne tourne que si un onglet est ouvert</h4><span class="chip minor">Modéré</span></div>
+      <p>La boucle de scan (<span class="filepath">AnalysisSessionStore.jsx:138-148</span>) est un <code>setInterval</code> React côté navigateur. Fermer l'onglet, mettre l'ordinateur en veille, ou fermer l'app desktop <b>arrête tout</b> — analyse et gestion comprises. Aucune tâche planifiée côté serveur (Base44 cron) ne prend le relais. L'ancien moteur Python, lui, tourne en processus permanent 24/7 — c'est un vrai recul d'architecture sur ce point précis.</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head"><h4>6 — Détails de code mineurs</h4><span class="chip minor">Mineur</span></div>
+      <p>12 imports inutilisés (corrigibles avec <span class="filepath">npm run lint:fix</span>), et un bundle JS de 1,1 Mo non découpé (<span class="filepath">vite.config.js</span> — <code>manualChunks</code> à configurer). Aucun impact sur le trading, juste de l'hygiène.</p>
+    </div>
+  </section>
+
+  <section id="plan">
+    <span class="h2-num">04 · Plan d'action</span>
+    <h2>Par où commencer, dans l'ordre</h2>
+
+    <div class="phase">
+      <span class="phase-label">Ce soir — arrêter l'hémorragie</span>
+      <div class="action">
+        <div class="a-effort">15 min</div>
+        <div class="a-body"><b>Ne jamais faire tourner l'ancien AlphaTrade et AlphaTrade Global en même temps sur le même compte MT5.</b><span>Solution immédiate sans toucher au code : les utiliser sur deux comptes démo séparés, ou couper l'ancien moteur tant qu'AlphaTrade Global est testé.</span></div>
+      </div>
+      <div class="action">
+        <div class="a-effort">30 min</div>
+        <div class="a-body"><b>Corriger le filtre par mot-clé de l'ancien moteur.</b><span>Dans <span class="filepath">alphatrade_engine.py</span>, retirer <code>"alphatrade"</code> de <code>comment_keywords</code> et se fier uniquement au magic number — ou changer le commentaire d'AlphaTrade Global pour qu'il ne contienne plus ce mot. Corrige le bug à la source, même si les deux tournent un jour ensemble.</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="phase-label">Cette semaine — donner de vrais yeux au système</span>
+      <div class="action">
+        <div class="a-effort">Coeur</div>
+        <div class="a-body"><b>Injecter de vraies données de marché dans le Market Brain.</b><span>Récupérer les bougies OHLC réelles (MT5 <code>copy_rates_from</code> via le bridge, déjà connecté) et calculer EMA/RSI/MACD/ATR côté code — pas côté LLM. Le LLM garde son rôle : interpréter et fusionner des chiffres déjà calculés, pas les inventer.</span></div>
+      </div>
+      <div class="action">
+        <div class="a-effort">Coeur</div>
+        <div class="a-body"><b>Remplacer le backtest halluciné par un vrai moteur de simulation.</b><span>Rejouer une stratégie codée (règles explicites de structure/indicateurs) sur l'historique réel MT5, trade par trade, sans LLM dans la boucle de calcul. Le LLM peut ensuite commenter les résultats — jamais les produire.</span></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <span class="phase-label">Ensuite — fermer les trous d'exécution</span>
+      <div class="action">
+        <div class="a-effort">Moyen</div>
+        <div class="a-body"><b>Implémenter la gestion de position réelle côté bridge.</b><span>Break-even automatique, trailing stop, sortie partielle au premier objectif — en code déterministe dans <span class="filepath">alphatg_bridge.py</span> ou le connecteur, pas en description dans un prompt.</span></div>
+      </div>
+      <div class="action">
+        <div class="a-effort">Moyen</div>
+        <div class="a-body"><b>Sortir la boucle autonome du navigateur.</b><span>Déplacer le cycle de scan vers une tâche planifiée côté serveur (Base44 cron function) ou un processus dédié qui tourne indépendamment de l'onglet ouvert.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <section id="conclusion">
+    <span class="h2-num">05 · En réponse directe</span>
+    <h2>Est-ce déjà meilleur qu'AlphaTrade ?</h2>
+    <p>Non, pas encore — mais pas pour la raison qu'on pourrait croire. Ce n'est pas que les idées (19 domaines d'analyse, entry planner, gestion du risque) soient moins bonnes. C'est que l'ancien moteur, malgré son code plus rigide, <b>calcule réellement ses indicateurs sur des prix réels</b>, alors qu'AlphaTrade Global délègue cette analyse à un LLM qui n'a jamais vu un seul prix. Un système qui calcule juste avec une stratégie simple bat un système qui raisonne bien sur des données inventées.</p>
+    <p>La bonne nouvelle : la structure d'AlphaTrade Global (les 19 moteurs, l'architecture multi-plateforme, le pont MT5 temps réel, l'UI complète) est un <b>meilleur socle</b> pour construire la vraie intelligence que ne l'était le code monolithique de l'ancien moteur. Il manque une seule chose, mais elle est centrale : brancher des données de marché réelles derrière chaque moteur. Une fois ce fil branché, l'architecture existante est prête à en tirer parti sans tout reconstruire.</p>
+  </section>
+
+  <footer>
+    Audit basé sur lecture de code (frontend + fonctions Base44 + pont Python), extraction en lecture seule de l'historique MT5 réel, et exécution du build/lint du projet. Aucun ordre n'a été passé ni modifié pendant cet audit.
+  </footer>
+
+</div>
+</content>

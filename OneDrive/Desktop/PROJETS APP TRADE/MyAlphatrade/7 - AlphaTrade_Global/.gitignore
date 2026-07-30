@@ -1,0 +1,8 @@
+# Dist/ is its own git repository (Base44-linked, separate remote) — never track it here.
+Dist/
+
+# Large Base44 export backup — not source, not meant for version control.
+alpha-intel-lab.zip
+
+# Secrets — the bridge's local API key, generated per-machine, never committed.
+EA_Bridge/bridge_api_key.txt
