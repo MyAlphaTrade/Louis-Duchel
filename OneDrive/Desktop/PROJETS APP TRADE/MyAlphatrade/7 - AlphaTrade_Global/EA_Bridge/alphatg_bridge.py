@@ -986,6 +986,219 @@ def send_order():
     })
 
 
+@app.route("/send_pending_order", methods=["POST"])
+def send_pending_order():
+    """Places a pending order (BUY/SELL LIMIT/STOP) instead of a market order.
+    Lets the AI plan an entry level in advance instead of only reacting to
+    whatever the price is doing right now."""
+    if not _connection["initialized"]:
+        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+
+    data = request.json or {}
+    symbol = data.get("symbol")
+    direction = (data.get("direction") or "BUY").upper()
+    lot = float(data.get("lot", 0.01))
+    stop_loss = float(data.get("stop_loss", 0))
+    take_profit = float(data.get("take_profit_1", data.get("take_profit", 0)))
+    expiration = data.get("expiration")  # optional ISO datetime string; GTC if absent
+
+    if not symbol:
+        return jsonify(_structured_error("SYMBOL_NOT_FOUND", "symbol required")), 400
+    if direction not in ("BUY", "SELL"):
+        return jsonify(_structured_error("INVALID_REQUEST", "direction must be BUY or SELL")), 400
+    try:
+        entry_price = float(data.get("entry_price"))
+    except (TypeError, ValueError):
+        return jsonify(_structured_error("INVALID_REQUEST", "entry_price is required for a pending order")), 400
+
+    validation = pre_order_validation(symbol, lot, direction)
+    if not validation["valid"]:
+        log.warning("[PRE_ORDER_VALIDATION] FAILED (pending) symbol=%s reason=%s", symbol, validation["reason"])
+        return jsonify(_structured_error(
+            validation["reason"],
+            "Pending order rejected at validation stage: " + validation["reason"],
+            symbol=symbol,
+            extra={"stage": "PRE_ORDER_VALIDATION", "details": validation.get("details", {})},
+        )), 400
+
+    details = validation["details"]
+    resolved = details["resolved_symbol"]
+    normalized_lot = details["normalized_lot"]
+    filling_const_val = details.get("filling_const", mt5.ORDER_FILLING_RETURN)
+    current_price = details["tick_price"]
+
+    with _mt5_lock:
+        info = mt5.symbol_info(resolved)
+    point = getattr(info, "point", 0.0001) or 0.0001
+    stops_level = getattr(info, "trade_stops_level", 0) or 0
+    min_distance = stops_level * point * 1.2  # same 20% safety buffer as market-order SL/TP
+
+    distance = abs(entry_price - current_price)
+    if distance < min_distance:
+        return jsonify(_structured_error(
+            "TOO_CLOSE_TO_MARKET",
+            "entry_price (" + str(entry_price) + ") is too close to the current price (" + str(current_price) +
+            ") for a pending order — needs at least " + str(round(min_distance, 5)) +
+            " distance. Use an immediate market order instead.",
+            symbol=resolved,
+            extra={"current_price": current_price, "min_distance": min_distance},
+        )), 400
+
+    # BUY: entry below current price = LIMIT (waiting for a pullback down),
+    # entry above = STOP (waiting for a breakout up). SELL is the mirror.
+    if direction == "BUY":
+        order_type = mt5.ORDER_TYPE_BUY_LIMIT if entry_price < current_price else mt5.ORDER_TYPE_BUY_STOP
+        pending_kind = "BUY_LIMIT" if entry_price < current_price else "BUY_STOP"
+    else:
+        order_type = mt5.ORDER_TYPE_SELL_LIMIT if entry_price > current_price else mt5.ORDER_TYPE_SELL_STOP
+        pending_kind = "SELL_LIMIT" if entry_price > current_price else "SELL_STOP"
+
+    stops = validate_and_adjust_stops(resolved, direction, entry_price, stop_loss, take_profit)
+
+    request_data = {
+        "action": mt5.TRADE_ACTION_PENDING,
+        "symbol": resolved,
+        "volume": normalized_lot,
+        "type": order_type,
+        "price": entry_price,
+        "sl": stops["sl"],
+        "tp": stops["tp"],
+        "deviation": 20,
+        "magic": 234000,
+        "comment": "AT Global",
+        "type_time": mt5.ORDER_TIME_GTC,
+        "type_filling": filling_const_val,
+    }
+
+    if expiration:
+        try:
+            exp_dt = datetime.fromisoformat(str(expiration).replace("Z", "+00:00"))
+            request_data["type_time"] = mt5.ORDER_TIME_SPECIFIED
+            request_data["expiration"] = int(exp_dt.timestamp())
+        except ValueError:
+            log.warning("[PENDING_ORDER] Malformed expiration '%s' — falling back to GTC", expiration)
+
+    log.info("[PENDING_ORDER_SEND] %s %s %s @ %s (current=%s, resolved=%s, lot=%s)",
+             pending_kind, symbol, lot, entry_price, current_price, resolved, normalized_lot)
+
+    filling_modes_to_try = [filling_const_val]
+    for alt in [mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_RETURN]:
+        if alt != filling_const_val and alt not in filling_modes_to_try:
+            filling_modes_to_try.append(alt)
+
+    result = None
+    for idx, fill_const in enumerate(filling_modes_to_try):
+        request_data["type_filling"] = fill_const
+        result = mt5.order_send(request_data)
+        if result is None:
+            return jsonify(_structured_error("ORDER_SEND_FAILED", "order_send returned None", symbol=resolved)), 500
+        if result.retcode == mt5.TRADE_RETCODE_DONE:
+            log.info("[PENDING_ORDER_OK] %s %s @ %s, ticket=%s (filling_mode_attempt=%d)", pending_kind, resolved, entry_price, result.order, idx + 1)
+            break
+        if result.retcode != 10030:
+            break
+        log.warning("[PENDING_ORDER_RETRY] retcode=10030 (filling mode %d/%d rejected), trying next mode", idx + 1, len(filling_modes_to_try))
+
+    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+        retcode = result.retcode if result else 0
+        if retcode == 10030:
+            err_code = "FILLING_MODE_UNSUPPORTED"
+        elif retcode == 10014:
+            err_code = "INVALID_VOLUME"
+        elif retcode == 10015 or retcode == 10018:
+            # MT5 retcode reference: 10018 is TRADE_RETCODE_MARKET_CLOSED, not
+            # insufficient funds (that's 10019) — a mislabel already present in
+            # the market-order endpoint above, corrected here.
+            err_code = "MARKET_CLOSED"
+        elif retcode == 10016:
+            err_code = "INVALID_STOPS"
+        elif retcode == 10013:
+            err_code = "INVALID_REQUEST"
+        elif retcode == 10019:
+            err_code = "INSUFFICIENT_FUNDS"
+        elif retcode == 10027:
+            err_code = "AUTOTRADING_DISABLED"
+        elif retcode == 10006 or retcode == 10021:
+            err_code = "NO_PRICE"
+        else:
+            err_code = "ORDER_REJECTED"
+        return jsonify(_structured_error(
+            err_code,
+            "Pending order failed: retcode=" + str(retcode) + ", comment=" + str(result.comment if result else "N/A"),
+            symbol=resolved,
+            extra={"retcode": retcode, "comment": str(result.comment if result else ""), "stage": "MT5_EXECUTION"},
+        )), 400
+
+    return jsonify({
+        "ok": True,
+        "ticket": str(result.order),
+        "order_type": pending_kind,
+        "resolved_symbol": resolved,
+        "lot": normalized_lot,
+        "entry_price": entry_price,
+    })
+
+
+@app.route("/pending_orders", methods=["GET"])
+def get_pending_orders_endpoint():
+    if not _connection["initialized"]:
+        return jsonify({"ok": False, "error": "MT5 not connected"}), 400
+
+    with _mt5_lock:
+        orders = mt5.orders_get() or []
+
+    type_names = {
+        mt5.ORDER_TYPE_BUY_LIMIT: "BUY_LIMIT",
+        mt5.ORDER_TYPE_SELL_LIMIT: "SELL_LIMIT",
+        mt5.ORDER_TYPE_BUY_STOP: "BUY_STOP",
+        mt5.ORDER_TYPE_SELL_STOP: "SELL_STOP",
+    }
+    result = [
+        {
+            "ticket": str(o.ticket),
+            "symbol": o.symbol,
+            "type": type_names.get(o.type, str(o.type)),
+            "lot": o.volume_current,
+            "price": o.price_open,
+            "stop_loss": o.sl,
+            "take_profit": o.tp,
+            "placed_at": datetime.fromtimestamp(o.time_setup).isoformat() if o.time_setup else None,
+            "comment": o.comment,
+            "magic": o.magic,
+        }
+        for o in orders
+    ]
+    return jsonify({"ok": True, "orders": result})
+
+
+@app.route("/cancel_order", methods=["POST"])
+def cancel_pending_order():
+    if not _connection["initialized"]:
+        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+
+    data = request.json or {}
+    try:
+        ticket = int(data.get("ticket", 0))
+    except (TypeError, ValueError):
+        ticket = 0
+    if not ticket:
+        return jsonify(_structured_error("INVALID_REQUEST", "ticket is required")), 400
+
+    request_data = {"action": mt5.TRADE_ACTION_REMOVE, "order": ticket}
+    result = mt5.order_send(request_data)
+
+    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+        retcode = result.retcode if result else 0
+        return jsonify(_structured_error(
+            "CANCEL_FAILED",
+            "Cancel failed: retcode=" + str(retcode) + ", comment=" + str(result.comment if result else "N/A"),
+            extra={"retcode": retcode, "ticket": ticket},
+        )), 400
+
+    log.info("[PENDING_ORDER_CANCELLED] ticket=%s", ticket)
+    return jsonify({"ok": True, "ticket": str(ticket)})
+
+
 @app.route("/positions", methods=["GET"])
 def get_positions_endpoint():
     positions = get_open_positions()
