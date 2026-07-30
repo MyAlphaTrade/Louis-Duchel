@@ -1023,10 +1023,8 @@ def get_rates():
 
     symbol = (request.args.get("symbol") or "").strip().upper()
     timeframe = (request.args.get("timeframe") or "H1").strip().upper()
-    try:
-        count = min(max(int(request.args.get("count", 300)), 1), 1000)
-    except ValueError:
-        return jsonify(_structured_error("INVALID_REQUEST", "count must be an integer")), 400
+    from_str = request.args.get("from")
+    to_str = request.args.get("to")
 
     if not symbol:
         return jsonify(_structured_error("INVALID_REQUEST", "symbol is required")), 400
@@ -1048,8 +1046,23 @@ def get_rates():
             extra={"similar": mapping.get("similar", [])},
         )), 404
 
-    with _mt5_lock:
-        rates = mt5.copy_rates_from_pos(resolved, tf_const, 0, count)
+    # Two modes: a date range for backtesting over a historical period, or the
+    # last N bars for live analysis snapshots. copy_rates_range has no bar limit.
+    if from_str or to_str:
+        try:
+            date_from = datetime.fromisoformat(from_str.replace("Z", "+00:00")) if from_str else datetime(2000, 1, 1)
+            date_to = datetime.fromisoformat(to_str.replace("Z", "+00:00")) if to_str else datetime.utcnow()
+        except ValueError:
+            return jsonify(_structured_error("INVALID_REQUEST", "from/to must be ISO date strings (YYYY-MM-DD)")), 400
+        with _mt5_lock:
+            rates = mt5.copy_rates_range(resolved, tf_const, date_from, date_to)
+    else:
+        try:
+            count = min(max(int(request.args.get("count", 300)), 1), 1000)
+        except ValueError:
+            return jsonify(_structured_error("INVALID_REQUEST", "count must be an integer")), 400
+        with _mt5_lock:
+            rates = mt5.copy_rates_from_pos(resolved, tf_const, 0, count)
 
     if rates is None or len(rates) == 0:
         return jsonify(_structured_error(
