@@ -1237,61 +1237,38 @@ _MT5_TIMEFRAMES = {
 }
 
 
-@app.route("/rates", methods=["GET"])
-def get_rates():
-    """Real OHLCV candles from MT5 — the actual price data behind the
-    analysis engines. No candles here means no real technical analysis,
-    only a text description a model has to guess at."""
+def fetch_candles_direct(symbol, timeframe, count=300, from_str=None, to_str=None):
+    """In-process candle fetch — same MT5 path as the /rates endpoint, but
+    callable directly from route handlers (e.g. marketBrain) without an
+    HTTP round trip to itself. Returns (candles, resolved_symbol, error).
+    """
     if not _connection["initialized"]:
-        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+        return None, None, "MT5 not connected"
 
-    symbol = (request.args.get("symbol") or "").strip().upper()
-    timeframe = (request.args.get("timeframe") or "H1").strip().upper()
-    from_str = request.args.get("from")
-    to_str = request.args.get("to")
-
-    if not symbol:
-        return jsonify(_structured_error("INVALID_REQUEST", "symbol is required")), 400
-
-    tf_attr = _MT5_TIMEFRAMES.get(timeframe)
+    tf_attr = _MT5_TIMEFRAMES.get(timeframe.upper())
     if tf_attr is None:
-        return jsonify(_structured_error(
-            "INVALID_REQUEST",
-            "Unsupported timeframe: " + timeframe,
-            extra={"supported": list(_MT5_TIMEFRAMES.keys())},
-        )), 400
+        return None, None, "Unsupported timeframe: " + timeframe
     tf_const = getattr(mt5, tf_attr)
 
-    mapping = resolve_symbol(symbol)
+    mapping = resolve_symbol(symbol.upper())
     resolved = mapping.get("resolved")
     if not mapping.get("found") or not resolved:
-        return jsonify(_structured_error(
-            "SYMBOL_NOT_FOUND", "Symbol not found: " + symbol, symbol=symbol,
-            extra={"similar": mapping.get("similar", [])},
-        )), 404
+        return None, None, "Symbol not found: " + symbol
 
-    # Two modes: a date range for backtesting over a historical period, or the
-    # last N bars for live analysis snapshots. copy_rates_range has no bar limit.
     if from_str or to_str:
         try:
             date_from = datetime.fromisoformat(from_str.replace("Z", "+00:00")) if from_str else datetime(2000, 1, 1)
             date_to = datetime.fromisoformat(to_str.replace("Z", "+00:00")) if to_str else datetime.utcnow()
         except ValueError:
-            return jsonify(_structured_error("INVALID_REQUEST", "from/to must be ISO date strings (YYYY-MM-DD)")), 400
+            return None, None, "from/to must be ISO date strings"
         with _mt5_lock:
             rates = mt5.copy_rates_range(resolved, tf_const, date_from, date_to)
     else:
-        try:
-            count = min(max(int(request.args.get("count", 300)), 1), 1000)
-        except ValueError:
-            return jsonify(_structured_error("INVALID_REQUEST", "count must be an integer")), 400
         with _mt5_lock:
-            rates = mt5.copy_rates_from_pos(resolved, tf_const, 0, count)
+            rates = mt5.copy_rates_from_pos(resolved, tf_const, 0, min(max(count, 1), 1000))
 
     if rates is None or len(rates) == 0:
-        return jsonify(_structured_error(
-            "NO_DATA", "No rate data returned for " + resolved, symbol=resolved,
-        )), 400
+        return None, resolved, "No rate data returned for " + resolved
 
     candles = [
         {
@@ -1305,6 +1282,40 @@ def get_rates():
         }
         for r in rates
     ]
+    return candles, resolved, None
+
+
+@app.route("/rates", methods=["GET"])
+def get_rates():
+    """Real OHLCV candles from MT5 — the actual price data behind the
+    analysis engines. No candles here means no real technical analysis,
+    only a text description a model has to guess at."""
+    symbol = (request.args.get("symbol") or "").strip().upper()
+    timeframe = (request.args.get("timeframe") or "H1").strip().upper()
+    from_str = request.args.get("from")
+    to_str = request.args.get("to")
+
+    if not symbol:
+        return jsonify(_structured_error("INVALID_REQUEST", "symbol is required")), 400
+    if timeframe not in _MT5_TIMEFRAMES:
+        return jsonify(_structured_error(
+            "INVALID_REQUEST",
+            "Unsupported timeframe: " + timeframe,
+            extra={"supported": list(_MT5_TIMEFRAMES.keys())},
+        )), 400
+
+    try:
+        count = min(max(int(request.args.get("count", 300)), 1), 1000)
+    except ValueError:
+        return jsonify(_structured_error("INVALID_REQUEST", "count must be an integer")), 400
+
+    candles, resolved, error = fetch_candles_direct(symbol, timeframe, count=count, from_str=from_str, to_str=to_str)
+    if error:
+        if error == "MT5 not connected":
+            return jsonify(_structured_error("CONNECTION_LOST", error)), 400
+        if error.startswith("Symbol not found"):
+            return jsonify(_structured_error("SYMBOL_NOT_FOUND", error, symbol=symbol)), 404
+        return jsonify(_structured_error("NO_DATA", error, symbol=resolved)), 400
 
     return jsonify({
         "ok": True,
@@ -1479,6 +1490,18 @@ def call_function(function_name):
             payload, status = local_functions.trade_manager_sync_daily(body)
             return jsonify(payload), status
         return jsonify({"error": "Action inconnue"}), 400
+
+    if function_name == "strategyOrchestrator":
+        payload, status = local_functions.strategy_orchestrator(body)
+        return jsonify(payload), status
+
+    if function_name == "marketBrain":
+        payload, status = local_functions.market_brain_analyze(body, fetch_candles_direct)
+        return jsonify(payload), status
+
+    if function_name == "engineTest":
+        payload, status = local_functions.engine_test(body, fetch_candles_direct)
+        return jsonify(payload), status
 
     stub = local_functions.deterministic_stub_response(function_name, body)
     if isinstance(stub, tuple):

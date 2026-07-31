@@ -399,11 +399,326 @@ def trade_manager_sync_daily(body):
     return {"ok": True, "date": date, **payload}, 200
 
 
+# ── strategyOrchestrator ────────────────────────────────────────────
+# Turns "we can backtest" into "the system decides what to trade". Given
+# real candles for a symbol, validates every coded strategy against fixed
+# thresholds and activates the best one. If nothing clears the bar, nothing
+# goes active — the system stays out of the market rather than trade on a
+# strategy that didn't earn it. No LLM anywhere in this path.
+
+def strategy_orchestrator(body):
+    import strategy_validator as sv
+
+    symbol = str(body.get("symbol") or "").strip().upper()
+    trading_profile = str(body.get("trading_profile") or "intraday").strip()
+    timeframe = str(body.get("timeframe") or "H1").strip().upper()
+    candles = body.get("candles") or []
+
+    if not symbol:
+        return {"error": "Le symbole est requis"}, 400
+    if len(candles) < 50:
+        return {"error": "Au moins 50 bougies réelles sont nécessaires pour valider une stratégie"}, 400
+
+    params_list = list_entities("Parameter", sort="-created_date", limit=1)
+    params = params_list[0] if params_list else {}
+    capital = params.get("capital") or 1000
+    risk_percent = params.get("max_risk_percent") or 1
+
+    results = sv.validate_all_strategies(candles, symbol, capital, risk_percent)
+    best = sv.select_best_strategy(results)
+
+    total_trades = sum(r["stats"]["total_trades"] for r in results)
+    summary = (
+        f"{best['strategy_name']} validée et activée pour {symbol} ({trading_profile}) — profit factor {best['stats']['profit_factor']}."
+        if best else
+        f"Aucune stratégie n'a passé les seuils de validation pour {symbol} ({trading_profile}). Aucune activation."
+    )
+    backtest_run = create_entity("BacktestRun", {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "strategy_name": "Validation automatique (4 stratégies)",
+        "strategy_description": f"Validation orchestrée pour le profil {trading_profile}",
+        "start_date": candles[0]["time"].split("T")[0],
+        "end_date": candles[-1]["time"].split("T")[0],
+        "status": "completed",
+        "total_trades": total_trades,
+        "summary": summary,
+        "recommendations": [f"{r['strategy_name']}: {reason}" for r in results for reason in r["reasons"]],
+    })
+
+    # Upsert one Strategy record per (symbol, profile, strategy). The winner
+    # becomes "active", everything else that was active gets archived — never
+    # more than one active strategy per symbol/profile at a time.
+    existing = list_entities("Strategy", query={"symbol": symbol, "trading_profile": trading_profile}, sort="-created_date", limit=200)
+    existing_by_name = {e["name"]: e for e in existing}
+
+    for r in results:
+        is_best = best is not None and r["strategy_name"] == best["strategy_name"]
+        status = "active" if is_best else ("testing" if r["passed"] else "archived")
+        payload = {
+            "name": r["strategy_name"],
+            "symbol": symbol,
+            "trading_profile": trading_profile,
+            "timeframe": timeframe,
+            "status": status,
+            "backtest_run_id": backtest_run["id"],
+            "validated_at": _now_iso(),
+            "win_rate": r["stats"]["win_rate"],
+            "profit_factor": r["stats"]["profit_factor"],
+            "max_drawdown": r["stats"]["max_drawdown"],
+            "total_trades": r["stats"]["total_trades"],
+            "total_pnl_percent": r["stats"]["total_pnl_percent"],
+            "validation_reasons": r["reasons"],
+        }
+        record = existing_by_name.get(r["strategy_name"])
+        if record:
+            update_entity("Strategy", record["id"], payload)
+        else:
+            create_entity("Strategy", payload)
+
+    # Any strategy that was previously active for this symbol/profile but
+    # isn't today's winner (including ones no longer in the registry) steps down.
+    for e in existing:
+        if e.get("status") == "active" and (not best or e.get("name") != best["strategy_name"]):
+            update_entity("Strategy", e["id"], {"status": "archived"})
+
+    create_entity("AppLog", {
+        "level": "info",
+        "category": "strategy",
+        "message": (
+            f"Stratégie activée pour {symbol} ({trading_profile}): {best['strategy_name']}"
+            if best else f"Aucune stratégie validée pour {symbol} ({trading_profile})"
+        ),
+        "source": "strategyOrchestrator",
+        "payload": {
+            "symbol": symbol,
+            "trading_profile": trading_profile,
+            "results": [{"name": r["strategy_name"], "passed": r["passed"], "profit_factor": r["stats"]["profit_factor"]} for r in results],
+        },
+    })
+
+    return {
+        "symbol": symbol,
+        "trading_profile": trading_profile,
+        "timeframe": timeframe,
+        "active_strategy": best["strategy_name"] if best else None,
+        "results": results,
+        "backtest_run_id": backtest_run["id"],
+    }, 200
+
+
+# ── marketBrain ─────────────────────────────────────────────────────
+# Fully deterministic now: direction and confidence come from
+# engine_scoring.py's weighted vote across real engine reads, never from
+# an LLM. See market_brain.py for the assembly logic.
+
+MULTI_TIMEFRAMES = ["D1", "H4", "H1", "M15", "M5"]
+
+
+def market_brain_analyze(body, fetch_candles_fn):
+    import backtest_engine as bt
+    import indicators as ind
+    import market_brain as mb
+
+    symbol = str(body.get("symbol") or "").strip().upper()
+    trading_profile = str(body.get("trading_profile") or "intraday").strip()
+    requested_timeframe = str(body.get("timeframe") or "H1").strip().upper()
+    if not symbol:
+        return {"error": "Le symbole est requis"}, 400
+
+    mtf_candles = {}
+    for tf in MULTI_TIMEFRAMES:
+        candles, _resolved, error = fetch_candles_fn(symbol, tf, 300)
+        if candles:
+            mtf_candles[tf] = candles
+    if not mtf_candles:
+        return {"error": f"Impossible de récupérer des bougies réelles pour {symbol} — pont MT5 injoignable ou symbole introuvable"}, 400
+
+    tf_selection = None
+    if requested_timeframe == "AUTO":
+        snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in mtf_candles.items()}
+        mtf_view = ind.compute_multi_timeframe_view(snapshots)
+        timeframe, tf_rationale = mb.select_timeframe(mtf_view)
+        tf_selection = {"timeframe": timeframe, "rationale": tf_rationale}
+    else:
+        timeframe = requested_timeframe
+
+    primary_candles = mtf_candles.get(timeframe)
+    if not primary_candles:
+        candles, _resolved, error = fetch_candles_fn(symbol, timeframe, 300)
+        if not candles:
+            return {"error": f"Impossible de récupérer des bougies réelles pour {symbol} ({timeframe}): {error}"}, 400
+        primary_candles = candles
+
+    params_list = list_entities("Parameter", sort="-created_date", limit=1)
+    params = params_list[0] if params_list else {}
+    capital = params.get("capital") or 1000
+    risk_percent = params.get("max_risk_percent") or 1
+
+    active = list_entities("Strategy", query={"symbol": symbol, "trading_profile": trading_profile, "status": "active"}, limit=1)
+    validated_strategy = None
+    if active:
+        st = active[0]
+        signal = bt.evaluate_live_signal(st["name"], primary_candles)
+        validated_strategy = {
+            "strategy_name": st["name"],
+            "signal": signal,
+            "stats": {"win_rate": st.get("win_rate"), "profit_factor": st.get("profit_factor"),
+                      "max_drawdown": st.get("max_drawdown"), "total_trades": st.get("total_trades")},
+        }
+
+    result = mb.analyze(symbol, timeframe, primary_candles, multi_tf_candles=mtf_candles,
+                         validated_strategy=validated_strategy, capital=capital, risk_percent=risk_percent)
+
+    vs_entity = None
+    if validated_strategy:
+        signal = validated_strategy.get("signal")
+        vs_entity = {
+            "strategy_name": validated_strategy["strategy_name"],
+            "agreement": result["validated_strategy_agreement"],
+            "signal_direction": signal["direction"] if signal else None,
+            "signal_rationale": signal["rationale"] if signal else None,
+        }
+
+    record = create_entity("AIDecision", {
+        "symbol": symbol,
+        "decision": result["decision"],
+        "confidence": result["confidence"],
+        "timeframe": result["timeframe"],
+        "current_price": result["current_price"],
+        "entry_type": result["entry_type"],
+        "entry_zone_low": result["entry_zone_low"],
+        "entry_zone_high": result["entry_zone_high"],
+        "ideal_entry": result["ideal_entry"],
+        "stop_loss": result["stop_loss"],
+        "take_profit_1": result["take_profit_1"],
+        "take_profit_2": result["take_profit_2"],
+        "break_even": result["break_even"],
+        "rationale": result["rationale"],
+        "explanation": result["explanation"],
+        "probable_scenario": result["probable_scenario"],
+        "invalidation": result["invalidation"],
+        "scenarios": result["scenarios"],
+        "engine_results": result["engine_results"],
+        "conflicts": result["conflicts"],
+        "validated_strategy": vs_entity,
+    })
+
+    return {
+        "decision": record,
+        "tier": result["tier"],
+        "fused_confidence": result["fused_confidence"],
+        "engine_count": len(result["engine_results"]),
+        "timeframe_selection": tf_selection,
+    }, 200
+
+
+# ── engineTest ──────────────────────────────────────────────────────
+# Individual-engine diagnostics for the Validation Center, and the
+# "pipeline" mode which just delegates to market_brain_analyze.
+
+_ENGINE_TEST_NOT_IMPLEMENTED = {
+    "economic": "Pas de source de données de calendrier économique disponible — moteur neutralisé plutôt que simulé.",
+    "position_management": "Géré ailleurs dans l'app (break-even/trailing réels), pas encore exposé comme score de moteur.",
+    "risk_management": "Calcul de lot réel utilisé à l'exécution (voir tradingConnector), pas encore exposé comme score de moteur.",
+    "daily_goal": "Daily Goal Engine pas encore implémenté.",
+    "ai_confidence": "Remplacé par la fusion pondérée réelle des moteurs (voir le résultat du pipeline).",
+    "ai_learning": "AI Learning Engine pas encore implémenté.",
+    "execution_engine": "Exécution réelle gérée par le pont MT5, pas encore exposée comme score de moteur.",
+    "alphatrade_connector": "Fonctionnalité obsolète (lié à l'ancienne intégration AlphaTrade cloud).",
+    "autonomous_trading": "Piloté par le paramètre d'exécution autonome (Settings), pas encore exposé comme score de moteur.",
+}
+
+
+def engine_test(body, fetch_candles_fn):
+    import engine_scoring as es
+    import indicators as ind
+
+    symbol = str(body.get("symbol") or "XAUUSD").strip().upper()
+    timeframe = str(body.get("timeframe") or "H1").strip().upper()
+
+    if body.get("pipeline") is True:
+        result, status = market_brain_analyze(body, fetch_candles_fn)
+        if status != 200:
+            return result, status
+        decision = result["decision"]
+        return {
+            "pipeline": True,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "status": "ok",
+            "response_time_ms": 0,
+            "decision": decision,
+            "tier": result["tier"],
+            "fused_confidence": result["fused_confidence"],
+            "engine_count": result["engine_count"],
+            "logs": [f"Décision: {decision.get('decision')} ({decision.get('confidence')}%)",
+                     f"Moteurs analysés: {result['engine_count']}",
+                     f"Confiance fusionnée: {result['fused_confidence']}%"],
+        }, 200
+
+    engine_id = str(body.get("engine_id") or "").strip()
+    if not engine_id:
+        return {"error": "engine_id est requis"}, 400
+
+    if engine_id == "session":
+        r = es.score_session({})
+        return {
+            "engine_id": "session", "engine_name": "Session Intelligence", "symbol": symbol, "timeframe": timeframe,
+            "status": "ok", "response_time_ms": 0, "confidence": r["confidence"], "bias": r["bias"],
+            "findings": r["findings"], "risks": [], "details": "Calcul déterministe depuis l'horloge, aucun LLM appelé.",
+            "logs": ["Session calculée directement depuis l'horloge (aucun LLM appelé)"],
+        }, 200
+
+    if engine_id in _ENGINE_TEST_NOT_IMPLEMENTED:
+        return {
+            "engine_id": engine_id, "engine_name": engine_id, "symbol": symbol, "timeframe": timeframe,
+            "status": "not_implemented", "response_time_ms": 0, "confidence": 0, "bias": "neutral",
+            "findings": [], "risks": [], "details": _ENGINE_TEST_NOT_IMPLEMENTED[engine_id],
+            "logs": [_ENGINE_TEST_NOT_IMPLEMENTED[engine_id]],
+        }, 200
+
+    if engine_id == "multi_timeframe":
+        mtf_candles = {}
+        for tf in MULTI_TIMEFRAMES:
+            candles, _resolved, _error = fetch_candles_fn(symbol, tf, 300)
+            if candles:
+                mtf_candles[tf] = candles
+        if not mtf_candles:
+            return {"error": "Impossible de récupérer des bougies réelles"}, 400
+        snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in mtf_candles.items()}
+        view = ind.compute_multi_timeframe_view(snapshots)
+        findings = [f"{view['timeframes_analyzed']} timeframes analysés, {view['alignment_score']}% alignés sur {view['dominant_bias']}"]
+        findings += [f"{t['timeframe']}: {t['bias']}" for t in view["timeframes"]]
+        return {
+            "engine_id": "multi_timeframe", "engine_name": "Multi-Timeframe Engine", "symbol": symbol, "timeframe": timeframe,
+            "status": "ok", "response_time_ms": 0, "confidence": view["alignment_score"], "bias": view["dominant_bias"],
+            "findings": findings, "risks": [], "details": f"Biais dominant {view['dominant_bias']} sur {view['timeframes_analyzed']} timeframes réels.",
+            "logs": ["Calcul déterministe multi-timeframe, aucun LLM appelé"],
+        }, 200
+
+    if engine_id not in es.ENGINE_SCORERS:
+        return {"error": f"Moteur inconnu: {engine_id}"}, 400
+
+    candles, _resolved, error = fetch_candles_fn(symbol, timeframe, 300)
+    if not candles:
+        return {"error": f"Impossible de récupérer des bougies réelles pour {symbol} ({timeframe}): {error}"}, 400
+
+    ctx = es.build_context(candles)
+    r = es.ENGINE_SCORERS[engine_id](ctx)
+    return {
+        "engine_id": engine_id, "engine_name": engine_id, "symbol": symbol, "timeframe": timeframe,
+        "status": "ok", "response_time_ms": 0, "confidence": r["confidence"], "bias": r["bias"],
+        "findings": r["findings"], "risks": [], "details": "; ".join(r["findings"]),
+        "logs": [f"{engine_id} calculé sur {len(candles)} bougies réelles, aucun LLM appelé"],
+    }, 200
+
+
 # ── Stubs for functions not yet ported off the LLM (next phase) ──
 
 _STUB_LABEL = "Moteur en cours de portage vers une logique déterministe Python (LLM retiré) — pas encore actif."
 
-_STUB_DECISIONS = {"marketBrain", "engineTest", "strategyOrchestrator", "strategyTester"}
+_STUB_DECISIONS = {"strategyTester"}
 _STUB_NOOPS = {"aiProvider", "slackNotifier"}
 
 
