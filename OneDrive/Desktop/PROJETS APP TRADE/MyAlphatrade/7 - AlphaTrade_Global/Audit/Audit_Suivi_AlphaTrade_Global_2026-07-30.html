@@ -1,0 +1,353 @@
+<content>
+<title>Audit de suivi — AlphaTrade Global (30/07/2026)</title>
+
+<style>
+  :root{
+    --paper:#eef0ec; --paper-raised:#e2e6df; --paper-sunken:#e6e9e2;
+    --ink:#1a1f1e; --ink-soft:#454e4a; --hairline:#c7ccc2; --hairline-strong:#a9b0a2;
+    --accent:#2c6b6f; --accent-soft:#dbe6e4;
+    --critical:#a8392f; --critical-soft:#f1ddd8;
+    --warning:#9a6c22; --warning-soft:#f0e4cd;
+    --good:#3f7a52; --good-soft:#dfeadf;
+    --gold:#8a6a2f; --gold-soft:#f1e7d0;
+    --mono-bg:#e4e7e0; --shadow: 0 1px 2px rgba(20,24,20,0.06);
+    --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,"Times New Roman",serif;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono: ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#12161b; --paper-raised:#1b212a; --paper-sunken:#171c22;
+      --ink:#e4e7e1; --ink-soft:#a9b2ac; --hairline:#2b333a; --hairline-strong:#3a444c;
+      --accent:#67b6ba; --accent-soft:#1c2d2e;
+      --critical:#e0685a; --critical-soft:#301f1c;
+      --warning:#d9a35c; --warning-soft:#2f2818;
+      --good:#7ac194; --good-soft:#1c2a20;
+      --gold:#d8bb7a; --gold-soft:#2c2717;
+      --mono-bg:#1c222a; --shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12161b; --paper-raised:#1b212a; --paper-sunken:#171c22;
+    --ink:#e4e7e1; --ink-soft:#a9b2ac; --hairline:#2b333a; --hairline-strong:#3a444c;
+    --accent:#67b6ba; --accent-soft:#1c2d2e;
+    --critical:#e0685a; --critical-soft:#301f1c;
+    --warning:#d9a35c; --warning-soft:#2f2818;
+    --good:#7ac194; --good-soft:#1c2a20;
+    --gold:#d8bb7a; --gold-soft:#2c2717;
+    --mono-bg:#1c222a; --shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+  :root[data-theme="light"]{
+    --paper:#eef0ec; --paper-raised:#e2e6df; --paper-sunken:#e6e9e2;
+    --ink:#1a1f1e; --ink-soft:#454e4a; --hairline:#c7ccc2; --hairline-strong:#a9b0a2;
+    --accent:#2c6b6f; --accent-soft:#dbe6e4;
+    --critical:#a8392f; --critical-soft:#f1ddd8;
+    --warning:#9a6c22; --warning-soft:#f0e4cd;
+    --good:#3f7a52; --good-soft:#dfeadf;
+    --gold:#8a6a2f; --gold-soft:#f1e7d0;
+    --mono-bg:#e4e7e0; --shadow: 0 1px 2px rgba(20,24,20,0.06);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--paper); color:var(--ink); font-family:var(--sans); line-height:1.6; font-size:16px; -webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--accent-soft);}
+  a{color:var(--accent);}
+  a:focus-visible, button:focus-visible, summary:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  .sheet{ max-width:860px; margin:0 auto; padding:56px 24px 120px; }
+
+  .letterhead{ border-bottom:2px solid var(--ink); padding-bottom:22px; margin-bottom:36px; }
+  .letterhead .kicker{ font-family:var(--mono); font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+  .letterhead h1{ font-family:var(--serif); font-weight:600; font-size:2.1rem; line-height:1.15; margin:.3em 0 .2em; text-wrap:balance; }
+  .letterhead .sub{ font-size:1.02rem; color:var(--ink-soft); max-width:60ch; }
+  .meta-row{ display:flex; flex-wrap:wrap; gap:6px 22px; margin-top:18px; font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); }
+  .meta-row b{color:var(--ink); font-weight:600;}
+
+  nav.toc{ position:sticky; top:0; z-index:5; background:var(--paper); border-bottom:1px solid var(--hairline); margin:0 calc(-1 * 24px) 40px; padding:10px 24px; display:flex; gap:16px; overflow-x:auto; font-family:var(--mono); font-size:11.5px; letter-spacing:.02em; white-space:nowrap; }
+  nav.toc a{color:var(--ink-soft); text-decoration:none; text-transform:uppercase;}
+  nav.toc a:hover{color:var(--accent);}
+
+  section{margin-bottom:52px; scroll-margin-top:52px;}
+  h2{ font-family:var(--serif); font-size:1.45rem; font-weight:600; margin:0 0 6px; text-wrap:balance; }
+  .h2-num{ font-family:var(--mono); font-size:.78rem; color:var(--accent); display:block; letter-spacing:.06em; margin-bottom:2px; }
+  h3{ font-family:var(--sans); font-size:1.02rem; font-weight:700; margin:1.6em 0 .5em; }
+  p{margin:0 0 1em; max-width:66ch;}
+  .lede{font-size:1.05rem; color:var(--ink-soft); max-width:62ch;}
+  ul, ol{margin:0 0 1em; padding-left:1.3em; max-width:64ch;}
+  li{margin-bottom:.4em;}
+  .divider{border:none; border-top:1px solid var(--hairline); margin:44px 0;}
+  code, .mono{font-family:var(--mono); font-size:.88em;}
+  .filepath{ font-family:var(--mono); font-size:.82em; background:var(--mono-bg); border-radius:3px; padding:.1em .4em; }
+
+  .verdict{ background:var(--paper-raised); border-left:3px solid var(--accent); padding:20px 22px; border-radius:2px; margin:0 0 28px; }
+  .verdict p{margin:0 0 .7em; max-width:none;}
+  .verdict p:last-child{margin-bottom:0;}
+
+  .stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--hairline); border:1px solid var(--hairline); margin:22px 0; }
+  .stat{ background:var(--paper); padding:16px 14px; }
+  .stat .num{ font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:1.4rem; font-weight:600; color:var(--ink); display:block; line-height:1.1; }
+  .stat .num.good{color:var(--good);} .stat .num.crit{color:var(--critical);}
+  .stat .label{ font-size:.72rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-top:4px; display:block; }
+  @media (max-width:640px){ .stat-grid{grid-template-columns:repeat(2,1fr);} }
+
+  .table-wrap{overflow-x:auto; margin:18px 0;}
+  table{border-collapse:collapse; width:100%; font-size:.9rem;}
+  th, td{ text-align:left; padding:9px 12px 9px 0; border-bottom:1px solid var(--hairline); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:600; white-space:nowrap; }
+  td.num, th.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right;}
+  tr:last-child td{border-bottom:none;}
+
+  .pill{ display:inline-block; font-family:var(--mono); font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; padding:2px 8px; border-radius:20px; font-weight:600; white-space:nowrap; }
+  .pill.fixed{background:var(--good-soft); color:var(--good);}
+  .pill.partial{background:var(--warning-soft); color:var(--warning);}
+  .pill.open{background:var(--critical-soft); color:var(--critical);}
+  .pill.real{background:var(--good-soft); color:var(--good);}
+  .pill.narrative{background:var(--critical-soft); color:var(--critical);}
+  .pill.deterministic{background:var(--accent-soft); color:var(--accent);}
+
+  .finding{ border:1px solid var(--hairline); border-left:4px solid var(--hairline-strong); padding:18px 20px; margin-bottom:18px; background:var(--paper-raised); }
+  .finding.fixed{border-left-color:var(--good);}
+  .finding.partial{border-left-color:var(--warning);}
+  .finding-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px;}
+  .finding-head h4{font-family:var(--serif); font-size:1.05rem; font-weight:600; margin:0;}
+  .finding p{margin-bottom:.6em; font-size:.95rem;}
+  .evidence{ background:var(--mono-bg); border-radius:3px; padding:11px 13px; font-family:var(--mono); font-size:.76rem; line-height:1.6; overflow-x:auto; margin:8px 0; color:var(--ink-soft); }
+  .evidence b{color:var(--ink); font-weight:600;}
+
+  .vs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--hairline); margin:20px 0; }
+  .vs-col{ padding:18px 20px; }
+  .vs-col.gold{ border-right:1px solid var(--hairline); }
+  .vs-col h4{ font-family:var(--serif); font-size:1.1rem; margin:0 0 4px; }
+  .vs-col .vs-sub{ font-family:var(--mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:14px; }
+  .vs-col.gold .vs-sub{color:var(--gold);}
+  .vs-col.global .vs-sub{color:var(--accent);}
+  @media (max-width:640px){ .vs-grid{grid-template-columns:1fr;} .vs-col.gold{border-right:none; border-bottom:1px solid var(--hairline);} }
+
+  .bar-compare{margin:14px 0 4px;}
+  .bar-row{display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:.85rem;}
+  .bar-row .bar-label{width:130px; flex:none; color:var(--ink-soft);}
+  .bar-track{flex:1; background:var(--paper-sunken); border-radius:2px; height:18px; position:relative; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:2px;}
+  .bar-fill.gold{background:var(--gold);}
+  .bar-fill.global{background:var(--accent);}
+  .bar-row .bar-val{width:60px; flex:none; text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:.8rem;}
+
+  .phase{margin-bottom:26px;}
+  .phase .phase-label{ font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin-bottom:8px; display:block; }
+  .action{ display:flex; gap:14px; padding:12px 0; border-top:1px solid var(--hairline); }
+  .action:last-child{border-bottom:1px solid var(--hairline);}
+  .action .a-num{ flex:none; width:22px; font-family:var(--mono); font-size:.8rem; color:var(--accent); padding-top:1px; }
+  .action .a-body b{display:block; margin-bottom:2px; font-size:.95rem;}
+  .action .a-body span{color:var(--ink-soft); font-size:.88rem;}
+
+  .good-list{list-style:none; padding:0; margin:0;}
+  .good-list li{ padding-left:24px; position:relative; margin-bottom:.6em; font-size:.95rem;}
+  .good-list li::before{ content:"✓"; position:absolute; left:0; color:var(--good); font-weight:700; }
+  .open-list{list-style:none; padding:0; margin:0;}
+  .open-list li{ padding-left:24px; position:relative; margin-bottom:.6em; font-size:.95rem;}
+  .open-list li::before{ content:"○"; position:absolute; left:0; color:var(--critical); font-weight:700; }
+
+  footer{ margin-top:60px; padding-top:20px; border-top:1px solid var(--hairline); font-size:.8rem; color:var(--ink-soft); font-family:var(--mono); }
+</style>
+
+<div class="sheet">
+
+  <div class="letterhead">
+    <span class="kicker">Audit de suivi — usage interne</span>
+    <h1>AlphaTrade Global, 24 heures plus tard — ce qui a changé, ce qui reste, et face à AlphaTrade Gold</h1>
+    <p class="sub">Deuxième passage après une session de développement intensive. Objectif : mesurer précisément l'écart avec l'audit du 29/07, et trancher honnêtement la question de fond — est-ce que ce système vaut mieux que l'ancien moteur aujourd'hui ?</p>
+    <div class="meta-row">
+      <span><b>Premier audit</b> 29/07/2026</span>
+      <span><b>Ce document</b> 30/07/2026</span>
+      <span><b>Commits depuis</b> 6</span>
+      <span><b>Comparé à</b> AlphaTrade Gold v5.0.0</span>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <a href="#verdict">Verdict</a>
+    <a href="#suivi">Suivi des causes</a>
+    <a href="#construit">Construit ce soir</a>
+    <a href="#moteurs">État des 20 moteurs</a>
+    <a href="#comparaison">Vs AlphaTrade Gold</a>
+    <a href="#suite">Prochaines étapes</a>
+  </nav>
+
+  <section id="verdict">
+    <span class="h2-num">Résumé</span>
+    <h2>Le verdict, avant le détail</h2>
+    <div class="verdict">
+      <p><b>Le diagnostic du 29/07 tenait — et la moitié des causes racines identifiées sont désormais corrigées et vérifiées, pas juste "en principe".</b> Le pont MT5 sait maintenant placer des ordres en attente, l'historique se réconcilie avec la réalité du broker, une stratégie codée peut être validée par backtest réel puis activée automatiquement, et le moteur multi-timeframe raisonne enfin sur de vraies bougies plutôt que sur rien.</p>
+      <p><b>Mais AlphaTrade Global n'a toujours pas rattrapé AlphaTrade Gold sur l'essentiel : l'exécution 24/7 indépendante du navigateur, et la gestion de position après ouverture (break-even, trailing réel).</b> Gold a ces deux choses en production depuis des semaines. Global ne les a pas encore. La bonne nouvelle : l'architecture de Global est maintenant honnête et testée à chaque étape — quand elle affirme quelque chose, c'est vérifié, pas supposé.</p>
+    </div>
+  </section>
+
+  <section id="suivi">
+    <span class="h2-num">01 · Suivi</span>
+    <h2>Les 6 causes racines de l'audit du 29/07, une par une</h2>
+    <p class="lede">Rappel du diagnostic initial et statut réel aujourd'hui — pas d'auto-satisfaction, deux points n'ont pas bougé.</p>
+
+    <div class="finding fixed">
+      <div class="finding-head"><h4>1 — Contamination croisée avec l'ancien moteur</h4><span class="pill fixed">Corrigé</span></div>
+      <p>Le commentaire d'ordre MT5 est passé de <code>"AlphaTrade Global"</code> à <code>"AT Global"</code> — ne matche plus le mot-clé <code>"alphatrade"</code> de l'ancien moteur. Root cause éliminée à la source.</p>
+    </div>
+
+    <div class="finding partial">
+      <div class="finding-head"><h4>2 — Aucune donnée de marché réelle derrière les moteurs</h4><span class="pill partial">Partiellement corrigé</span></div>
+      <p>Le Market Brain et le moteur Multi-Timeframe reçoivent désormais de vraies bougies et de vrais indicateurs calculés (EMA/RSI/MACD/ATR/structure/Fibonacci/session, sur 5 timeframes réels). <b>Mais</b> les 18 autres moteurs (Smart Money, Volume, Pattern Recognition, etc.) restent narratifs — ils reçoivent le contexte de prix réel en préambule mais l'interprétation reste un jugement du modèle, pas un calcul dédié à chaque domaine.</p>
+    </div>
+
+    <div class="finding fixed">
+      <div class="finding-head"><h4>3 — Le backtest était halluciné</h4><span class="pill fixed">Corrigé</span></div>
+      <p>Remplacé par un vrai moteur de simulation bar-par-bar (4 stratégies codées) sur bougies réelles. Vérifié sur 210 trades historiques réels, un vrai bug trouvé et corrigé au passage (date d'entrée vs sortie confondues).</p>
+    </div>
+
+    <div class="finding partial">
+      <div class="finding-head"><h4>4 — Aucune gestion de position après ouverture</h4><span class="pill open">Toujours ouvert</span></div>
+      <p>Non traité ce soir. Une position ouverte reste sans surveillance active jusqu'à son SL/TP fixe — pas de break-even, pas de trailing, pas de sortie partielle. C'est précisément ce qu'AlphaTrade Gold fait déjà (trailing dynamique 4 paliers) et que Global n'a pas encore.</p>
+    </div>
+
+    <div class="finding partial">
+      <div class="finding-head"><h4>5 — Le trading autonome ne tourne que dans un onglet ouvert</h4><span class="pill open">Toujours ouvert</span></div>
+      <p>Non traité ce soir. La boucle vit toujours dans <code class="filepath">AnalysisSessionStore.jsx</code>, côté navigateur. C'est le principal écart d'architecture face à Gold, qui tourne en processus Python permanent.</p>
+    </div>
+
+    <div class="finding fixed">
+      <div class="finding-head"><h4>6 — Détails de code mineurs</h4><span class="pill fixed">Corrigé</span></div>
+      <p>Les 12 erreurs de lint historiques (imports inutilisés) sont éliminées définitivement.</p>
+    </div>
+  </section>
+
+  <section id="construit">
+    <span class="h2-num">02 · Nouveau</span>
+    <h2>Ce qui a été construit et vérifié ce soir</h2>
+    <p class="lede">Chaque ligne ci-dessous a été testée contre des données réelles avant d'être considérée terminée — pas seulement "le code compile".</p>
+
+    <div class="stat-grid">
+      <div class="stat"><span class="num good">210/210</span><span class="label">Signaux backtest vérifiés</span></div>
+      <div class="stat"><span class="num good">2/4</span><span class="label">Stratégies validées (seuils réels)</span></div>
+      <div class="stat"><span class="num">5</span><span class="label">Timeframes réels analysés</span></div>
+      <div class="stat"><span class="num good">2</span><span class="label">Vrais trades reconciliés</span></div>
+    </div>
+
+    <ul class="good-list">
+      <li><b>Ordres en attente</b> (BUY/SELL LIMIT/STOP) — le bridge ne savait envoyer que des ordres marché ; il peut maintenant placer, lister et annuler des ordres en avance. Visibles dans Dashboard et Trades avec un badge distinct.</li>
+      <li><b>Réconciliation des trades</b> — plus aucun trade ne reste "ouvert" indéfiniment en base alors qu'il est fermé depuis longtemps sur MT5 ; testé sur deux positions réelles (PnL exact retrouvé : 3,40 $ et 4,78 $).</li>
+      <li><b>Validation automatique de stratégies</b> — le système teste ses 4 stratégies codées sur 90 jours réels, n'active que celles qui passent des seuils fixes, et ce résultat devient un vote supplémentaire (jamais seul déclencheur) dans la décision finale.</li>
+      <li><b>Multi-timeframe réel</b> — le moteur le plus lourdement pondéré (14/100) calcule enfin une vraie confluence D1→M5 au lieu de zéro donnée.</li>
+      <li><b>Packaging desktop réparé</b> — l'app installable démarre vraiment son pont MT5 (bug de nom de fichier + copie du bridge obsolète corrigés).</li>
+      <li><b>Nouveau logo</b> appliqué partout (favicon, connexion, en-tête, rapports, icône desktop), hébergé localement au lieu d'une URL Base44 externe.</li>
+    </ul>
+  </section>
+
+  <section id="moteurs">
+    <span class="h2-num">03 · État réel</span>
+    <h2>Les 20 moteurs, honnêtement classés</h2>
+    <p class="lede">Correction au passage : le premier audit disait 19, il y en a bien 20. Classement par ce qu'ils font réellement aujourd'hui, pas par leur nom.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Moteur</th><th>Poids</th><th>Nature réelle</th></tr></thead>
+        <tbody>
+          <tr><td>Multi-Timeframe Engine</td><td class="num">14</td><td><span class="pill real">Réel</span> confluence calculée sur 5 vrais timeframes</td></tr>
+          <tr><td>Market Structure</td><td class="num">14</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Smart Money Engine</td><td class="num">12</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Indicator Fusion</td><td class="num">10</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Liquidity Intelligence</td><td class="num">8</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Entry Planner</td><td class="num">8</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Fibonacci Intelligence</td><td class="num">7</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Volume Intelligence</td><td class="num">7</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Economic Intelligence</td><td class="num">6</td><td><span class="pill narrative">Narratif</span> — aucun vrai calendrier branché</td></tr>
+          <tr><td>Volatility Engine</td><td class="num">5</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Pattern Recognition</td><td class="num">5</td><td><span class="pill deterministic">Données réelles</span> — interprétation narrative</td></tr>
+          <tr><td>Session Intelligence</td><td class="num">4</td><td><span class="pill real">Réel</span> — calcul d'horloge pur, zéro LLM</td></tr>
+          <tr><td>Stratégie validée (supplément)</td><td class="num">—</td><td><span class="pill real">Réel</span> — backtest codé, vote déterministe</td></tr>
+          <tr><td>Position Management</td><td class="num">0</td><td><span class="pill narrative">Narratif</span> — décrit, jamais exécuté</td></tr>
+          <tr><td>Risk Management</td><td class="num">0</td><td><span class="pill real">Réel</span> — calcul de lot basé sur le risque</td></tr>
+          <tr><td>Daily Goal Engine</td><td class="num">0</td><td><span class="pill narrative">Narratif</span> — aucun suivi d'objectif réel</td></tr>
+          <tr><td>AI Confidence Engine</td><td class="num">0</td><td><span class="pill deterministic">Fusion réelle</span> des scores des autres moteurs</td></tr>
+          <tr><td>AI Learning Engine</td><td class="num">0</td><td><span class="pill narrative">Narratif</span> — LearningData jamais peuplé en pratique</td></tr>
+          <tr><td>Execution Engine</td><td class="num">0</td><td><span class="pill real">Réel</span> — bridge MT5 fonctionnel, testé</td></tr>
+          <tr><td>Autonomous Trading Engine</td><td class="num">0</td><td><span class="pill narrative">Narratif</span> — pas de fonctionnement 24/7</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.85rem;color:var(--ink-soft)">"Données réelles — interprétation narrative" : le moteur reçoit désormais un vrai contexte de prix (via le snapshot marché), mais son analyse spécifique (order blocks, patterns, etc.) reste un jugement du modèle plutôt qu'un algorithme dédié à ce domaine précis.</p>
+  </section>
+
+  <section id="comparaison">
+    <span class="h2-num">04 · Face à face</span>
+    <h2>AlphaTrade Gold vs AlphaTrade Global, sans complaisance</h2>
+    <p class="lede">Gold tourne en production depuis des semaines sur un moteur Python monolithique de 3595 lignes. Global est une reconstruction de deux jours avec une méthodologie de test bien plus rigoureuse. Les deux ont des lacunes différentes.</p>
+
+    <div class="vs-grid">
+      <div class="vs-col gold">
+        <h4>AlphaTrade Gold</h4>
+        <div class="vs-sub">v5.0.0 · moteur Python monolithique</div>
+        <ul class="good-list">
+          <li>Tourne en processus permanent — fonctionne sans navigateur ouvert</li>
+          <li>Calcule ses propres EMA/RSI en Python, sur les vraies bougies MT5</li>
+          <li>Trailing dynamique réel à 4 paliers, en production</li>
+          <li>Protection <code>MAX_POSITION_LOSS</code> / <code>MAX_FLOATING_LOSS</code> active</li>
+          <li>Semaines de fonctionnement réel, bugs déjà rencontrés et corrigés</li>
+        </ul>
+        <h4 style="margin-top:20px;font-size:.95rem;">Ce qu'il n'a pas</h4>
+        <ul class="open-list">
+          <li>Aucun ordre en attente (marché uniquement)</li>
+          <li>Break-even réel et TP par paliers désactivés (flags à <code>False</code>)</li>
+          <li>Analyse mono-symbole, pas de moteur multi-timeframe formalisé</li>
+          <li>Pas de backtest — aucune validation avant mise en production d'une règle</li>
+        </ul>
+      </div>
+      <div class="vs-col global">
+        <h4>AlphaTrade Global</h4>
+        <div class="vs-sub">Base44 + Deno + LLM + bridge Python</div>
+        <ul class="good-list">
+          <li>Ordres en attente supportés (LIMIT/STOP, testé)</li>
+          <li>Vrai backtest sur 4 stratégies, validé statistiquement avant activation</li>
+          <li>Multi-timeframe réel (5 échelles), pas juste le timeframe demandé</li>
+          <li>Réconciliation automatique des trades avec la réalité MT5</li>
+          <li>Chaque affirmation de ce soir vérifiée par un test reproductible</li>
+        </ul>
+        <h4 style="margin-top:20px;font-size:.95rem;">Ce qu'il n'a pas</h4>
+        <ul class="open-list">
+          <li>Pas d'exécution 24/7 — dépend d'un onglet navigateur ouvert</li>
+          <li>Pas de break-even ni de trailing réel après ouverture</li>
+          <li>18 des 20 moteurs restent une interprétation LLM, pas un calcul dédié</li>
+          <li>Code de deux jours — zéro heure de fonctionnement réel en continu</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Sur le point qui compte le plus : la fiabilité des chiffres annoncés</h3>
+    <div class="bar-compare">
+      <div class="bar-row"><span class="bar-label">Gold — win rate annoncé</span><div class="bar-track"><div class="bar-fill gold" style="width:64%"></div></div><span class="bar-val">non vérifié</span></div>
+      <div class="bar-row"><span class="bar-label">Global — stratégies validées</span><div class="bar-track"><div class="bar-fill global" style="width:100%"></div></div><span class="bar-val">vérifié 2×</span></div>
+    </div>
+    <p style="font-size:.85rem;color:var(--ink-soft)">Gold n'a jamais eu de mécanisme de validation statistique de ses propres règles avant mise en production — ses résultats réels (audit du 29/07 : profit factor 0,32 sur 53 trades) le confirment. Global valide maintenant chaque stratégie avant activation ; reste à prouver que ça tient en conditions réelles prolongées, ce que Gold a fait et Global n'a pas encore fait.</p>
+
+    <h3>Verdict direct</h3>
+    <p><b>Aujourd'hui, ni l'un ni l'autre ne mérite la confiance totale de Louis sur un compte réel.</b> Gold a la maturité d'exécution (24/7, trailing réel) mais aucune preuve statistique de son edge. Global a une méthodologie de preuve honnête mais pas encore l'endurance opérationnelle. Le chemin le plus court vers "les deux à la fois" : porter l'exécution 24/7 et la gestion de position de Gold dans l'architecture de Global — pas l'inverse, parce que la rigueur de test de Global est plus dure à reconstruire que la boucle d'exécution de Gold.</p>
+  </section>
+
+  <section id="suite">
+    <span class="h2-num">05 · Prochaines étapes</span>
+    <h2>Dans l'ordre, par impact</h2>
+
+    <div class="phase">
+      <div class="action"><div class="a-num">1</div><div class="a-body"><b>Gestion de position réelle (break-even, trailing, sortie partielle)</b><span>C'est le trou le plus coûteux en argent réel — l'asymétrie gain/perte de l'audit initial vient directement de là. Porter la logique de trailing déjà prouvée de Gold plutôt que la réinventer.</span></div></div>
+      <div class="action"><div class="a-num">2</div><div class="a-body"><b>Exécution 24/7 indépendante du navigateur</b><span>Processus de fond dans l'app desktop Electron — condition pour que la validation de stratégies et la réconciliation tournent sans surveillance.</span></div></div>
+      <div class="action"><div class="a-num">3</div><div class="a-body"><b>Promotion ordre en attente → trade</b><span>Quand un ordre en attente se déclenche, le relier automatiquement à son signal d'origine au lieu de laisser un ticket orphelin.</span></div></div>
+      <div class="action"><div class="a-num">4</div><div class="a-body"><b>Daily Goal Engine réel</b><span>Suivi du PnL du jour vs objectif, arrêt des nouvelles ouvertures une fois atteint, reprise manuelle possible — la pièce qui manque à la vision "trader pro autonome".</span></div></div>
+      <div class="action"><div class="a-num">5</div><div class="a-body"><b>Calculs dédiés pour les moteurs restants</b><span>Order blocks/FVG réels (Smart Money), volume profile réel — remplacer l'interprétation narrative moteur par moteur, en commençant par les plus lourdement pondérés.</span></div></div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <footer>
+    Audit basé sur les commits du 30/07/2026, tests réels contre le bridge MT5 (compte Deriv-Demo), et lecture directe du code source des deux applications. Aucun ordre réel placé pendant la rédaction de ce document.
+  </footer>
+
+</div>
+</content>

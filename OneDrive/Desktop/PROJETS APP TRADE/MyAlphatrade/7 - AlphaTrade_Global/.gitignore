@@ -6,3 +6,10 @@ alpha-intel-lab.zip
 
 # Secrets — the bridge's local API key, generated per-machine, never committed.
 EA_Bridge/bridge_api_key.txt
+
+# Local entity database (replaces Base44) — per-machine data, never committed.
+EA_Bridge/alphatg_local.db
+
+# Claude Code local permissions cache — accumulates command history that can
+# include secrets typed during a session (e.g. test passwords), never committed.
+.claude/settings.local.json

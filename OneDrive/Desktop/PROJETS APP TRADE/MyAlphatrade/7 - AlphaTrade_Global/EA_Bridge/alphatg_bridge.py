@@ -52,6 +52,9 @@ except ImportError:
     print("Run: pip install flask flask-cors")
     sys.exit(1)
 
+import local_store
+import local_functions
+
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -105,6 +108,14 @@ def check_auth():
         return resp
 
     if request.path == "/health":
+        return None
+
+    # Local app data (entities/auth/functions) is not MT5-order-sensitive —
+    # the bridge only listens on 127.0.0.1, which is already the security
+    # boundary for a local desktop app. Keeping the API key requirement here
+    # would create a chicken-and-egg problem: the frontend needs to read
+    # TradingAccount before it can even display the API key field.
+    if request.path.startswith("/auth") or request.path.startswith("/entities") or request.path.startswith("/functions"):
         return None
 
     # SSE endpoint accepts key via query param (EventSource can't set headers)
@@ -1371,6 +1382,109 @@ def close_position():
 
     log.info("[CLOSE_OK] ticket=%s symbol=%s closed at %s", ticket, pos.symbol, price)
     return jsonify({"ok": True, "ticket": str(result.order)})
+
+
+# ── Local entity store (replaces Base44 database) ─────────────────
+LOCAL_USER = {
+    "id": "local",
+    "email": "local@alphatrade.global",
+    "full_name": "AlphaTrade Global",
+    "role": "admin",
+    "is_admin": True,
+}
+
+
+@app.route("/auth/me", methods=["GET"])
+def auth_me():
+    return jsonify(LOCAL_USER)
+
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    body = request.json or {}
+    payload, status = local_functions.auth_login(body, LOCAL_USER)
+    return jsonify(payload), status
+
+
+@app.route("/auth/reset_password", methods=["POST"])
+def auth_reset_password():
+    body = request.json or {}
+    payload, status = local_functions.auth_reset_password(body)
+    return jsonify(payload), status
+
+
+@app.route("/entities/<entity_type>", methods=["GET", "POST"])
+def entities_collection(entity_type):
+    if request.method == "POST":
+        data = request.json or {}
+        return jsonify(local_store.create_entity(entity_type, data))
+
+    query = None
+    raw_filter = request.args.get("filter")
+    if raw_filter:
+        try:
+            query = json.loads(raw_filter)
+        except (TypeError, ValueError):
+            return jsonify({"error": "filter invalide (JSON attendu)"}), 400
+
+    sort = request.args.get("sort")
+    limit_raw = request.args.get("limit")
+    limit = int(limit_raw) if limit_raw and limit_raw.isdigit() else None
+
+    return jsonify(local_store.list_entities(entity_type, query=query, sort=sort, limit=limit))
+
+
+@app.route("/entities/<entity_type>/<entity_id>", methods=["GET", "PATCH", "DELETE"])
+def entities_item(entity_type, entity_id):
+    if request.method == "GET":
+        record = local_store.get_entity(entity_type, entity_id)
+        if record is None:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(record)
+
+    if request.method == "PATCH":
+        patch = request.json or {}
+        record = local_store.update_entity(entity_type, entity_id, patch)
+        if record is None:
+            return jsonify({"error": "Not found"}), 404
+        return jsonify(record)
+
+    deleted = local_store.delete_entity(entity_type, entity_id)
+    if not deleted:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/functions/<function_name>", methods=["POST"])
+def call_function(function_name):
+    body = request.json or {}
+    action = str(body.get("action") or "")
+
+    if function_name == "tradingConnector":
+        if action == "read":
+            return jsonify(local_functions.trading_connector_read())
+        if action == "save":
+            return jsonify(local_functions.trading_connector_save(body))
+        if action in ("test", "connect", "reconnect"):
+            return jsonify(local_functions.trading_connector_test(get_account_snapshot))
+        if action == "build_order":
+            return jsonify({"ok": True, "order": local_functions.build_order(body)})
+        return jsonify({"error": "Action inconnue"}), 400
+
+    if function_name == "tradeManager":
+        if action == "close_trade":
+            payload, status = local_functions.trade_manager_close_trade(body, local_store.get_entity)
+            return jsonify(payload), status
+        if action == "sync_daily":
+            payload, status = local_functions.trade_manager_sync_daily(body)
+            return jsonify(payload), status
+        return jsonify({"error": "Action inconnue"}), 400
+
+    stub = local_functions.deterministic_stub_response(function_name, body)
+    if isinstance(stub, tuple):
+        payload, status = stub
+        return jsonify(payload), status
+    return jsonify(stub)
 
 
 # ── Entry point ──────────────────────────────────────────────────
