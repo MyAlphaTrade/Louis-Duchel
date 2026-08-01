@@ -10,6 +10,15 @@ is computed, not guessed by a model.
 
 import indicators as ind
 import engine_scoring as es
+from market_analysis import find_order_blocks, find_fvgs
+
+# Beyond this many ATRs from the nearest real zone, a pending order isn't
+# worth placing — price may never come back, and it wouldn't be a plan
+# grounded in structure anymore, just a guess.
+PENDING_ORDER_MAX_ATR = 1.5
+# Below this, price is already close enough that waiting only risks paying
+# a worse price than acting now — treat it as "there", not "approaching".
+IMMEDIATE_ENTRY_MAX_ATR = 0.15
 
 ACTION_TIERS = [
     (90, "premium", "Configuration premium"),
@@ -46,6 +55,49 @@ def select_timeframe(multi_tf_view):
         return "H1", "Aucun timeframe ne confirme un biais dominant clair — repli sur H1."
     chosen = next((tf for tf in order if tf in agreeing), agreeing[0])
     return chosen, f"Timeframe {chosen} choisi — confirme le biais dominant {dominant} ({multi_tf_view['alignment_score']}% d'alignement)."
+
+
+def _find_pending_entry_zone(ctx, atr_val, decision_bias):
+    """Where would a professional trader place a resting order instead of
+    paying the current price? Looks at the same real zones Smart Money and
+    Fibonacci already compute, but — unlike those engines' own confidence
+    scoring — does NOT require price to already be at the zone. Distance is
+    exactly what this function exists to measure, in ATR multiples, so
+    analyze() can decide immediate vs pending vs "too far to plan around".
+    Kept fully separate from engine_scoring.py: this never touches the
+    weighted vote or confidence math, only which price to enter at once a
+    direction is already decided."""
+    candles = ctx["candles"]
+    price = candles[-1]["close"]
+    kind = "bullish" if decision_bias == "bullish" else "bearish" if decision_bias == "bearish" else None
+    if kind is None or not atr_val:
+        return None
+
+    fvgs = [f for f in find_fvgs(candles) if not f["filled"] and f["type"] == kind]
+    obs = [o for o in find_order_blocks(candles, ctx["atr14"]) if not o["mitigated"] and o["type"] == kind]
+    candidates = []
+    for z in fvgs + obs:
+        # The edge closest to current price — top of a demand zone below
+        # price, bottom of a supply zone above it — is the level that would
+        # actually get filled first, not the far edge of the zone.
+        edge = z["top"] if kind == "bullish" else z["bottom"]
+        if (kind == "bullish" and edge <= price) or (kind == "bearish" and edge >= price):
+            candidates.append(edge)
+
+    swings = ctx["swings"]
+    last_high = next((s for s in reversed(swings) if s["type"] == "high"), None)
+    last_low = next((s for s in reversed(swings) if s["type"] == "low"), None)
+    if last_high and last_low:
+        direction = "down" if last_high["index"] > last_low["index"] else "up"
+        fib = ind.fibonacci_levels(last_high["price"], last_low["price"], direction)
+        golden = fib["levels"]["0.618"]
+        if (kind == "bullish" and golden <= price) or (kind == "bearish" and golden >= price):
+            candidates.append(golden)
+
+    if not candidates:
+        return None
+    nearest = min(candidates, key=lambda p: abs(price - p))
+    return {"price": nearest, "distance_atr": abs(price - nearest) / atr_val}
 
 
 def _find_actionable_zone(breakdown, decision_bias):
@@ -114,16 +166,34 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     stop_loss = take_profit_1 = take_profit_2 = break_even = None
     decision_bias = fusion["direction"]
 
+    pending_zone = None
     if decision != "WAIT":
         zone_engine, zone = _find_actionable_zone(breakdown, decision_bias)
-        # A clean structural zone (order block / FVG / golden pocket) was
-        # what triggered the decision in the first place for most cases,
-        # meaning price is already there — so an immediate entry is honest.
-        # No zone but a directional decision still stands (e.g. indicator
-        # fusion alone crossed the confidence floor) → enter now anyway,
-        # there's no better level to wait for.
-        ideal_entry = current_price
-        entry_type = "immediate"
+        pending_zone = _find_pending_entry_zone(ctx, atr_val, decision_bias)
+
+        if pending_zone is None or pending_zone["distance_atr"] <= IMMEDIATE_ENTRY_MAX_ATR:
+            # No real zone to plan around, or price is already there — an
+            # immediate entry is the honest read of the situation.
+            ideal_entry = current_price
+            entry_type = "immediate"
+        elif pending_zone["distance_atr"] <= PENDING_ORDER_MAX_ATR:
+            # A real order block, FVG or golden pocket sits close enough to
+            # be worth waiting for — plan the entry there instead of paying
+            # the current, worse price. The bridge classifies this as a
+            # LIMIT or STOP order on its own by comparing this price to the
+            # current one (see alphatg_bridge.py send_pending_order).
+            ideal_entry = pending_zone["price"]
+            entry_type = "pending_order"
+        else:
+            # The only real zone is too far to plan around honestly — an
+            # order placed there might never fill, and entering now would
+            # mean ignoring the very structure that justified the decision.
+            # Keep the directional call (BUY/SELL) and the planned level for
+            # the record (entry_type, not ideal_entry, is what gates whether
+            # the frontend actually sends an order), but send nothing this
+            # cycle; next cycle re-evaluates as price moves.
+            ideal_entry = pending_zone["price"]
+            entry_type = "wait_confirmation"
 
         sl_mult, tp1_mult, tp2_mult = 1.5, 3.0, 5.0
         if decision == "BUY":
@@ -157,12 +227,21 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         elif strategy_agreement == "no_signal":
             strategy_note = f" La stratégie validée « {vs_name} » n'émet aucun signal sur cette bougie."
 
+    entry_plan_note = ""
+    if decision != "WAIT" and pending_zone is not None:
+        if entry_type == "immediate":
+            entry_plan_note = ""
+        elif entry_type == "pending_order":
+            entry_plan_note = f" Entrée différée à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR du prix actuel) plutôt qu'au marché."
+        else:
+            entry_plan_note = f" Zone la plus proche à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR) — trop loin pour un ordre en attente, en attente que le prix se rapproche."
+
     if decision == "WAIT":
         reason = "aucun consensus directionnel suffisant entre les moteurs" if confidence < CONFIDENCE_FLOOR else "conflit avec la stratégie validée"
         explanation = f"WAIT — {reason} (confiance fusionnée {confidence}%).{strategy_note}"
     else:
         engines_favorable = ", ".join(r["findings"][0] for r in supporting[:3]) if supporting else "aucun détail"
-        explanation = f"{decision} avec {confidence}% de confiance. Moteurs favorables : {engines_favorable}.{strategy_note}"
+        explanation = f"{decision} avec {confidence}% de confiance. Moteurs favorables : {engines_favorable}.{strategy_note}{entry_plan_note}"
 
     invalidation = None
     if decision != "WAIT" and stop_loss is not None:
