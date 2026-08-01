@@ -1403,6 +1403,56 @@ def close_position():
     return jsonify({"ok": True, "ticket": str(result.order)})
 
 
+def modify_position_direct(ticket, stop_loss=None, take_profit=None):
+    """In-process SL/TP change (TRADE_ACTION_SLTP) — shared by the HTTP
+    endpoint and the position-management engine (manage_open_positions),
+    which calls this directly without a round trip to itself."""
+    if not _connection["initialized"]:
+        return {"ok": False, "error": "MT5 not connected"}
+
+    with _mt5_lock:
+        positions = mt5.positions_get(ticket=ticket) or []
+    if not positions:
+        return {"ok": False, "error": "Position not found: " + str(ticket)}
+
+    pos = positions[0]
+    new_sl = float(stop_loss) if stop_loss is not None else pos.sl
+    new_tp = float(take_profit) if take_profit is not None else pos.tp
+
+    request_data = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": pos.symbol,
+        "position": ticket,
+        "sl": new_sl,
+        "tp": new_tp,
+        "magic": 234000,
+    }
+    result = mt5.order_send(request_data)
+
+    if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+        retcode = result.retcode if result else 0
+        return {"ok": False, "error": "retcode=" + str(retcode) + " " + str(getattr(result, "comment", ""))}
+
+    log.info("[MODIFY_OK] ticket=%s symbol=%s new_sl=%s new_tp=%s", ticket, pos.symbol, new_sl, new_tp)
+    return {"ok": True, "ticket": str(ticket), "stop_loss": new_sl, "take_profit": new_tp}
+
+
+@app.route("/modify_position", methods=["POST"])
+def modify_position():
+    """Changes SL/TP on an already-open position — used manually or by the
+    real position-management engine to move a position to break-even or
+    trail its stop."""
+    if not _connection["initialized"]:
+        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+
+    data = request.json or {}
+    ticket = int(data.get("ticket", 0))
+    result = modify_position_direct(ticket, data.get("stop_loss"), data.get("take_profit"))
+    if not result["ok"]:
+        return jsonify(_structured_error("MODIFY_FAILED", result["error"])), 400
+    return jsonify(result)
+
+
 # ── Local entity store (replaces Base44 database) ─────────────────
 LOCAL_USER = {
     "id": "local",
@@ -1511,8 +1561,19 @@ def call_function(function_name):
         return jsonify(payload), status
 
     if function_name == "engineTest":
-        payload, status = local_functions.engine_test(body, fetch_candles_direct)
+        payload, status = local_functions.engine_test(body, fetch_candles_direct, get_open_positions, modify_position_direct)
         return jsonify(payload), status
+
+    if function_name == "positionManagement":
+        params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+        params = params_list[0] if params_list else {}
+        result = local_functions.manage_open_positions(get_open_positions, modify_position_direct, params)
+        return jsonify({"ok": True, **result})
+
+    if function_name == "dailyGoalStatus":
+        params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+        params = params_list[0] if params_list else {}
+        return jsonify({"ok": True, **local_functions.daily_goal_status(params)})
 
     stub = local_functions.deterministic_stub_response(function_name, body)
     if isinstance(stub, tuple):

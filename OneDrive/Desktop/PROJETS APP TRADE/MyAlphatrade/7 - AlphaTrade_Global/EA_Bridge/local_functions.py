@@ -371,6 +371,94 @@ def build_order(body):
     }
 
 
+# ── Position Management ─────────────────────────────────────────────
+# Real break-even + trailing-stop management against live MT5 positions.
+# Trade.stop_loss always holds the ORIGINAL stop set at entry (the risk
+# unit, "1R") — Trade.trailing_stop holds wherever the SL has actually
+# been moved to since. Comparing the two is how we know whether a
+# position has already been protected without re-reading MT5's own SL
+# (which we've just changed ourselves and don't want to re-derive R from).
+DEFAULT_BREAK_EVEN_TRIGGER = 1.0   # R-multiple of profit before locking entry
+DEFAULT_PROFIT_PROTECTION_TRIGGER = 1.5  # R-multiple before trailing starts
+TRAIL_DISTANCE_R = 0.5  # how far behind price the trailing stop sits, in R
+
+
+def _r_multiple(direction, entry_price, current_price, original_risk):
+    if original_risk <= 0:
+        return 0
+    moved = (current_price - entry_price) if direction == "BUY" else (entry_price - current_price)
+    return moved / original_risk
+
+
+def manage_open_positions(get_positions_fn, modify_fn, params=None):
+    """Runs every cycle alongside reconciliation. For each open MT5
+    position with a matching Trade record, moves the stop to break-even
+    once profit clears break_even_trigger R, then trails it once profit
+    clears profit_protection_trigger R. Never touches a position it can't
+    trace back to a Trade (no original risk to measure R against)."""
+    params = params or {}
+    be_trigger = params.get("break_even_trigger") or DEFAULT_BREAK_EVEN_TRIGGER
+    trail_trigger = params.get("profit_protection_trigger") or DEFAULT_PROFIT_PROTECTION_TRIGGER
+
+    positions = get_positions_fn()
+    if positions is None:
+        return {"managed": 0, "protected": 0, "eligible": 0, "actions": [], "connected": False}
+
+    open_trades = {t["ticket_mt5"]: t for t in list_entities("Trade", query={"status": "open"}, limit=200) if t.get("ticket_mt5")}
+    actions = []
+    eligible = 0
+    protected = 0
+
+    for pos in positions:
+        trade = open_trades.get(pos["ticket"])
+        if not trade:
+            continue
+
+        direction = pos["direction"]
+        entry_price = trade.get("entry_price") or pos["entry_price"]
+        original_sl = trade.get("stop_loss")
+        current_sl = trade.get("trailing_stop") or original_sl
+        if not original_sl:
+            continue
+        original_risk = abs(entry_price - original_sl)
+        if original_risk <= 0:
+            continue
+
+        r = _r_multiple(direction, entry_price, pos["current_price"], original_risk)
+        if r < be_trigger:
+            continue
+        eligible += 1
+
+        at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
+
+        new_sl = None
+        event = None
+        if r >= trail_trigger:
+            trail_offset = original_risk * TRAIL_DISTANCE_R
+            candidate = (pos["current_price"] - trail_offset) if direction == "BUY" else (pos["current_price"] + trail_offset)
+            better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+            if better and (candidate > entry_price if direction == "BUY" else candidate < entry_price):
+                new_sl, event = candidate, "trailing_stop"
+        elif not at_breakeven_or_better:
+            new_sl, event = entry_price, "break_even"
+
+        if new_sl is not None:
+            result = modify_fn(pos["ticket"], stop_loss=round(new_sl, 5))
+            if result.get("ok"):
+                update_entity("Trade", trade["id"], {
+                    "trailing_stop": new_sl,
+                    "management_events": (trade.get("management_events") or []) + [event],
+                })
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": event, "new_stop_loss": round(new_sl, 5)})
+                protected += 1
+            else:
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "failed", "error": result.get("error")})
+        elif at_breakeven_or_better or event is None:
+            protected += 1
+
+    return {"managed": len(open_trades), "protected": protected, "eligible": eligible, "actions": actions, "connected": True}
+
+
 # ── tradeManager ──────────────────────────────────────────────────
 
 def trade_manager_close_trade(body, get_entity_fn):
@@ -496,9 +584,16 @@ def trade_manager_sync_daily(body):
     losses = sum(1 for t in day_trades if (t.get("pnl") or 0) < 0)
     trade_ids = [t["id"] for t in day_trades]
 
+    params = _get_params()
+    capital = params.get("capital") or 1000
+    goal_amount = capital * (params.get("daily_goal_percent") or 2) / 100
+
     existing = list_entities("DailyPerformance", query={"date": date}, sort="-created_date", limit=1)
     payload = {
         "pnl": round(pnl * 100) / 100,
+        "pnl_percent": round((pnl / capital) * 100, 2) if capital else 0,
+        "goal_amount": round(goal_amount, 2),
+        "goal_reached": goal_amount > 0 and pnl >= goal_amount,
         "trades_count": len(day_trades),
         "wins": wins,
         "losses": losses,
@@ -732,18 +827,129 @@ def market_brain_analyze(body, fetch_candles_fn):
 
 _ENGINE_TEST_NOT_IMPLEMENTED = {
     "economic": "Pas de source de données de calendrier économique disponible — moteur neutralisé plutôt que simulé.",
-    "position_management": "Géré ailleurs dans l'app (break-even/trailing réels), pas encore exposé comme score de moteur.",
-    "risk_management": "Calcul de lot réel utilisé à l'exécution (voir tradingConnector), pas encore exposé comme score de moteur.",
-    "daily_goal": "Daily Goal Engine pas encore implémenté.",
     "ai_confidence": "Remplacé par la fusion pondérée réelle des moteurs (voir le résultat du pipeline).",
-    "ai_learning": "AI Learning Engine pas encore implémenté.",
-    "execution_engine": "Exécution réelle gérée par le pont MT5, pas encore exposée comme score de moteur.",
-    "alphatrade_connector": "Fonctionnalité obsolète (lié à l'ancienne intégration AlphaTrade cloud).",
-    "autonomous_trading": "Piloté par le paramètre d'exécution autonome (Settings), pas encore exposé comme score de moteur.",
 }
 
 
-def engine_test(body, fetch_candles_fn):
+def _get_params():
+    params_list = list_entities("Parameter", sort="-created_date", limit=1)
+    return params_list[0] if params_list else {}
+
+
+def _today_closed_trades():
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    trades = list_entities("Trade", query={"status": "closed"}, sort="-closed_at", limit=500)
+    return [t for t in trades if (t.get("closed_at") or "").startswith(today)]
+
+
+def score_position_management(get_positions_fn, modify_fn, params):
+    result = manage_open_positions(get_positions_fn, modify_fn, params)
+    if not result["connected"]:
+        return {"confidence": 0, "bias": "neutral", "findings": ["MT5 non connecté — gestion de position indisponible"]}
+    if result["managed"] == 0:
+        return {"confidence": 100, "bias": "neutral", "findings": ["Aucune position ouverte à gérer"]}
+    ratio = (result["protected"] / result["eligible"]) if result["eligible"] else 1
+    findings = [f"{result['protected']}/{max(result['eligible'], result['managed'])} position(s) suivie(s) protégée(s) (break-even/trailing)"]
+    findings += [f"{a['event']}: {a['symbol']} (ticket {a['ticket']})" + (f" → SL {a['new_stop_loss']}" if a.get("new_stop_loss") else f" — {a.get('error')}") for a in result["actions"][:3]]
+    return {"confidence": round(ratio * 100), "bias": "neutral", "findings": findings}
+
+
+def score_risk_management(params):
+    capital = params.get("capital") or 1000
+    max_daily_loss_pct = params.get("max_daily_loss_percent") or 2
+    max_daily_trades = params.get("max_daily_trades") or 3
+
+    today_trades = _today_closed_trades()
+    today_pnl = sum(t.get("pnl") or 0 for t in today_trades)
+    loss_budget = capital * max_daily_loss_pct / 100
+    loss_used_pct = round(min(100, max(0, -today_pnl / loss_budget * 100))) if loss_budget > 0 else 0
+    open_positions = list_entities("Trade", query={"status": "open"}, limit=100)
+
+    findings = [
+        f"Budget de perte journalier utilisé : {loss_used_pct}% ({today_pnl:.2f}$ sur limite -{loss_budget:.2f}$)",
+        f"Trades clôturés aujourd'hui : {len(today_trades)}/{max_daily_trades}",
+        f"Positions ouvertes : {len(open_positions)}",
+    ]
+    return {"confidence": max(0, 100 - loss_used_pct), "bias": "neutral", "findings": findings}
+
+
+def score_execution_engine():
+    accounts = list_entities("TradingAccount", limit=1)
+    acct = accounts[0] if accounts else {}
+    latency = acct.get("latency_ms")
+    if acct.get("connection_status") != "connected" or latency is None:
+        return {"confidence": 0, "bias": "neutral", "findings": ["Compte non connecté — aucune mesure d'exécution disponible"]}
+    if latency < 200:
+        confidence = 95
+    elif latency < 500:
+        confidence = 75
+    elif latency < 1000:
+        confidence = 50
+    else:
+        confidence = 25
+    return {"confidence": confidence, "bias": "neutral", "findings": [f"Latence de connexion mesurée : {latency}ms", f"Plateforme : {acct.get('platform', 'mt5')}"]}
+
+
+def daily_goal_status(params):
+    """Shared by the engine score AND the frontend's pre-trade gate (see
+    dispatcher action dailyGoalStatus) — one source of truth for whether
+    autonomous execution should keep trading today."""
+    capital = params.get("capital") or 1000
+    goal_pct = params.get("daily_goal_percent") or 2
+    loss_pct = params.get("max_daily_loss_percent") or 2
+    today_trades = _today_closed_trades()
+    pnl = sum(t.get("pnl") or 0 for t in today_trades)
+    goal_amount = capital * goal_pct / 100
+    loss_limit = capital * loss_pct / 100
+    goal_reached = goal_amount > 0 and pnl >= goal_amount
+    protection_triggered = loss_limit > 0 and pnl <= -loss_limit
+    progress_pct = round(min(100, max(0, pnl / goal_amount * 100))) if goal_amount > 0 else 0
+    return {
+        "pnl": round(pnl, 2), "goal_amount": round(goal_amount, 2), "loss_limit": round(loss_limit, 2),
+        "progress_pct": progress_pct, "goal_reached": goal_reached, "protection_triggered": protection_triggered,
+        "stop_trading": goal_reached or protection_triggered,
+    }
+
+
+def score_daily_goal(params):
+    status = daily_goal_status(params)
+    if status["protection_triggered"]:
+        return {"confidence": 100, "bias": "neutral", "findings": [
+            f"Protection de capital déclenchée : perte du jour {status['pnl']:.2f}$ ≥ limite -{status['loss_limit']:.2f}$ — trading autonome arrêté pour aujourd'hui"]}
+    if status["goal_reached"]:
+        return {"confidence": 100, "bias": "neutral", "findings": [
+            f"Objectif journalier atteint : {status['pnl']:.2f}$ ≥ {status['goal_amount']:.2f}$ — trading autonome arrêté pour aujourd'hui"]}
+    return {"confidence": status["progress_pct"], "bias": "neutral", "findings": [
+        f"Progression vers l'objectif : {status['pnl']:.2f}$ / {status['goal_amount']:.2f}$ ({status['progress_pct']}%)"]}
+
+
+def score_ai_learning():
+    learning = list_entities("LearningData", sort="-created_date", limit=200)
+    if len(learning) < 10:
+        return {"confidence": round(len(learning) * 10), "bias": "neutral", "findings": [
+            f"Historique insuffisant ({len(learning)} trade(s) clôturé(s)) pour évaluer la calibration réelle du système"]}
+    wins = sum(1 for l in learning if l.get("outcome") == "win")
+    win_rate = round(wins / len(learning) * 100)
+    return {"confidence": win_rate, "bias": "neutral", "findings": [f"Taux de réussite réel sur les {len(learning)} derniers trades clôturés : {win_rate}%"]}
+
+
+def score_autonomous_trading(params):
+    if not params.get("autonomous_execution_enabled"):
+        return {"confidence": 0, "bias": "neutral", "findings": ["Exécution autonome désactivée (mode manuel — les signaux sont créés mais aucun ordre n'est envoyé)"]}
+    return {"confidence": 80, "bias": "neutral", "findings": [f"Exécution autonome active — mode {params.get('execution_mode') or 'simulation'}"]}
+
+
+_REAL_TIME_ENGINE_SCORERS = {
+    "position_management": lambda params, get_positions_fn, modify_fn: score_position_management(get_positions_fn, modify_fn, params),
+    "risk_management": lambda params, get_positions_fn, modify_fn: score_risk_management(params),
+    "daily_goal": lambda params, get_positions_fn, modify_fn: score_daily_goal(params),
+    "ai_learning": lambda params, get_positions_fn, modify_fn: score_ai_learning(),
+    "execution_engine": lambda params, get_positions_fn, modify_fn: score_execution_engine(),
+    "autonomous_trading": lambda params, get_positions_fn, modify_fn: score_autonomous_trading(params),
+}
+
+
+def engine_test(body, fetch_candles_fn, get_positions_fn=None, modify_position_fn=None):
     import engine_scoring as es
     import indicators as ind
 
@@ -781,6 +987,16 @@ def engine_test(body, fetch_candles_fn):
             "status": "ok", "response_time_ms": 0, "confidence": r["confidence"], "bias": r["bias"],
             "findings": r["findings"], "risks": [], "details": "Calcul déterministe depuis l'horloge, aucun LLM appelé.",
             "logs": ["Session calculée directement depuis l'horloge (aucun LLM appelé)"],
+        }, 200
+
+    if engine_id in _REAL_TIME_ENGINE_SCORERS:
+        params = _get_params()
+        r = _REAL_TIME_ENGINE_SCORERS[engine_id](params, get_positions_fn or (lambda: None), modify_position_fn or (lambda *a, **k: {"ok": False, "error": "unavailable"}))
+        return {
+            "engine_id": engine_id, "engine_name": engine_id, "symbol": symbol, "timeframe": timeframe,
+            "status": "ok", "response_time_ms": 0, "confidence": r["confidence"], "bias": r["bias"],
+            "findings": r["findings"], "risks": [], "details": "; ".join(r["findings"]),
+            "logs": [f"{engine_id} calculé à partir de données réelles (comptes/trades/paramètres), aucun LLM appelé"],
         }, 200
 
     if engine_id in _ENGINE_TEST_NOT_IMPLEMENTED:
@@ -832,7 +1048,7 @@ def engine_test(body, fetch_candles_fn):
 _STUB_LABEL = "Moteur en cours de portage vers une logique déterministe Python (LLM retiré) — pas encore actif."
 
 _STUB_DECISIONS = {"strategyTester"}
-_STUB_NOOPS = {"aiProvider", "slackNotifier"}
+_STUB_NOOPS = {"slackNotifier"}
 
 
 def deterministic_stub_response(function_name, body):
