@@ -42,6 +42,29 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+# Timestamps are stored in UTC (unambiguous, sorts correctly) but "which day
+# did this happen on" is a question about the TRADER's calendar, not UTC's —
+# this app runs on the trader's own machine, so "today" and "which day does
+# this trade belong to" must use the local system timezone. Bucketing by the
+# raw UTC date instead shifts the boundary by the local UTC offset: a trade
+# closed late in the local evening (already tomorrow in UTC, for timezones
+# west of Greenwich) would silently count against the wrong day's goal/loss
+# limit, and the Daily Goal Engine would reset at UTC midnight instead of the
+# trader's actual midnight.
+def _local_today():
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _to_local_date(iso_utc_str):
+    if not iso_utc_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_utc_str.replace("Z", "+00:00"))
+    except ValueError:
+        return iso_utc_str.split("T")[0]
+    return dt.astimezone().strftime("%Y-%m-%d")
+
+
 def _mask_secret(value):
     if not value:
         return ""
@@ -572,9 +595,9 @@ def trade_manager_close_trade(body, get_entity_fn):
 
 
 def trade_manager_sync_daily(body):
-    date = body.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = body.get("date") or _local_today()
     trades = list_entities("Trade", query={"status": "closed"}, sort="-closed_at", limit=500)
-    day_trades = [t for t in trades if t.get("closed_at") and t["closed_at"].split("T")[0] == date]
+    day_trades = [t for t in trades if _to_local_date(t.get("closed_at")) == date]
 
     if not day_trades:
         return {"ok": True, "date": date, "message": "Aucun trade clôturé ce jour."}, 200
@@ -837,9 +860,9 @@ def _get_params():
 
 
 def _today_closed_trades():
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = _local_today()
     trades = list_entities("Trade", query={"status": "closed"}, sort="-closed_at", limit=500)
-    return [t for t in trades if (t.get("closed_at") or "").startswith(today)]
+    return [t for t in trades if _to_local_date(t.get("closed_at")) == today]
 
 
 def score_position_management(get_positions_fn, modify_fn, params):
