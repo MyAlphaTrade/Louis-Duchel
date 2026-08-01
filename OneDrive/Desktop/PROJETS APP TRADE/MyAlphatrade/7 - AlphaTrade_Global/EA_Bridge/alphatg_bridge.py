@@ -1220,13 +1220,21 @@ def get_positions_endpoint():
     return jsonify({"ok": True, "positions": positions})
 
 
+def fetch_symbols_direct():
+    """In-process symbol list fetch — same MT5 path as /symbols, callable
+    directly from route handlers without an HTTP round trip to itself."""
+    if not _connection["initialized"]:
+        return None
+    with _mt5_lock:
+        symbols = mt5.symbols_get() or []
+    return [s.name for s in symbols]
+
+
 @app.route("/symbols", methods=["GET"])
 def get_symbols():
-    if not _connection["initialized"]:
+    symbol_names = fetch_symbols_direct()
+    if symbol_names is None:
         return jsonify({"ok": False, "error": "MT5 not connected"}), 400
-
-    symbols = mt5.symbols_get() or []
-    symbol_names = [s.name for s in symbols]
     return jsonify({"ok": True, "symbols": symbol_names})
 
 
@@ -1477,9 +1485,12 @@ def call_function(function_name):
         if action == "save":
             return jsonify(local_functions.trading_connector_save(body))
         if action in ("test", "connect", "reconnect"):
-            return jsonify(local_functions.trading_connector_test(get_account_snapshot))
+            return jsonify(local_functions.trading_connector_test(get_account_snapshot, fetch_symbols_direct))
         if action == "build_order":
             return jsonify({"ok": True, "order": local_functions.build_order(body)})
+        if action == "save_bridge_result":
+            payload, status = local_functions.trading_connector_save_bridge_result(body, fetch_symbols_direct)
+            return jsonify(payload), status
         return jsonify({"error": "Action inconnue"}), 400
 
     if function_name == "tradeManager":
@@ -1525,11 +1536,19 @@ if __name__ == "__main__":
     log.info("  Monitor interval: %dms (latency < %dms)", MONITOR_INTERVAL_MS, MONITOR_INTERVAL_MS + 50)
     log.info("=" * 60)
 
-    log.info("Connecting to MT5 terminal...")
-    if mt5_auto_connect():
-        log.info("Bridge ready — starting real-time monitor...")
-        start_monitor()
-    else:
-        log.warning("MT5 not connected. Open MT5, log in, then restart this bridge.")
+    # MT5 connection runs in the background: mt5.initialize() blocks until
+    # the terminal finishes starting up, which can take anywhere from a
+    # couple seconds to well over a minute on a cold start. Gating the
+    # whole HTTP server behind that meant the app (entities, auth, login —
+    # none of which need MT5) was unreachable for that entire window, with
+    # no way to tell the difference between "still starting" and "broken".
+    def connect_mt5_and_start_monitor():
+        log.info("Connecting to MT5 terminal...")
+        if mt5_auto_connect():
+            log.info("Bridge ready — starting real-time monitor...")
+            start_monitor()
+        else:
+            log.warning("MT5 not connected. Open MT5, log in, then restart this bridge.")
 
+    threading.Thread(target=connect_mt5_and_start_monitor, daemon=True).start()
     app.run(host=host, port=port, debug=False, threaded=True)

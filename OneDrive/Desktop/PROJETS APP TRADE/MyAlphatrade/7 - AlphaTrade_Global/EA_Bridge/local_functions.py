@@ -17,6 +17,7 @@ Ported faithfully from:
 """
 
 import hashlib
+import re
 import secrets
 from datetime import datetime, timezone
 
@@ -62,6 +63,78 @@ def _mask_login(value):
 def _get_account():
     accounts = list_entities("TradingAccount", sort="-created_date", limit=1)
     return accounts[0] if accounts else None
+
+
+def _coalesce(*values):
+    for v in values:
+        if v is not None:
+            return v
+    return None
+
+
+def _normalize_symbol(raw):
+    s = re.sub(r"\s+", "", (raw or "").upper())
+    s = re.sub(r"\.[A-Z0-9]+$", "", s)
+    s = re.sub(r"INDEX$", "", s)
+    return s
+
+
+def _infer_asset_category(raw):
+    s = re.sub(r"\s+", "", (raw or "").upper())
+    if re.match(r"^(BOOM|CRASH|STEP)", s) or re.search(r"VIX\d", s):
+        return "synthetic"
+    if "INDEX" in s:
+        return "indices"
+    if re.match(r"^(BTC|ETH|SOL|XRP|ADA|DOGE|BNB|LTC|AVAX|LINK|DOT|MATIC|ATOM|TRX|NEAR|APT|FIL|ICP|ARB|OP|INJ|SUI|TIA|RNDR|FTM)", s):
+        return "crypto"
+    if re.match(r"^X(AU|AG|PT|PD)", s):
+        return "metals"
+    if re.search(r"(OIL|GAS|COPPER|WHEAT|CORN|SOY|COFFEE|SUGAR|COCOA)", s):
+        return "commodities"
+    return "forex"
+
+
+def seed_asset_registry_if_empty(fetch_symbols_fn, platform):
+    """The first successful MT5 connection auto-populates the searchable
+    asset library from the account's real available symbols — otherwise a
+    user would have to "favorite" every single one by hand in Asset
+    Discovery just to make search return anything at all."""
+    if list_entities("AssetRegistry", limit=1):
+        return
+    symbols = fetch_symbols_fn() if fetch_symbols_fn else None
+    if not symbols:
+        return
+    for i, raw in enumerate(symbols):
+        create_entity("AssetRegistry", {
+            "symbol": re.sub(r"\s+", "", raw),
+            "name": raw,
+            "category": _infer_asset_category(raw),
+            "platforms": [platform],
+            "is_available": True,
+            "sort_order": i,
+        })
+
+
+def _detect_account_type(data, acct):
+    """Auto-detect whether an MT5/MT4 account is demo or real from the API
+    response. Checks multiple common fields: account_type, demo flag,
+    server name pattern."""
+    if data.get("account_type"):
+        at = str(data["account_type"]).lower()
+        if "demo" in at:
+            return "demo"
+        if "real" in at or "live" in at:
+            return "real"
+    if isinstance(data.get("demo"), bool):
+        return "demo" if data["demo"] else "real"
+    if isinstance(data.get("is_demo"), bool):
+        return "demo" if data["is_demo"] else "real"
+    server = str(data.get("server") or (acct or {}).get("server") or "").lower()
+    if "demo" in server:
+        return "demo"
+    if "live" in server or "real" in server:
+        return "real"
+    return (acct or {}).get("account_type") or "demo"
 
 
 # ── Local login (single-user bypass, no cloud auth) ────────────────
@@ -174,7 +247,7 @@ def trading_connector_save(body):
     return {"ok": True}
 
 
-def trading_connector_test(get_account_snapshot):
+def trading_connector_test(get_account_snapshot, fetch_symbols_fn=None):
     """get_account_snapshot: callable returning the bridge's own live MT5
     snapshot dict (see alphatg_bridge.get_account_snapshot), or None."""
     acct = _get_account()
@@ -203,6 +276,8 @@ def trading_connector_test(get_account_snapshot):
             })
             return {"ok": False, "error": "MT5 non connecté au terminal — ouvrez MetaTrader 5 et connectez-vous."}
 
+        seed_asset_registry_if_empty(fetch_symbols_fn, platform)
+
         update_entity("TradingAccount", acct["id"], {
             "connection_status": "connected",
             "last_tested_at": _now_iso(),
@@ -221,6 +296,44 @@ def trading_connector_test(get_account_snapshot):
         return {"ok": True, "latency_ms": 0}
 
     return {"ok": False, "error": f"Plateforme '{platform}' non prise en charge par le service local (MT5 uniquement)."}
+
+
+def trading_connector_save_bridge_result(body, fetch_symbols_fn=None):
+    """Persists a test/sync result the frontend already obtained by calling
+    the bridge directly (browser → bridge, for mt5/mt4 — see baseConnector.js's
+    BRIDGE_ACTIONS routing, which bypasses this backend for the actual HTTP
+    call and only comes back here to save the outcome)."""
+    acct = _get_account()
+    if not acct:
+        return {"ok": False, "error": "No config"}, 200
+
+    result = body.get("result") or {}
+    platform = acct.get("platform") or "simulation"
+
+    if platform in ("mt5", "mt4"):
+        data = result.get("account") or {}
+        mt5_connected = result.get("ok") is True
+        detected_type = _detect_account_type(data, acct)
+        if mt5_connected:
+            seed_asset_registry_if_empty(fetch_symbols_fn, platform)
+        update_entity("TradingAccount", acct["id"], {
+            "connection_status": "connected" if mt5_connected else "failed",
+            "last_tested_at": _now_iso(),
+            "last_error": None if mt5_connected else (result.get("error") or "MT5 non connecté"),
+            "latency_ms": result.get("latency_ms"),
+            "account_type": detected_type if mt5_connected else acct.get("account_type"),
+            "account_number": _coalesce(data.get("account_number"), acct.get("account_number"), acct.get("login"), ""),
+            "currency": _coalesce(data.get("currency"), acct.get("currency"), "USD"),
+            "leverage": _coalesce(data.get("leverage"), acct.get("leverage"), "1:100"),
+            "balance": _coalesce(data.get("balance"), acct.get("balance"), 0),
+            "equity": _coalesce(data.get("equity"), data.get("balance"), 0),
+            "floating_profit": data.get("floating_profit") or 0,
+            "open_positions_count": data.get("open_positions") or 0,
+            "last_sync_at": _now_iso() if mt5_connected else acct.get("last_sync_at"),
+        })
+        return {"ok": True}, 200
+
+    return {"ok": False, "error": "Not a bridge platform"}, 200
 
 
 def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None):
