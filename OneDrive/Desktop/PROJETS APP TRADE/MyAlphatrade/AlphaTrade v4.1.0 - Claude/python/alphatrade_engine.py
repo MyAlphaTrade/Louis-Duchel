@@ -21,6 +21,7 @@ if str(ENGINE_DIR) not in sys.path:
 from market_microstructure import MicrostructureObserver
 import calendar_tracker
 from agent_report import AgentReport, make_agent_report, sort_by_priority, PRIORITY_ORDER
+from economic_calendar import economic_calendar_report
 from shared_memory import SHARED_MEMORY
 # v5.1.0 -- modules purs recuperes depuis l'historique git (commit f5f6403,
 # 15/07/2026, "KB1-KB8"), non touches par le retrait de KB1000 comme moteur
@@ -102,6 +103,11 @@ DEFAULT_PARAMS = {
     "mission_weekly_target": 0.0,
     "mission_monthly_target": 0.0,
     "mission_consecutive_loss_defense": 3,
+    # v5.1.0 -- Economic Calendar : agent de condition (jamais directionnel),
+    # bloque une entree via CAIO quand une publication macro a fort impact
+    # (NFP/CPI/Fed) est imminente sur la devise du symbole actif.
+    "economic_calendar_enabled": True,
+    "economic_calendar_block_hours": 2.0,
     # v5.1.0 -- CAIO v1 : seuil de qualite minimum sous lequel aucun scenario
     # n'est retenu, meme le mieux classe (voir caio_decide()).
     "caio_min_confidence": 60.0,
@@ -3465,6 +3471,10 @@ def gold_brain_snapshot(
         smart_money_analyst_report(candles, current_price),
         risk_manager_report(params, account, symbol_names),
     ]
+    if bool(params.get("economic_calendar_enabled", True)):
+        reports.append(economic_calendar_report(
+            symbol, block_hours=float(params.get("economic_calendar_block_hours", 2.0) or 2.0),
+        ))
     classic_signal = str(decision.get("signal") or "")
     if classic_signal in ("BUY", "SELL"):
         reports.append(make_agent_report(

@@ -49,6 +49,8 @@ const defaults = {
   mission_weekly_target: 0,
   mission_monthly_target: 0,
   mission_consecutive_loss_defense: 3,
+  economic_calendar_enabled: true,
+  economic_calendar_block_hours: 2.0,
   fast_be_enabled: true,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
@@ -2379,6 +2381,21 @@ function renderGoldBrain(s) {
     if ($('gbRiskRejected')) $('gbRiskRejected').textContent = risk.recommendation?.any_rejected
       ? (currentLanguage === 'en' ? 'Yes' : 'Oui')
       : (currentLanguage === 'en' ? 'No' : 'Non');
+  }
+  const econ = reports.economic_calendar;
+  if (econ) {
+    if ($('gbEconPrio')) {
+      $('gbEconPrio').textContent = econ.priority;
+      $('gbEconPrio').className = `gb-prio ${GB_PRIO_CLASS[econ.priority] || 'low'}`;
+    }
+    if ($('gbEconConf')) $('gbEconConf').textContent = `${Math.round(econ.confidence)}%`;
+    if ($('gbEconConfBar')) $('gbEconConfBar').style.width = `${econ.confidence}%`;
+    if ($('gbEconLine')) {
+      $('gbEconLine').textContent = econ.recommendation?.any_rejected
+        ? 'Entrée bloquée — publication imminente'
+        : 'Aucun blocage actif';
+    }
+    if ($('gbEconArgs')) $('gbEconArgs').innerHTML = (econ.arguments || econ.risks || []).map(a => `<li>${a}</li>`).join('');
   }
 }
 
