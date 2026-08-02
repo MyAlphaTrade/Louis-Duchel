@@ -33,10 +33,6 @@ const defaults = {
   active_symbol: 'XAUUSD',
   strategy_mode: 'scalping_fast',
   active_engine: 'alphatrade_ai',
-  kb1000_candles_per_level: 160,
-  kb1000_coherence_min_pct: 60,
-  kb1000_min_confirmations: 3,
-  kb1000_entry_threshold: 70,
   external_signals_allow_real: false,
   trade_origins: [
     { name: 'AlphaTrade AI', type: 'INTERNAL_BOT', magic_numbers: [20260607], comment_keywords: ['alphatrade', 'alphakaris'], enabled: true },
@@ -47,6 +43,12 @@ const defaults = {
   daily_target: 500,
   session_max_loss: -200,
   giveback: 100,
+  gold_brain_enabled: false,
+  caio_min_confidence: 60,
+  pending_order_expire_min: 60,
+  mission_weekly_target: 0,
+  mission_monthly_target: 0,
+  mission_consecutive_loss_defense: 3,
   fast_be_enabled: true,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
@@ -70,6 +72,12 @@ const defaults = {
   rebond_stop_pips: 2.00,
   rebond_max_hold_sec: 90,
   rebond_max_active: 3,
+  rebond_fort_enabled: false,
+  rebond_fort_min_signal_pct: 80,
+  rebond_fort_target_pips: 15.0,
+  rebond_fort_stop_pips: 8.0,
+  rebond_fort_max_hold_sec: 900,
+  rebond_fort_max_attempts: 1,
   ai_server_enabled: true,
   ai_server_url: 'http://127.0.0.1:8765',
   ai_server_token: '',
@@ -95,6 +103,7 @@ const defaults = {
       session_filter_enabled: false, session_start_utc: 8, session_end_utc: 17, stop_before_end_min: 30,
       lot_multiplicateur_renfort: 1.0,
       lot_multiplicateur_rebond: 3.0,
+      lot_multiplicateur_rebond_fort: 2.0,
       take_profit_enabled: false,
       take_profit_levels: [
         { threshold: 3.75, pct: 25 },
@@ -106,24 +115,40 @@ const defaults = {
   }
 };
 
-const strategyProfiles = {
-  scalping_fast: {
-    labelFr: 'Scalping rapide', labelEn: 'Fast scalping',
-    values: { risk_pct: .35, auto_max_positions: 3, max_trades_hour: 80, cadence_sec: 15, max_hold_sec: 90, confidence_min: 64, session_target: 20 }
-  },
-  scalping_safe: {
-    labelFr: 'Scalping prudent', labelEn: 'Safe scalping',
-    values: { risk_pct: .15, auto_max_positions: 1, max_trades_hour: 25, cadence_sec: 45, max_hold_sec: 180, confidence_min: 76, session_target: 10 }
-  },
-  long_analysis: {
-    labelFr: 'Analyse longue', labelEn: 'Long analysis',
-    values: { risk_pct: .2, auto_max_positions: 1, max_trades_hour: 12, cadence_sec: 120, max_hold_sec: 900, confidence_min: 74, session_target: 15 }
-  },
-  combined: {
-    labelFr: 'Mode combiné', labelEn: 'Combined mode',
-    values: { risk_pct: .25, auto_max_positions: 2, max_trades_hour: 35, cadence_sec: 30, max_hold_sec: 300, confidence_min: 70, session_target: 15 }
-  }
+// v5.1.0 -- ces valeurs ne couvrent plus que les champs propres a l'UI
+// (risque/session, jamais lus par STRATEGY_PROFILES cote Python). Les champs
+// qui existent aussi dans le moteur (confidence_min, cadence_sec,
+// position_review_sec, profit_target, max_hold_sec, timeframe) viennent
+// desormais de currentStatus.strategy_profiles (source de verite unique
+// envoyee par le moteur a chaque cycle) -- corrige la desync deja documentee
+// dans l'audit Phase 3 (ces memes champs avaient ici des valeurs differentes
+// du Python, silencieusement ecrites dans params.json a la sauvegarde).
+const strategyProfilesUiExtras = {
+  scalping_fast: { labelFr: 'Scalping rapide', labelEn: 'Fast scalping', values: { risk_pct: .35, auto_max_positions: 3, max_trades_hour: 80, session_target: 20 } },
+  scalping_safe: { labelFr: 'Scalping prudent', labelEn: 'Safe scalping', values: { risk_pct: .15, auto_max_positions: 1, max_trades_hour: 25, session_target: 10 } },
+  long_analysis: { labelFr: 'Analyse longue', labelEn: 'Long analysis', values: { risk_pct: .2, auto_max_positions: 1, max_trades_hour: 12, session_target: 15 } },
+  combined: { labelFr: 'Mode combiné', labelEn: 'Combined mode', values: { risk_pct: .25, auto_max_positions: 2, max_trades_hour: 35, session_target: 15 } }
 };
+
+const ENTRY_POLICY_LABELS = {
+  immediate: { fr: 'entrée immédiate (marché)', en: 'immediate entry (market)' },
+  pending_limit: { fr: 'ordres en attente (limit)', en: 'pending orders (limit)' },
+  adaptive: { fr: 'adaptative (le moteur choisit)', en: 'adaptive (engine decides)' },
+};
+
+function strategyProfileMeta(mode) {
+  const extras = strategyProfilesUiExtras[mode] || strategyProfilesUiExtras.scalping_safe;
+  const backend = currentStatus?.strategy_profiles?.[mode];
+  const backendValues = backend?.symbols?.XAUUSD || {};
+  return {
+    labelFr: backend?.label || extras.labelFr,
+    labelEn: extras.labelEn,
+    entryPolicy: backend?.entry_policy || null,
+    // Les valeurs backend (a droite) gagnent toujours sur les valeurs UI par
+    // defaut pour les champs en commun -- jamais l'inverse.
+    values: { ...extras.values, ...backendValues },
+  };
+}
 
 function updateClock() {
   $('clock').textContent = new Intl.DateTimeFormat(currentLanguage === 'en' ? 'en-CA' : 'fr-CA', {
@@ -174,8 +199,8 @@ function setLanguage(language) {
   $('langEn').classList.toggle('active', language === 'en');
   document.documentElement.lang = language;
   const nav = {
-    fr: ['Tableau de bord', 'Trades', 'Sessions IA', 'Microstructure', 'Sessions marché', 'Calendrier', 'Paramètres', 'Journal', 'Assistant IA'],
-    en: ['Dashboard', 'Trades', 'AI Sessions', 'Microstructure', 'Market Sessions', 'Calendar', 'Settings', 'Journal', 'AI Assistant']
+    fr: ['Tableau de bord', 'Trades', 'Sessions IA', 'Microstructure', 'Sessions marché', 'Calendrier', 'Gold Brain', 'Paramètres', 'Journal', 'Assistant IA'],
+    en: ['Dashboard', 'Trades', 'AI Sessions', 'Microstructure', 'Market Sessions', 'Calendar', 'Gold Brain', 'Settings', 'Journal', 'AI Assistant']
   };
   document.querySelectorAll('.tabs button').forEach((button, index) => {
     button.textContent = nav[language][index];
@@ -677,9 +702,124 @@ $('voiceButton')?.addEventListener('click', () => {
   }
 });
 
+// ── Écran "Quoi de neuf" (v5.1.0) ──────────────────────────────────────────
+// Affiché une fois par version, au premier lancement suivant une mise à jour
+// (l'auto-updater installe au redémarrage -- ici on détecte simplement que
+// s.version (source de vérité, moteur Python) est plus récente que la
+// dernière version vue, mémorisée en localStorage comme alphatrade-language
+// /alphatrade-theme). Pour publier une nouvelle version : ajouter une entrée
+// en tête de WHATS_NEW_LOG (la plus récente en premier).
+const WN_ICONS = {
+  cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+};
+const WN_CHECK = '<polyline points="20 6 9 17 4 12"/>';
+const WN_CROSS = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
+const WN_INFO = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
+
+const WHATS_NEW_LOG = [
+  {
+    version: '5.1.0',
+    items: [
+      {
+        icon: 'cpu', tag: 'new', title: 'Gold AI Brain',
+        body: `
+          <p>Un nouvel onglet <b>Gold Brain</b> ajoute une couche d'arbitrage indépendante avant chaque entrée réelle sur XAUUSD. Quatre agents spécialisés analysent le marché en parallèle du signal classique, et un cinquième — le CAIO (Chief AI Officer) — arbitre entre leurs avis pour rendre une décision finale GO / NO_TRADE, visible en direct dans l'onglet.</p>
+          <div class="wn-sublabel">Les 4 agents consultés</div>
+          <ul class="wn-agentlist">
+            <li><b>Structure Analyst</b> — identifie le régime de marché (tendance haussière/baissière/range) et les zones offre/demande.</li>
+            <li><b>Smart Money Analyst</b> — repère les sweeps de liquidité, Order Blocks, Fair Value Gaps et cassures de structure (BOS/CHOCH).</li>
+            <li><b>Risk Manager</b> — vérifie le budget de risque disponible avant d'autoriser toute nouvelle position.</li>
+            <li><b>Trading Mission Manager</b> — suit vos objectifs jour/semaine/mois et adapte l'agressivité du système selon vos résultats en cours.</li>
+          </ul>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Désactivé par défaut — tant que vous ne l'activez pas, AlphaTrade se comporte exactement comme avant, aucune différence.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Une fois activé, le CAIO n'ajoute qu'un filtre supplémentaire — il peut refuser une entrée, jamais en forcer une que le pipeline classique n'aurait pas déjà validée.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Le panneau se met à jour en continu (toutes les 0.5s) pour observation, même sans tentative d'entrée en cours.</li>
+          </ul>`,
+        howto: 'Comment l\'utiliser : Paramètres → section "Gold AI Brain" → activez le premier interrupteur. Puis ouvrez l\'onglet <b>Gold Brain</b> pour suivre en direct le raisonnement des 4 agents et la décision du CAIO.',
+      },
+      {
+        icon: 'shield', tag: 'fix', title: 'Correctif de robustesse — Time Stop',
+        body: `
+          <p>Un audit statistique complet sur 465 trades réels a mis en évidence un cas où une position perdante pouvait rester ouverte indéfiniment — deux positions étaient restées ouvertes <b>127 heures</b> avant d'être stoppées en catastrophe, pour une perte combinée de plus de 500$. La cause : le paramètre "Max hold (s)" ne fermait une position que si elle était déjà en profit — jamais une position en perte.</p>
+          <div class="wn-sublabel">Avant / après</div>
+          <ul class="wn-mech">
+            <li class="before"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${WN_CROSS}</svg>Avant : une position en perte pouvait rester ouverte sans limite de temps, tant qu'elle ne touchait pas le plancher de protection catastrophique.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Maintenant : dès que "Max hold (s)" est dépassé sur une position toujours en perte, elle est fermée automatiquement — indépendamment du Take Profit, du renfort ou du module Rebond.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Ce filet de sécurité s'ajoute à ceux déjà existants (perte max par position, flottant max, protection catastrophe) — il ne les remplace pas.</li>
+          </ul>`,
+        howto: 'Réglable dans Paramètres → "Cible profit &amp; Protection" → "Max hold (s)". Valeur par défaut : 2700 secondes (45 minutes) pour le profil Scalping rapide.',
+      },
+    ],
+  },
+];
+
+function wnCompareVersions(a, b) {
+  const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+function renderWhatsNewItem(item) {
+  const iconPath = WN_ICONS[item.icon] || WN_ICONS.star;
+  const tagHtml = item.tag ? `<span class="wn-tag ${item.tag}">${item.tag === 'fix' ? 'Correctif' : 'Nouveau'}</span>` : '';
+  return `
+    <div class="wn-item">
+      <div class="wn-item-head">
+        <div class="wn-icon ${item.tag === 'fix' ? 'fix' : ''}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg>
+        </div>
+        <h3>${item.title} ${tagHtml}</h3>
+      </div>
+      <div class="wn-body">
+        ${item.body}
+        <div class="wn-howto">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${WN_INFO}</svg>
+          <span>${item.howto}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showWhatsNew(entry) {
+  const backdrop = $('whatsNewBackdrop');
+  if (!backdrop) return;
+  if ($('wnVersion')) $('wnVersion').textContent = `v${entry.version}`;
+  if ($('wnList')) $('wnList').innerHTML = entry.items.map(renderWhatsNewItem).join('');
+  const dots = $('wnDots');
+  if (dots) dots.innerHTML = entry.items.map((_, i) => `<span class="${i === 0 ? 'on' : ''}"></span>`).join('');
+  backdrop.style.display = 'flex';
+
+  const dismiss = (markSeen) => {
+    backdrop.style.display = 'none';
+    if (markSeen) localStorage.setItem('alphatrade-whatsnew-seen', entry.version);
+  };
+  $('wnOkBtn').onclick = () => dismiss(true);
+  $('wnLaterBtn').onclick = () => dismiss(false); // ferme sans marquer comme vu -- réapparaît au prochain lancement
+  $('wnCloseBtn').onclick = () => dismiss(false);
+}
+
+let whatsNewChecked = false;
+function maybeShowWhatsNew(version) {
+  if (whatsNewChecked || !version) return;
+  whatsNewChecked = true;
+  const entry = WHATS_NEW_LOG.find(e => e.version === version);
+  if (!entry) return; // pas de notes pour cette version -- ne rien afficher plutot que deviner
+  const lastSeen = localStorage.getItem('alphatrade-whatsnew-seen') || '0.0.0';
+  if (wnCompareVersions(version, lastSeen) > 0) showWhatsNew(entry);
+}
+
 function renderStatus(s) {
   if (!s) return;
   currentStatus = s;
+  if (s.version) maybeShowWhatsNew(s.version);
   if (s.version) {
     const vStr = `v${s.version}`;
     ['appVersionNavbar', 'appVersionLogin', 'appVersionInfo'].forEach(id => {
@@ -801,6 +941,7 @@ function renderStatus(s) {
   renderCalendar();
   renderActiveMarket();
   renderMicrostructurePage();
+  renderGoldBrain(s);
   if (currentLanguage === 'en') translateStatic('en');
 }
 
@@ -1720,6 +1861,7 @@ function fillSettings(values) {
   renderOriginsTable();
   renderTakeProfitLevels();
   applyParamLocksToUI();
+  syncGoldBrainToggle();
 }
 
 const ORIGIN_TYPE_LABELS = {
@@ -1876,14 +2018,12 @@ function selectEngine(engine) {
   document.querySelectorAll('.engine-card[data-engine]').forEach(card => {
     card.classList.toggle('selected', card.dataset.engine === engine);
   });
-  // Depuis la simplification du 16/07/2026, seule la génération du signal
-  // reste propre à chaque moteur (Stratégie Or ci-dessous, panneau KB1000
-  // Gold AI géré séparément) — lot, TP, trailing et protections sont
-  // désormais partagés (plus de classe ata-engine-only dessus).
+  // Seule la génération du signal reste propre à chaque moteur (Stratégie Or
+  // ci-dessous) — lot, TP, trailing et protections sont partagés (plus de
+  // classe ata-engine-only dessus).
   document.querySelectorAll('.ata-engine-only').forEach(panel => {
     panel.style.display = engine === 'alphatrade_ai' ? '' : 'none';
   });
-  if ($('kb1000Panel')) $('kb1000Panel').style.display = engine === 'kb1000_gold_ai' ? '' : 'none';
   if ($('externalSignalPanel')) $('externalSignalPanel').style.display = engine === 'external_signal' ? '' : 'none';
   if (params) params.active_engine = engine;
 }
@@ -1903,7 +2043,7 @@ function updateAssetCards() {
 }
 
 function updateStrategyAppliedState(mode) {
-  const profile = strategyProfiles[mode] || strategyProfiles.scalping_safe;
+  const profile = strategyProfileMeta(mode);
   const label = currentLanguage === 'en' ? profile.labelEn : profile.labelFr;
   if ($('strategyAppliedState')) {
     $('strategyAppliedState').textContent = currentLanguage === 'en'
@@ -1913,7 +2053,7 @@ function updateStrategyAppliedState(mode) {
 }
 
 function applyStrategyProfile(mode) {
-  const profile = strategyProfiles[mode];
+  const profile = strategyProfileMeta(mode);
   if (!profile || !params) return;
   params.strategy_mode = mode;
   Object.assign(params, profile.values);
@@ -1925,9 +2065,12 @@ function applyStrategyProfile(mode) {
   if ($('strategyModeToolbar')) $('strategyModeToolbar').value = mode;
   updateStrategyAppliedState(mode);
   const label = currentLanguage === 'en' ? profile.labelEn : profile.labelFr;
+  const policyLabel = profile.entryPolicy
+    ? (ENTRY_POLICY_LABELS[profile.entryPolicy]?.[currentLanguage === 'en' ? 'en' : 'fr'] || profile.entryPolicy)
+    : null;
   addLogs([currentLanguage === 'en'
-    ? `[STRATEGY] ${label} applied: risk, cadence, positions, confidence, duration and target updated.`
-    : `[STRATÉGIE] ${label} appliqué : risque, cadence, positions, confiance, durée et objectif mis à jour.`]);
+    ? `[STRATEGY] ${label} applied: risk, cadence, positions, confidence, duration and target updated.${policyLabel ? ` Entry policy: ${policyLabel}.` : ''}`
+    : `[STRATÉGIE] ${label} appliqué : risque, cadence, positions, confiance, durée et objectif mis à jour.${policyLabel ? ` Politique d'entrée : ${policyLabel}.` : ''}`]);
 }
 
 function collectSettings(form = $('settingsForm')) {
@@ -2057,6 +2200,187 @@ $('resetSettings')?.addEventListener('click', async event => {
     }, 1600);
   }
 });
+
+// ── Gold AI Brain (v5.1.0) ──────────────────────────────────────────────────
+const GB_PRIO_CLASS = { CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low' };
+const GB_MODE_CLASS = { Normal: 'normal', Prudent: 'prudent', Defense: 'defense', Protection: 'protection' };
+const GB_ACTION_LABEL = {
+  BUY_MARKET: 'BUY MARCHÉ', SELL_MARKET: 'SELL MARCHÉ',
+  BUY_LIMIT: 'BUY LIMIT', SELL_LIMIT: 'SELL LIMIT',
+  BUY_STOP: 'BUY STOP', SELL_STOP: 'SELL STOP',
+  WAIT: 'WAIT',
+};
+
+function gbActionHtml(recommendation) {
+  const action = recommendation?.action || 'WAIT';
+  const label = GB_ACTION_LABEL[action] || action;
+  const priceTxt = recommendation?.price != null ? ` · ${Number(recommendation.price).toFixed(2)}` : '';
+  const cls = action.startsWith('BUY') ? 'gb-action-buy' : action.startsWith('SELL') ? 'gb-action-sell' : 'gb-action-wait';
+  return `<span class="${cls}">${label}${priceTxt}</span>`;
+}
+
+function gbTimeAgo(iso) {
+  if (!iso) return '';
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return currentLanguage === 'en' ? `${seconds}s ago` : `il y a ${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return currentLanguage === 'en' ? `${minutes}min ago` : `il y a ${minutes}min`;
+}
+
+function gbFillPct(value, target) {
+  const t = Number(target || 0);
+  if (t <= 0) return 0;
+  return Math.max(0, Math.min(100, (Number(value || 0) / t) * 100));
+}
+
+function syncGoldBrainToggle() {
+  const toggle = $('goldBrainToggle');
+  if (!toggle || !params) return;
+  const enabled = Boolean(params.gold_brain_enabled);
+  toggle.checked = enabled;
+  const state = $('goldBrainState');
+  if (state) {
+    state.textContent = enabled
+      ? (currentLanguage === 'en' ? 'Enabled' : 'Activé')
+      : (currentLanguage === 'en' ? 'Disabled' : 'Désactivé');
+    state.className = `gb-state ${enabled ? 'on' : 'off'}`;
+  }
+  if ($('goldBrainOffNotice')) $('goldBrainOffNotice').style.display = enabled ? 'none' : 'block';
+  if ($('goldBrainContent')) $('goldBrainContent').style.display = enabled ? 'block' : 'none';
+}
+
+$('goldBrainToggle')?.addEventListener('change', async event => {
+  if (!params) return;
+  const enabled = event.currentTarget.checked;
+  const updated = { ...params, gold_brain_enabled: enabled };
+  try {
+    await alpha.saveParams(updated);
+    params = updated;
+    addLogs([enabled
+      ? '[GOLD BRAIN] Activé — le CAIO arbitre désormais en dernier ressort avant chaque entrée.'
+      : '[GOLD BRAIN] Désactivé — retour immédiat au pipeline classique, sans redémarrage.']);
+  } catch (error) {
+    event.currentTarget.checked = !enabled;
+    addLogs([`[ERROR] Bascule Gold Brain impossible: ${error?.message || error}`]);
+  }
+  syncGoldBrainToggle();
+});
+
+function renderGoldBrain(s) {
+  if (s?.gold_brain_version && $('goldBrainVersion')) $('goldBrainVersion').textContent = `v${s.gold_brain_version}`;
+  const gb = s?.auto_trading?.gold_brain;
+  const emptyEl = $('gbEmptyState');
+  const wrapEl = $('gbDecisionWrap');
+  if (!gb) {
+    if (emptyEl) emptyEl.style.display = 'block';
+    if (wrapEl) wrapEl.style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (wrapEl) wrapEl.style.display = 'block';
+
+  const isGo = gb.decision === 'GO';
+  const badge = $('gbDecisionBadge');
+  if (badge) {
+    badge.textContent = gb.decision || '—';
+    badge.className = `gb-decision-badge ${isGo ? 'go' : 'notrade'}`;
+  }
+  if ($('gbTimestamp')) $('gbTimestamp').textContent = gbTimeAgo(gb.timestamp);
+  if ($('gbOrderType')) $('gbOrderType').textContent = gb.order_type ? (GB_ACTION_LABEL[gb.order_type] || gb.order_type) : '—';
+  if ($('gbPrice')) $('gbPrice').textContent = gb.price != null ? Number(gb.price).toFixed(2) : '—';
+  if ($('gbSource')) $('gbSource').textContent = gb.source_agent || '—';
+  if ($('gbReason')) $('gbReason').textContent = gb.raison || '';
+  const overridesEl = $('gbOverrides');
+  if (overridesEl) {
+    if (gb.overrides && gb.overrides.length) {
+      overridesEl.style.display = 'block';
+      overridesEl.textContent = `⚠ ${gb.overrides.join(' ')}`;
+    } else {
+      overridesEl.style.display = 'none';
+    }
+  }
+
+  // Mission Manager
+  const mission = gb.mission || {};
+  const mode = mission.mode || 'Normal';
+  if ($('gbMissionMode')) {
+    $('gbMissionMode').textContent = { Normal: 'Normal', Prudent: 'Prudent', Defense: 'Défense', Protection: 'Protection' }[mode] || mode;
+    $('gbMissionMode').className = `gb-mm-mode ${GB_MODE_CLASS[mode] || 'normal'}`;
+  }
+  if ($('gbMissionPsy')) $('gbMissionPsy').textContent = mission.psychological_state || '—';
+  if ($('gbMissionPrio')) {
+    $('gbMissionPrio').textContent = mission.priority || 'LOW';
+    $('gbMissionPrio').className = `gb-prio ${GB_PRIO_CLASS[mission.priority] || 'low'}`;
+  }
+  if ($('gbDayVal')) $('gbDayVal').textContent = `${money(mission.daily_profit)} / ${plainMoney(mission.daily_target)}`;
+  if ($('gbDayBar')) $('gbDayBar').style.width = `${gbFillPct(mission.daily_profit, mission.daily_target)}%`;
+  if ($('gbWeekVal')) $('gbWeekVal').textContent = `${money(mission.weekly_profit)} / ${plainMoney(mission.weekly_target)}`;
+  if ($('gbWeekBar')) $('gbWeekBar').style.width = `${gbFillPct(mission.weekly_profit, mission.weekly_target)}%`;
+  if ($('gbWeekAuto')) $('gbWeekAuto').style.display = mission.weekly_target_auto ? 'inline' : 'none';
+  if ($('gbMonthVal')) $('gbMonthVal').textContent = `${money(mission.monthly_profit)} / ${plainMoney(mission.monthly_target)}`;
+  if ($('gbMonthBar')) $('gbMonthBar').style.width = `${gbFillPct(mission.monthly_profit, mission.monthly_target)}%`;
+  if ($('gbMonthAuto')) $('gbMonthAuto').style.display = mission.monthly_target_auto ? 'inline' : 'none';
+  if ($('gbAggVal')) $('gbAggVal').textContent = `${Math.round(Number(mission.aggressiveness_level || 0))} / 100`;
+  if ($('gbAggBar')) $('gbAggBar').style.width = `${Math.max(0, Math.min(100, Number(mission.aggressiveness_level || 0)))}%`;
+  if ($('gbLosses')) $('gbLosses').textContent = mission.consecutive_losses ?? '0';
+  if ($('gbRiskAppetite')) $('gbRiskAppetite').textContent = plainMoney(mission.risk_appetite);
+
+  // Structure Analyst / Smart Money Analyst / Risk Manager
+  const reports = gb.reports || {};
+  const structure = reports.structure_analyst;
+  if (structure) {
+    if ($('gbStructurePrio')) {
+      $('gbStructurePrio').textContent = structure.priority;
+      $('gbStructurePrio').className = `gb-prio ${GB_PRIO_CLASS[structure.priority] || 'low'}`;
+    }
+    if ($('gbStructureConf')) $('gbStructureConf').textContent = `${Math.round(structure.confidence)}%`;
+    if ($('gbStructureConfBar')) $('gbStructureConfBar').style.width = `${structure.confidence}%`;
+    if ($('gbStructureAction')) $('gbStructureAction').innerHTML = gbActionHtml(structure.recommendation);
+    if ($('gbStructureArgs')) $('gbStructureArgs').innerHTML = (structure.arguments || []).map(a => `<li>${a}</li>`).join('');
+    if ($('gbStructureRegime')) $('gbStructureRegime').textContent = structure.metadata?.regime || '—';
+    if ($('gbStructureSwings')) $('gbStructureSwings').textContent = structure.metadata?.swing_count ?? '—';
+    if ($('gbStructureInst')) $('gbStructureInst').textContent = structure.metadata?.institutional_zones ?? '—';
+  }
+  const smartMoney = reports.smart_money_analyst;
+  if (smartMoney) {
+    if ($('gbSmartMoneyPrio')) {
+      $('gbSmartMoneyPrio').textContent = smartMoney.priority;
+      $('gbSmartMoneyPrio').className = `gb-prio ${GB_PRIO_CLASS[smartMoney.priority] || 'low'}`;
+    }
+    if ($('gbSmartMoneyConf')) $('gbSmartMoneyConf').textContent = `${Math.round(smartMoney.confidence)}%`;
+    if ($('gbSmartMoneyConfBar')) $('gbSmartMoneyConfBar').style.width = `${smartMoney.confidence}%`;
+    if ($('gbSmartMoneyAction')) $('gbSmartMoneyAction').innerHTML = gbActionHtml(smartMoney.recommendation);
+    const smArgs = [...(smartMoney.arguments || []), ...(smartMoney.risks || [])];
+    if ($('gbSmartMoneyArgs')) $('gbSmartMoneyArgs').innerHTML = smArgs.map(a => `<li>${a}</li>`).join('');
+    if ($('gbSmFvg')) $('gbSmFvg').textContent = smartMoney.metadata?.fvg_count ?? '—';
+    if ($('gbSmOb')) $('gbSmOb').textContent = smartMoney.metadata?.order_block_count ?? '—';
+    if ($('gbSmBc')) $('gbSmBc').textContent = smartMoney.metadata?.bos_choch_count ?? '—';
+    if ($('gbSmPd')) $('gbSmPd').textContent = smartMoney.metadata?.premium_discount?.zone || '—';
+  }
+  const risk = reports.risk_manager;
+  if (risk) {
+    if ($('gbRiskPrio')) {
+      $('gbRiskPrio').textContent = risk.priority;
+      $('gbRiskPrio').className = `gb-prio ${GB_PRIO_CLASS[risk.priority] || 'low'}`;
+    }
+    if ($('gbRiskConf')) $('gbRiskConf').textContent = `${Math.round(risk.confidence)}%`;
+    if ($('gbRiskConfBar')) $('gbRiskConfBar').style.width = `${risk.confidence}%`;
+    const xauLot = risk.recommendation?.lots?.XAUUSD;
+    if ($('gbRiskLine')) {
+      $('gbRiskLine').textContent = xauLot
+        ? `Lot effectif : ${Number(xauLot.effective_lot || 0).toFixed(3)} (XAUUSD)`
+        : '—';
+    }
+    if ($('gbRiskArgs')) $('gbRiskArgs').innerHTML = (risk.arguments || risk.risks || []).map(a => `<li>${a}</li>`).join('');
+    if ($('gbRiskStatus')) {
+      $('gbRiskStatus').textContent = risk.status;
+      $('gbRiskStatus').style.color = risk.status === 'OK' ? 'var(--green)' : 'var(--red)';
+    }
+    if ($('gbRiskRejected')) $('gbRiskRejected').textContent = risk.recommendation?.any_rejected
+      ? (currentLanguage === 'en' ? 'Yes' : 'Oui')
+      : (currentLanguage === 'en' ? 'No' : 'Non');
+  }
+}
 
 alpha.onStatus(renderStatus);
 alpha.onTrades(renderTrades);

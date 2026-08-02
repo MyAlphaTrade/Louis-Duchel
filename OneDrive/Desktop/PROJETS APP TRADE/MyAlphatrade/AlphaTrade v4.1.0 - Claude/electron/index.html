@@ -91,6 +91,7 @@
     <button data-page="microstructure">Microstructure</button>
     <button data-page="marketSessions">Sessions marché</button>
     <button data-page="calendar">Calendrier</button>
+    <button data-page="goldBrain">Gold Brain</button>
     <button data-page="settings">Paramètres</button>
     <button data-page="journal">Journal</button>
     <button data-page="assistant">Assistant IA</button>
@@ -467,6 +468,107 @@
       </article>
     </section>
 
+    <section id="goldBrain" class="page gold-brain-page">
+      <article class="panel gb-master">
+        <div class="gb-master-icon">🧠</div>
+        <div class="gb-master-text">
+          <div class="panel-title" style="margin:0 0 4px;">Gold AI Brain <small id="goldBrainVersion" style="color:var(--muted); font-weight:600;">v1.0</small></div>
+          <p class="mini-help">Désactivé (défaut) : comportement strictement identique à AlphaTrade AI classique. Activé : le CAIO arbitre en dernier ressort avant chaque entrée, en plus des filtres déjà existants (renfort, cooldown, session, validation IA serveur) — rien n'est retiré, une couche est ajoutée.</p>
+        </div>
+        <span id="goldBrainState" class="gb-state off">Désactivé</span>
+        <label class="gb-switch">
+          <input type="checkbox" id="goldBrainToggle">
+          <span class="gb-knob"></span>
+        </label>
+      </article>
+
+      <div id="goldBrainOffNotice" class="gb-off-notice">Gold AI Brain désactivé — AlphaTrade AI fonctionne exactement comme avant la v5.1.0. Aucun rapport d'agent, aucune décision CAIO tant qu'il reste éteint.</div>
+
+      <div id="goldBrainContent" style="display:none">
+        <div id="gbEmptyState" class="gb-off-notice">En attente du premier cycle d'analyse — le panneau s'actualise en continu (analyse des 4 agents à chaque cycle), même sans tentative d'entrée. La décision finale du CAIO n'est tracée dans l'historique d'apprentissage que lors d'une vraie tentative d'entrée.</div>
+
+        <div id="gbDecisionWrap" style="display:none">
+          <article class="panel gb-caio-card">
+            <div class="gb-caio-head">
+              <span class="gb-caio-label">Chief AI Officer — dernière décision</span>
+              <span id="gbTimestamp" class="gb-timestamp"></span>
+            </div>
+            <span id="gbDecisionBadge" class="gb-decision-badge go">GO</span>
+            <div class="grid gb-caio-grid">
+              <div class="gb-field"><label>Type d'ordre</label><div id="gbOrderType">—</div></div>
+              <div class="gb-field"><label>Prix</label><div id="gbPrice">—</div></div>
+              <div class="gb-field"><label>Agent retenu</label><div id="gbSource">—</div></div>
+            </div>
+            <div class="gb-caio-reason" id="gbReason"></div>
+            <div id="gbOverrides" class="gb-caio-overrides" style="display:none"></div>
+          </article>
+
+          <div class="gb-agents-row">
+            <article class="panel gb-agent-card">
+              <div class="gb-agent-title">🎯 Trading Mission Manager<span id="gbMissionPrio" class="gb-prio low">LOW</span></div>
+              <span id="gbMissionMode" class="gb-mm-mode normal">Normal</span><span id="gbMissionPsy" class="gb-psy-badge">Normal</span>
+              <div class="gb-target-row"><div class="gb-target-head"><span>Objectif jour</span><b id="gbDayVal">—</b></div><div class="gb-target-bar"><div id="gbDayBar" class="gb-fill" style="width:0%"></div></div></div>
+              <div class="gb-target-row"><div class="gb-target-head"><span>Objectif semaine <span id="gbWeekAuto" class="gb-auto-badge" style="display:none" title="Non défini dans Paramètres — dérivé automatiquement de l'Objectif journalier (× 5).">auto</span></span><b id="gbWeekVal">—</b></div><div class="gb-target-bar"><div id="gbWeekBar" class="gb-fill" style="width:0%"></div></div></div>
+              <div class="gb-target-row"><div class="gb-target-head"><span>Objectif mois <span id="gbMonthAuto" class="gb-auto-badge" style="display:none" title="Non défini dans Paramètres — dérivé automatiquement de l'Objectif journalier (× 20).">auto</span></span><b id="gbMonthVal">—</b></div><div class="gb-target-bar"><div id="gbMonthBar" class="gb-fill" style="width:0%"></div></div></div>
+              <div class="gb-agg-gauge"><div class="gb-target-head"><span>Agressivité</span><b id="gbAggVal">—</b></div><div class="gb-agg-bar"><div id="gbAggBar" class="gb-fill-agg" style="width:0%"></div></div></div>
+              <div class="gb-meta-row">
+                <span class="gb-meta-chip">Pertes consécutives : <span id="gbLosses">0</span></span>
+                <span class="gb-meta-chip">Coussin risque : <span id="gbRiskAppetite">—</span></span>
+              </div>
+            </article>
+
+            <article class="panel gb-agent-card">
+              <div class="gb-agent-title">🗺️ Structure Analyst<span id="gbStructurePrio" class="gb-prio medium">MEDIUM</span></div>
+              <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbStructureConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbStructureConf">—</b></div>
+              <div class="gb-rec-line" id="gbStructureAction">—</div>
+              <ul class="gb-arg-list" id="gbStructureArgs"></ul>
+              <div class="gb-meta-row">
+                <span class="gb-meta-chip">Régime : <b id="gbStructureRegime">—</b></span>
+                <span class="gb-meta-chip">Swings : <span id="gbStructureSwings">—</span></span>
+                <span class="gb-meta-chip">Zones institutionnelles : <span id="gbStructureInst">—</span></span>
+              </div>
+            </article>
+
+            <article class="panel gb-agent-card">
+              <div class="gb-agent-title">🕵️ Smart Money Analyst<span id="gbSmartMoneyPrio" class="gb-prio medium">MEDIUM</span></div>
+              <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbSmartMoneyConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbSmartMoneyConf">—</b></div>
+              <div class="gb-rec-line" id="gbSmartMoneyAction">—</div>
+              <ul class="gb-arg-list" id="gbSmartMoneyArgs"></ul>
+              <div class="gb-meta-row">
+                <span class="gb-meta-chip">FVG : <span id="gbSmFvg">—</span></span>
+                <span class="gb-meta-chip">Order Blocks : <span id="gbSmOb">—</span></span>
+                <span class="gb-meta-chip">BOS/CHOCH : <span id="gbSmBc">—</span></span>
+                <span class="gb-meta-chip">Zone : <span id="gbSmPd">—</span></span>
+              </div>
+            </article>
+
+            <article class="panel gb-agent-card">
+              <div class="gb-agent-title">🛡️ Risk Manager<span id="gbRiskPrio" class="gb-prio low">LOW</span></div>
+              <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbRiskConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbRiskConf">—</b></div>
+              <div class="gb-rec-line" id="gbRiskLine">—</div>
+              <ul class="gb-arg-list" id="gbRiskArgs"></ul>
+              <div class="gb-meta-row">
+                <span class="gb-meta-chip">Statut : <span id="gbRiskStatus">—</span></span>
+                <span class="gb-meta-chip">Rejeté : <span id="gbRiskRejected">—</span></span>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <article class="panel">
+          <div class="panel-title">Politique d'entrée par mode de stratégie</div>
+          <p class="mini-help">Le mode reste une préférence — le CAIO peut s'en écarter selon le contexte (voir l'écart journalisé ci-dessus si applicable).</p>
+          <table class="gb-policy-table">
+            <tr><th>Mode de stratégie</th><th>Politique d'entrée</th><th>Comportement</th></tr>
+            <tr><td>Scalping rapide</td><td>Entrée immédiate</td><td>Privilégie BUY/SELL au marché</td></tr>
+            <tr><td>Scalping prudent</td><td>Entrée immédiate</td><td>Privilégie BUY/SELL au marché</td></tr>
+            <tr><td>Analyse longue</td><td>Retour sur zone</td><td>Privilégie les ordres en attente ancrés sur une zone</td></tr>
+            <tr><td>Mode combiné</td><td>Adaptatif</td><td>Le CAIO choisit librement selon le contexte</td></tr>
+          </table>
+        </article>
+      </div>
+    </section>
+
     <section id="settings" class="page">
       <form id="settingsForm" class="settings-grid">
         <div class="settings-scroll">
@@ -476,7 +578,7 @@
         </div>
         <div class="settings-toolbar">
           <span id="essentialsLabel">Réglages essentiels affichés</span>
-          <label class="strategy-toolbar-control">Mode stratégie <span class="info-dot" data-tip="Profil de trading d'AlphaTrade AI : ajuste ensemble timeframe, cadence, confiance minimum et objectif de profit. Sans effet sur KB1000 Gold AI.">ⓘ</span>
+          <label class="strategy-toolbar-control">Mode stratégie <span class="info-dot" data-tip="Profil de trading d'AlphaTrade AI : ajuste ensemble timeframe, cadence, confiance minimum et objectif de profit.">ⓘ</span>
             <select id="strategyModeToolbar">
               <option value="scalping_fast">Scalping rapide</option>
               <option value="scalping_safe">Scalping prudent</option>
@@ -493,7 +595,6 @@
           <div class="ep-label">Moteur IA actif</div>
           <select name="active_engine" id="activeEngineSelect" class="visually-hidden" tabindex="-1" aria-hidden="true">
             <option value="alphatrade_ai">AlphaTrade AI</option>
-            <option value="kb1000_gold_ai">KB1000 Gold AI</option>
             <option value="external_signal">Strategy Lab (signaux externes)</option>
           </select>
           <div class="engine-cards">
@@ -503,14 +604,6 @@
               <div class="chips">
                 <span class="chip on">Multi-TF</span><span class="chip on">EMA/RSI/MACD</span><span class="chip on">IA locale</span>
                 <span class="chip on">IA cloud</span><span class="chip on">Mémoire</span>
-              </div>
-            </div>
-            <div class="engine-card" data-engine="kb1000_gold_ai">
-              <div class="en-name">⭐ KB1000 Gold AI</div>
-              <div class="en-desc">Structure, zones, Fibonacci, Smart Money (FVG/BOS/CHOCH), confirmations, gestion de position intelligente.</div>
-              <div class="chips">
-                <span class="chip on">Multi-TF D1→M1</span><span class="chip on">Smart Money</span><span class="chip on">Fibonacci</span>
-                <span class="chip on">Zones</span>
               </div>
             </div>
             <div class="engine-card" data-engine="external_signal">
@@ -566,7 +659,7 @@
         <!-- 🟦 Risque & Compte (partagé entre les deux moteurs) -->
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title collapsible">🟦 Risque &amp; Compte<span class="acc-chevron">▶</span></div>
-          <label>Risque / trade % <span class="info-dot" data-tip="Pourcentage du capital risqué par trade, plafonné à 0.50% en dur (garde-fou absolu). Partagé entre AlphaTrade AI et KB1000 Gold AI.">ⓘ</span><input name="risk_pct" type="number" min="0.01" max="0.5" step="0.01"></label>
+          <label>Risque / trade % <span class="info-dot" data-tip="Pourcentage du capital risqué par trade, plafonné à 0.50% en dur (garde-fou absolu).">ⓘ</span><input name="risk_pct" type="number" min="0.01" max="0.5" step="0.01"></label>
           <label>Lot max compte réel <span class="info-dot" data-tip="Plafond réel et unique du lot en compte réel — aucune limite cachée. Partagé entre les deux moteurs.">ⓘ</span><input name="real_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
           <label>Lot max compte démo <span class="info-dot" data-tip="Plafond réel et unique du lot en compte démo. Partagé entre les deux moteurs.">ⓘ</span><input name="demo_lot_cap" type="number" min="0.001" max="10.0" step="0.001"></label>
           <label>Lot minimum <span class="info-dot" data-tip="Volume plancher — la taille de lot ne descend jamais sous cette valeur, quel que soit le calcul de risque. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="lot_min" type="number" step="0.001"></label>
@@ -613,13 +706,32 @@
           <label>Cooldown rebond (s) <span class="info-dot" data-tip="Délai minimum entre deux rebonds successifs.">ⓘ</span><input name="rebond_cooldown_sec" type="number" min="60" max="600" step="30"></label>
           <label>Multiplicateur lot rebond <span class="info-dot" data-tip="Remplace les paliers fixes 80/65 codés en dur dans le calcul du lot de rebond.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_rebond" type="number" step="0.1" min="1" max="5"></label>
           <label>Rebonds actifs max <span class="info-dot" data-tip="Fusion de l'ancien champ 'max_rebound_attempts' et du paramètre moteur 'rebond_max_active'.">ⓘ</span><input name="rebond_max_active" type="number" min="1" max="10"></label>
+          <p class="mini-help">Rebond Fort <span class="info-dot" data-tip="Le Rebond normal ci-dessus se désactive volontairement quand le signal de tendance principal est fort (≥85%) — exactement le cas d'un mouvement soutenu (ex: chute continue de l'or), là où rien ne compensait la perte. Rebond Fort est un 2e palier séparé, à activer explicitement, qui ne s'ouvre QUE dans ce cas précis, avec une barre de confiance beaucoup plus haute et un nombre d'essais plafonné par position perdante. ATTENTION : ouvrir une contre-position pendant un mouvement fort reste risqué si le retournement ne se confirme pas — le lot reste plafonné par le plafond de compte (Lot max compte démo/réel, dans Sécurité).">ⓘ</span></p>
+          <label class="check"><input name="rebond_fort_enabled" type="checkbox"> Activer Rebond Fort <span class="info-dot" data-tip="Désactivé par défaut — active uniquement le 2e palier décrit ci-dessus, indépendamment du Rebond normal.">ⓘ</span></label>
+          <label>Seuil signal contraire min % (Fort) <span class="info-dot" data-tip="Barre de confiance du signal contra pour autoriser Rebond Fort pendant une tendance forte — volontairement plus haute que le seuil du Rebond normal.">ⓘ</span><input name="rebond_fort_min_signal_pct" type="number" min="65" max="95" step="1"></label>
+          <label>Cible (pts, Fort) <span class="info-dot" data-tip="Distance de profit visée par Rebond Fort — plus large que le Rebond normal (scalp de quelques points) pour pouvoir capter une vraie partie du retournement.">ⓘ</span><input name="rebond_fort_target_pips" type="number" min="1" max="100" step="0.5"></label>
+          <label>Distance stop (pts, Fort) <span class="info-dot" data-tip="Stop de Rebond Fort — plus large que le Rebond normal pour ne pas se faire sortir par le bruit habituel du marché.">ⓘ</span><input name="rebond_fort_stop_pips" type="number" min="1" max="50" step="0.5"></label>
+          <label>Durée max maintien (s, Fort) <span class="info-dot" data-tip="Temps de maintien maximum de Rebond Fort — bien plus long que le Rebond normal (quelques secondes) pour laisser le temps au retournement de se développer.">ⓘ</span><input name="rebond_fort_max_hold_sec" type="number" min="60" max="3600" step="60"></label>
+          <label>Tentatives max par position perdante <span class="info-dot" data-tip="Empêche tout comportement de 'doublage' répété : une fois ce nombre de tentatives Rebond Fort utilisé sur une même position principale en perte, plus aucune nouvelle tentative tant que cette position n'est pas fermée.">ⓘ</span><input name="rebond_fort_max_attempts" type="number" min="1" max="5"></label>
+          <label>Multiplicateur lot Rebond Fort <span class="info-dot" data-tip="Reste plafonné par le plafond de lot du compte (Sécurité) quel que soit ce multiplicateur — c'est le vrai garde-fou absolu.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_rebond_fort" type="number" step="0.1" min="1" max="5"></label>
           <p class="mini-help">Lot <span class="info-dot" data-tip="Fusionné le 17/07/2026 depuis l'ancienne carte 'Lot & Renfort' — ces 2 valeurs s'appliquent au lot des positions Renfort/Rebond ci-dessus, elles n'ont pas lieu d'être dans une carte séparée.">ⓘ</span></p>
           <label>Lot fixe <span class="info-dot" data-tip="Taille de lot de base — repli utilisé si le lot calculé par le risque tombe sous le minimum. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="lot" type="number" step="0.001"></label>
           <label>Multiplicateur lot renfort <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 1.0 dans le code) — maintenant réglable. S'active au-delà du même seuil que le Renfort en négatif (Écart confiance renfort %, ci-dessus). Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="lot_multiplicateur_renfort" type="number" step="0.1" min="1" max="5"></label>
-          <p class="mini-help">La porte de Renfort sur position perdante lit aujourd'hui la confiance d'AlphaTrade AI même quand KB1000 est actif — pas encore corrigé (correctif séparé prévu). Le Rebond garde sa propre logique de décision, indépendante du moteur actif.</p>
         </article>
 
-        <!-- 🟦 Stratégie Or — génération du signal (AlphaTrade AI uniquement ; KB1000 utilise ses propres seuils KB1-KB7 ci-dessous) -->
+        <!-- 🟦 Gold AI Brain (v5.1.0) — CAIO/Mission Manager/Structure/Smart Money/Risk -->
+        <article class="panel settings-full-width advanced-setting">
+          <div class="panel-title collapsible">🟦 Gold AI Brain (v5.1.0)<span class="acc-chevron">▶</span></div>
+          <p class="mini-help">Voir aussi l'onglet <b>Gold Brain</b> pour la décision en direct du CAIO et des agents. Le désactiver ici ramène instantanément au pipeline classique — aucun redémarrage requis.</p>
+          <label class="check"><input name="gold_brain_enabled" type="checkbox"> Activer Gold AI Brain <span class="info-dot" data-tip="Le CAIO arbitre en dernier ressort avant chaque entrée, en plus des filtres déjà existants (renfort, cooldown, session, validation IA serveur). Défaut désactivé : comportement strictement identique à avant la v5.1.0.">ⓘ</span></label>
+          <label>Confiance minimum CAIO % <span class="info-dot" data-tip="Seuil de qualité minimum sous lequel aucun scénario n'est retenu, même le mieux classé — le meilleur trade est parfois de ne rien faire.">ⓘ</span><input name="caio_min_confidence" type="number" min="0" max="100" step="1"></label>
+          <label>Expiration ordre en attente (min) <span class="info-dot" data-tip="Durée de vie d'un ordre Buy/Sell Limit ou Stop non déclenché avant annulation automatique par le broker.">ⓘ</span><input name="pending_order_expire_min" type="number" min="1" max="1440" step="1"></label>
+          <label>Objectif hebdomadaire $ <span class="info-dot" data-tip="0 = dérivé automatiquement de l'objectif journalier (×5). Publié par le Trading Mission Manager, distinct de l'objectif de session.">ⓘ</span><input name="mission_weekly_target" type="number" min="0" step="1"></label>
+          <label>Objectif mensuel $ <span class="info-dot" data-tip="0 = dérivé automatiquement de l'objectif journalier (×20).">ⓘ</span><input name="mission_monthly_target" type="number" min="0" step="1"></label>
+          <label>Pertes consécutives → mode Défense <span class="info-dot" data-tip="Nombre de pertes d'affilée qui font basculer le Trading Mission Manager en mode Défense (risque réduit, nouvelles entrées plus sélectives).">ⓘ</span><input name="mission_consecutive_loss_defense" type="number" min="1" max="10" step="1"></label>
+        </article>
+
+        <!-- 🟦 Stratégie Or — génération du signal (AlphaTrade AI uniquement) -->
         <article class="panel settings-full-width risk-session-panel ata-engine-only" id="strategieOrPanel">
           <div class="panel-title collapsible">🟦 Stratégie Or<span class="acc-chevron">▶</span></div>
           <label>Seuil de confiance min % <span class="info-dot" data-tip="Score minimum requis pour ouvrir un trade, ajusté automatiquement par l'apprentissage.">ⓘ</span><input data-sym="XAUUSD" name="confidence_min" type="number" min="50" max="95"></label>
@@ -631,21 +743,11 @@
           <label>Marge retournement signal <span class="info-dot" data-tip="Auparavant invisible (valeur fixe 99) — condition de sortie anticipée sur retournement fort.">ⓘ</span><input data-sym="XAUUSD" name="signal_reversal_margin" type="number" min="5" max="100"></label>
         </article>
 
-        <!-- 🟦 KB1000 Gold AI — Réglages (KB1000 Gold AI uniquement — génération du signal seulement, l'exécution est partagée) -->
-        <article class="panel settings-full-width risk-session-panel" id="kb1000Panel" style="display:none;">
-          <div class="panel-title collapsible">🟦 KB1000 Gold AI — Réglages<span class="acc-chevron">▶</span></div>
-          <label>Bougies analysées / niveau (KB1) <span class="info-dot" data-tip="Nombre de bougies historiques utilisées pour calculer le trend de chaque niveau de la cascade multi-timeframe D1→M1.">ⓘ</span><input name="kb1000_candles_per_level" type="number" min="60" max="500"></label>
-          <label>Seuil de cohérence min % (KB1) <span class="info-dot" data-tip="Proportion minimale de niveaux alignés avec D1 pour que la cascade multi-timeframe soit considérée exploitable.">ⓘ</span><input name="kb1000_coherence_min_pct" type="number" min="10" max="100"></label>
-          <label>Confirmations min. requises (KB6) <span class="info-dot" data-tip="Sur 4 indicateurs (EMA/RSI/MACD/Momentum), combien doivent confirmer la direction pour valider le setup.">ⓘ</span><input name="kb1000_min_confirmations" type="number" min="1" max="4"></label>
-          <label>Score d'entrée min % (KB7) <span class="info-dot" data-tip="Score de synthèse minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée.">ⓘ</span><input name="kb1000_entry_threshold" type="number" min="40" max="95"></label>
-          <p class="mini-help">Simplification du 16/07/2026 : KB1000 (KB1-KB7) n'est plus qu'une source de signal — une fois BUY/SELL décidé ici, le lot, le TP, le trailing et les protections sont exactement les mêmes qu'AlphaTrade AI (blocs ci-dessus/dessous, désormais partagés). L'ancienne gestion de sortie dédiée (KB8) est retirée de l'exécution.</p>
-        </article>
-
         <!-- 🟦 Strategy Lab (signaux externes) — Réglages (génération du signal seulement, l'exécution est partagée) -->
         <article class="panel settings-full-width risk-session-panel" id="externalSignalPanel" style="display:none;">
           <div class="panel-title collapsible">🟦 Strategy Lab (signaux externes) — Réglages<span class="acc-chevron">▶</span></div>
           <label class="check"><input name="external_signals_allow_real" type="checkbox"> Accepter les signaux externes en mode réel <span class="info-dot" data-tip="Désactivé par défaut. Tant que cette case est décochée, un signal reçu de Strategy Lab n'ouvre jamais de position en compte réel (il reste sans effet) — seuls les comptes démo/observation en tiennent compte. Ce réglage n'est modifiable que depuis cet ordinateur, jamais à distance.">ⓘ</span></label>
-          <p class="mini-help">Le signal (BUY/SELL) ne fait que choisir la direction d'entrée — le lot, le stop-loss et le take-profit réels restent entièrement calculés par AlphaTrade, exactement comme pour AlphaTrade AI et KB1000 Gold AI. Un signal expire de lui-même après quelques minutes s'il n'est pas consommé.</p>
+          <p class="mini-help">Le signal (BUY/SELL) ne fait que choisir la direction d'entrée — le lot, le stop-loss et le take-profit réels restent entièrement calculés par AlphaTrade, exactement comme pour AlphaTrade AI. Un signal expire de lui-même après quelques minutes s'il n'est pas consommé.</p>
         </article>
 
         <!-- 🟦 Take Profit / BE (recréée le 17/07/2026 — remplace l'ancien "Palier", qui n'était pas des Take Profit et prêtait à confusion) -->
@@ -664,13 +766,13 @@
         <article class="panel settings-full-width risk-session-panel">
           <div class="panel-title collapsible">🟦 Cible profit &amp; Protection<span class="acc-chevron">▶</span></div>
           <label>Cible profit $ <span class="info-dot" data-tip="Cible broker SI Take Profit est désactivé (carte ci-dessus) — sinon c'est le dernier niveau Take Profit qui fixe la vraie cible. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="profit_target" type="number" min="0.05" step="0.05"></label>
-          <label>Max hold (s) <span class="info-dot" data-tip="Durée maximale de maintien d'une position avant fermeture forcée — protection universelle, active quel que soit l'état de Take Profit. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
+          <label>Max hold (s) <span class="info-dot" data-tip="Durée maximale de maintien d'une position avant fermeture forcée. Sur une position en perte : fermeture forcée dès ce délai dépassé, quel que soit l'état de Take Profit ou du renfort. Sur une position en profit sans Take Profit actif : sert aussi de délai minimum avant la sortie sur cible. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="max_hold_sec" type="number" min="5" max="3600"></label>
           <label>Délai de réanalyse (s) <span class="info-dot" data-tip="Intervalle entre deux vérifications de sortie sur une position déjà ouverte — universel. Partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="position_review_sec" type="number" min="30" max="900"></label>
           <label>Protection catastrophe $ <span class="info-dot" data-tip="Ferme immédiatement la position si la perte dépasse ce seuil — dernier filet de sécurité universel, partagé entre les deux moteurs.">ⓘ</span><input data-sym="XAUUSD" name="emergency_loss_limit" type="number" min="0.5" step="0.5"></label>
           <label>Profit min. sortie $ <span class="info-dot" data-tip="Profit minimum requis pour autoriser une sortie sur signal inversé — universel.">ⓘ</span><input data-sym="XAUUSD" name="min_positive_exit" type="number" min="0" step="0.01"></label>
           <label>Score momentum sortie <span class="info-dot" data-tip="Sort la position si le score du sens opposé dépasse ce seuil — universel.">ⓘ</span><input data-sym="XAUUSD" name="momentum_exit_score" type="number" min="40" max="90" step="1"></label>
           <label>Trailing profit $ <span class="info-dot" data-tip="Actif uniquement si Take Profit est désactivé (carte ci-dessus). Dès que le pic de profit dépasse 'Profit min. sortie $', suit ce pic ; ferme immédiatement si le profit retombe de ce montant depuis le pic — sans attendre 'Cible profit $' ni 'Max hold'. 0 = désactivé (comportement précédent).">ⓘ</span><input data-sym="XAUUSD" name="profit_trailing_giveback" type="number" min="0" step="0.01"></label>
-          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Ce bloc est partagé entre les deux moteurs — quelle que soit la source du signal d'entrée (AlphaTrade AI ou KB1000), la sortie suit exactement les mêmes règles.</p>
+          <p class="mini-help">Un compte réel exige une confirmation explicite au moment de cliquer sur Démarrer. Ce bloc est partagé entre les moteurs — quelle que soit la source du signal d'entrée, la sortie suit exactement les mêmes règles.</p>
         </article>
         </div>
         <div class="settings-actions">
@@ -713,34 +815,6 @@
           <div class="params-doc-kv"><span>Impact</span><b>Ferme la position si sa perte dépasse ce seuil</b></div>
           <div class="params-doc-kv"><span>Codé en dur</span><b>NON (activé en Phase 1)</b></div>
         </div>
-        <div class="params-doc-entry">
-          <h4>kb1000_candles_per_level</h4>
-          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB1 (cascade multi-timeframe)</b></div>
-          <div class="params-doc-kv"><span>Impact</span><b>Nombre de bougies historiques utilisées pour calculer la tendance de chaque niveau (D1→M1)</b></div>
-          <div class="params-doc-kv"><span>Valeur par défaut</span><b>160</b></div>
-          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
-        </div>
-        <div class="params-doc-entry">
-          <h4>kb1000_coherence_min_pct</h4>
-          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB1 (cascade multi-timeframe)</b></div>
-          <div class="params-doc-kv"><span>Impact</span><b>Sous ce seuil, le biais D1→M1 est jugé non exploitable — aucune décision KB1000 n'est prise</b></div>
-          <div class="params-doc-kv"><span>Valeur par défaut</span><b>60%</b></div>
-          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
-        </div>
-        <div class="params-doc-entry">
-          <h4>kb1000_min_confirmations</h4>
-          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB6 (confirmations EMA/RSI/MACD/Momentum)</b></div>
-          <div class="params-doc-kv"><span>Impact</span><b>Nombre d'indicateurs sur 4 devant confirmer la direction du setup</b></div>
-          <div class="params-doc-kv"><span>Valeur par défaut</span><b>3</b></div>
-          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
-        </div>
-        <div class="params-doc-entry">
-          <h4>kb1000_entry_threshold</h4>
-          <div class="params-doc-kv"><span>Utilisation</span><b>kb1000_gold_ai_entry_decision() → KB7 (synthèse décisionnelle)</b></div>
-          <div class="params-doc-kv"><span>Impact</span><b>Score minimum (sur 100, pondéré KB1-KB6) pour autoriser une entrée</b></div>
-          <div class="params-doc-kv"><span>Valeur par défaut</span><b>70%</b></div>
-          <div class="params-doc-kv"><span>Codé en dur</span><b>NON (Phase 3bis)</b></div>
-        </div>
       </div>
     </div>
 
@@ -749,7 +823,7 @@
         <span class="params-doc-close" id="originModalClose">×</span>
         <h3 id="originModalTitle">Ajouter une origine <span class="info-dot" data-tip="Ces règles déterminent comment une position MT5 est identifiée : par son magic number (priorité) ou par des mots-clés dans son commentaire.">ⓘ</span></h3>
         <p class="mini-help" id="originModalSub"></p>
-        <label class="origin-field">Nom<input id="originFieldName" type="text" placeholder="Ex: KB1000 Gold AI"></label>
+        <label class="origin-field">Nom<input id="originFieldName" type="text" placeholder="Ex: MonRobotEA"></label>
         <label class="origin-field">Type
           <select id="originFieldType">
             <option value="INTERNAL_BOT">BOT interne</option>
@@ -759,7 +833,7 @@
           </select>
         </label>
         <label class="origin-field">Magic numbers (séparés par une virgule)<input id="originFieldMagic" type="text" placeholder="Ex: 900001"></label>
-        <label class="origin-field">Mots-clés reconnus dans le commentaire<input id="originFieldKeywords" type="text" placeholder="Ex: kb1000, gold-ai"></label>
+        <label class="origin-field">Mots-clés reconnus dans le commentaire<input id="originFieldKeywords" type="text" placeholder="Ex: monrobot, ea-gold"></label>
         <label class="origin-field-row"><span>Activer cette origine</span><input id="originFieldEnabled" type="checkbox" checked></label>
         <div class="origin-modal-actions">
           <button type="button" id="originCancelBtn" class="ghost-btn">Annuler</button>
@@ -966,6 +1040,30 @@
 
     <div class="login-footer">
       <a href="#" onclick="alpha && alpha.openExternal && alpha.openExternal('http://alphatrade.com')">Pas encore de compte ? alphatrade.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- Écran "Quoi de neuf" -- affiché une fois par version au premier lancement après une mise à jour -->
+<div id="whatsNewBackdrop" class="wn-backdrop" style="display:none">
+  <div class="wn-card">
+    <div class="wn-header">
+      <button id="wnCloseBtn" class="wn-close" title="Fermer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="wn-badge">Mise à jour installée</div>
+      <h1>Quoi de neuf dans AlphaTrade <span id="wnVersion" class="wn-version"></span></h1>
+      <p>Voici en détail ce qui a changé depuis votre dernière session.</p>
+    </div>
+    <div id="wnList" class="wn-list"></div>
+    <div class="wn-footer">
+      <div id="wnDots" class="wn-dots"></div>
+      <div class="wn-btns">
+        <button id="wnLaterBtn" class="wn-btn-secondary">Voir plus tard</button>
+        <button id="wnOkBtn" class="wn-btn-primary">Compris, c'est parti
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 </div>

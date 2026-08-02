@@ -19,21 +19,32 @@ if str(ENGINE_DIR) not in sys.path:
     sys.path.insert(0, str(ENGINE_DIR))
 
 from market_microstructure import MicrostructureObserver
-from multi_timeframe_cascade import multi_timeframe_cascade, CASCADE_LEVELS
-from market_structure import market_structure, detect_swings, classify_swings
+import calendar_tracker
+from agent_report import AgentReport, make_agent_report, sort_by_priority, PRIORITY_ORDER
+from shared_memory import SHARED_MEMORY
+# v5.1.0 -- modules purs recuperes depuis l'historique git (commit f5f6403,
+# 15/07/2026, "KB1-KB8"), non touches par le retrait de KB1000 comme moteur
+# separe (Phase 13, 16/07/2026 -- seule l'execution dupliquee/KB8 posait
+# probleme, la structure/smart money elles-memes n'ont jamais ete en cause).
+from market_structure import detect_swings, classify_swings, market_structure
 from market_zones import market_zones
 from market_fibonacci import fibonacci_from_swings
 from market_smart_money import (
-    detect_fvg, detect_order_blocks, detect_bos_choch,
-    detect_liquidity_grabs, detect_equal_levels, premium_discount,
+    detect_fvg,
+    detect_order_blocks,
+    detect_bos_choch,
+    detect_liquidity_grabs,
+    detect_equal_levels,
+    premium_discount,
 )
-from market_confirmations import confirmations as kb6_confirmations_check
-from market_decision import decision_score
-import calendar_tracker
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
-VERSION = "5.0.0"
+VERSION = "5.1.0"
+# v5.1.0 -- version propre au "Gold AI Brain" (CAIO/Mission Manager/Structure/
+# Smart Money/Risk), independante de VERSION : premiere version de ce
+# sous-systeme entierement nouveau, ne suit pas le numero de l'application.
+GOLD_BRAIN_VERSION = "1.0"
 HARD_RISK_PCT_CAP = 0.50
 HARD_AUTO_POSITION_CAP = 8
 
@@ -53,10 +64,6 @@ DEFAULT_PARAMS = {
     "active_symbol": "XAUUSD",
     "strategy_mode": "scalping_fast",
     "active_engine": "alphatrade_ai",
-    "kb1000_entry_threshold": 70.0,
-    "kb1000_candles_per_level": 160,
-    "kb1000_coherence_min_pct": 60.0,
-    "kb1000_min_confirmations": 3,
     # Export Signaux (Strategy Lab, 22/07/2026) -- desactive par defaut, et
     # jamais expose dans REMOTE_PARAM_ALLOWLIST (electron/main.js) : ne peut
     # etre change que localement, depuis Parametres sur ce PC. Sans ce garde-
@@ -65,7 +72,19 @@ DEFAULT_PARAMS = {
     # le pont d'authentification etaient un jour compromis.
     "external_signals_allow_real": False,
     "external_signal_max_age_sec": 180,
+    # "Strategy Lab" DOIT rester avant "AlphaTrade AI" dans cette liste : le
+    # meme MAGIC est utilise pour les deux (open_position() ne differencie
+    # que par le commentaire, voir position_type="STRATLAB"/"STRATLABNR"),
+    # et trade_origin() retourne au premier match magic+mot-cle -- place
+    # apres, cette regle ne serait jamais atteinte puisque "alphatrade" est
+    # deja un mot-cle de la regle suivante et apparait dans tous les
+    # commentaires. type reste "INTERNAL_BOT" (donc origin="BOT") pour ne
+    # RIEN changer aux filtres existants (renfort, exposition, verrou
+    # directionnel...) -- seul origin_name change, pour l'affichage/le
+    # Journal et pour l'exclusion ciblee du Rebond (should_open_rebond).
     "trade_origins": [
+        {"name": "Strategy Lab", "type": "INTERNAL_BOT", "magic_numbers": [],
+         "comment_keywords": ["stratlab"], "enabled": True},
         {"name": "AlphaTrade AI", "type": "INTERNAL_BOT", "magic_numbers": [MAGIC],
          "comment_keywords": ["alphatrade", "alphakaris"], "enabled": True},
         {"name": "AVA Assistant", "type": "EXTERNAL_AI", "magic_numbers": [AVA_MAGIC],
@@ -77,6 +96,25 @@ DEFAULT_PARAMS = {
     "daily_target": 50.0,
     "session_max_loss": -150.0,
     "giveback": 100.0,
+    # v5.1.0 -- Trading Mission Manager : horizons semaine/mois, distincts de
+    # daily_target/session_max_loss (jour). 0 = derive automatiquement de
+    # daily_target (x5 semaine, x20 mois) dans mission_state().
+    "mission_weekly_target": 0.0,
+    "mission_monthly_target": 0.0,
+    "mission_consecutive_loss_defense": 3,
+    # v5.1.0 -- CAIO v1 : seuil de qualite minimum sous lequel aucun scenario
+    # n'est retenu, meme le mieux classe (voir caio_decide()).
+    "caio_min_confidence": 60.0,
+    # v5.1.0 -- place_order() : duree de vie d'un ordre en attente (Limit/Stop)
+    # non declenche avant annulation automatique par le broker.
+    "pending_order_expire_min": 60,
+    # v5.1.0 -- interrupteur general de la nouvelle couche agentique (Mission
+    # Manager/Structure/Smart Money/CAIO). Defaut False = comportement
+    # strictement identique a avant (open_position() direct, aucun changement
+    # de comportement). Bascule instantanee, jamais activee directement en
+    # reel sans validation demo dediee (voir plan de securite de la
+    # Proposition Technique v5.1.0).
+    "gold_brain_enabled": False,
     "fast_be_enabled": True,
     "profit_protection_enabled": True,
     "profit_drawdown_pct": 30.0,
@@ -106,6 +144,23 @@ DEFAULT_PARAMS = {
     "rebond_max_hold_sec": 90,
     "rebond_stop_pips": 2.00,
     "rebond_max_active": 3,
+    # Rebond Fort (demande de Louis, 23/07/2026, suite a l'incident du
+    # 4160->4020 sur l'or) : le Rebond normal ci-dessus se desactive
+    # volontairement des que le signal de tendance principal est fort
+    # (>=85%, voir should_open_rebond) -- exactement le cas d'un mouvement
+    # soutenu, la` ou plus rien ne compensait la perte. Rebond Fort est un
+    # 2e palier, distinct et desactivable separement, qui ne s'active QUE
+    # dans ce cas-la`, avec une barre de confiance beaucoup plus haute
+    # (rebond_fort_min_signal_pct) et une cible/duree adaptees a un vrai
+    # retournement (pas un scalp de quelques secondes). Nombre de tentatives
+    # plafonne par position perdante (rebond_fort_max_attempts) pour eviter
+    # tout comportement de "doublage" repete.
+    "rebond_fort_enabled": False,
+    "rebond_fort_min_signal_pct": 80,
+    "rebond_fort_target_pips": 15.0,
+    "rebond_fort_stop_pips": 8.0,
+    "rebond_fort_max_hold_sec": 900,
+    "rebond_fort_max_attempts": 1,
     "microstructure_enabled": True,
     "microstructure_interval_sec": 2,
     "hyperliquid_observer_enabled": False,
@@ -121,7 +176,7 @@ DEFAULT_PARAMS = {
             "confidence_min": 60,
             "cadence_sec": 15,
             "max_trades_hour": 120,
-            "max_hold_sec": 3600,
+            "max_hold_sec": 2700,  # 45min -- time stop universel (positions perdantes incluses), voir position_exit_reason()
             "position_review_sec": 300,
             "profit_target": 5.00,
             "momentum_exit_score": 55,
@@ -143,14 +198,24 @@ DEFAULT_PARAMS = {
             "take_profit_move_be": True,
             "lot_multiplicateur_renfort": 1.0,
             "lot_multiplicateur_rebond": 3.0,
+            "lot_multiplicateur_rebond_fort": 2.0,
         },
     },
 }
 
+# entry_policy (v5.1.0) -- prefere lue par caio_decide(), PAS un filtre dur
+# consomme par place_order(). Voir Proposition_Technique_MiseEnOeuvre_v5.1.0.html
+# section "Decision d'architecture centrale" : le strategy_mode exprime une
+# philosophie, le CAIO garde le dernier mot selon le contexte (chaque ecart
+# journalise dans shared_memory["learning_history"] comme caio.entry_override).
+#   immediate     -> privilegie BUY/SELL MARKET (modes scalping)
+#   pending_limit -> privilegie BUY/SELL LIMIT ancres sur zone (analyse posee)
+#   adaptive      -> aucune preference fixe, y compris Buy/Sell Stop sur cassure confirmee
 STRATEGY_PROFILES = {
     "scalping_fast": {
         "label": "Scalping rapide",
         "description": "Plus reactif: petits gains frequents, signaux courts et sorties rapides.",
+        "entry_policy": "immediate",
         "global": {"lookback_candles": 120, "min_score_gap": 8, "edge_zone_pct": 18},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 55, "cadence_sec": 10, "position_review_sec": 60,  "profit_target": 3.00,  "max_hold_sec": 600},
@@ -159,6 +224,7 @@ STRATEGY_PROFILES = {
     "scalping_safe": {
         "label": "Scalping prudent",
         "description": "Moins de trades: confirmations plus propres et filtres de risque plus stricts.",
+        "entry_policy": "immediate",
         "global": {"lookback_candles": 200, "min_score_gap": 10, "edge_zone_pct": 20},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 60, "cadence_sec": 15, "position_review_sec": 120, "profit_target": 5.00,  "max_hold_sec": 1800},
@@ -167,6 +233,7 @@ STRATEGY_PROFILES = {
     "long_analysis": {
         "label": "Analyse longue",
         "description": "Moins d'entrees: lecture multi-timeframe, objectif par trade plus eleve.",
+        "entry_policy": "pending_limit",
         "global": {"lookback_candles": 300, "min_score_gap": 12, "edge_zone_pct": 24},
         "symbols": {
             "XAUUSD":   {"timeframe": "M15", "confidence_min": 65, "cadence_sec": 60, "position_review_sec": 300, "profit_target": 10.0,  "max_hold_sec": 3600, "max_positions": 3},
@@ -175,12 +242,20 @@ STRATEGY_PROFILES = {
     "combined": {
         "label": "Mode combine",
         "description": "Scalping seulement si la tendance longue ne contredit pas le signal court.",
+        "entry_policy": "adaptive",
         "global": {"lookback_candles": 240, "min_score_gap": 8, "edge_zone_pct": 20},
         "symbols": {
             "XAUUSD":   {"timeframe": "M5", "confidence_min": 58, "cadence_sec": 12, "position_review_sec": 120, "profit_target": 5.00, "max_hold_sec": 1800},
         },
     },
 }
+
+ENTRY_POLICY_VALUES = ("immediate", "pending_limit", "adaptive")
+
+
+def entry_policy_for_mode(mode: str) -> str:
+    profile = STRATEGY_PROFILES.get(mode, STRATEGY_PROFILES["scalping_fast"])
+    return profile.get("entry_policy", "immediate")
 
 AI_SERVER_STATE = {
     "enabled": True,
@@ -796,250 +871,6 @@ def multi_timeframe_context(symbol: str, symbol_key: str | None) -> dict:
     }
 
 
-def kb1_multi_timeframe_cascade(symbol: str, candles_per_level: int = 160, coherence_threshold_pct: float = 60.0) -> dict:
-    """KB1000 Gold AI — KB1. Cascade hiérarchique D1→M1, indépendante de
-    multi_timeframe_context() (utilisée par AlphaTrade AI, agrégation à plat).
-    Pas encore branchée sur un moteur actif : fonction isolée et testable."""
-    if mt5 is None:
-        return multi_timeframe_cascade({}, coherence_threshold_pct=coherence_threshold_pct)
-    level_contexts = {tf: timeframe_trend_context(symbol, tf, limit=candles_per_level) for tf in CASCADE_LEVELS}
-    return multi_timeframe_cascade(level_contexts, coherence_threshold_pct=coherence_threshold_pct)
-
-
-def kb2_market_structure(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
-    """KB1000 Gold AI — KB2. HH/HL/LH/LL et régime (tendance/range/correction/
-    retournement) sur un timeframe donné. Le détecteur de swing est réutilisé
-    par KB4 (Fibonacci). Pas encore branchée sur un moteur actif."""
-    if mt5 is None:
-        return {"regime": "COLLECTING", "swings": [], "swing_count": 0}
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
-    if rates is None or len(rates) < 2 * swing_lookback + 5:
-        return {"regime": "COLLECTING", "swings": [], "swing_count": 0}
-    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
-    return market_structure(ohlc, lookback=swing_lookback)
-
-
-def kb3_market_zones(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
-    """KB1000 Gold AI — KB3. Support/Résistance, Supply/Demand, zones
-    institutionnelles (confluence) — réutilise detect_swings() de KB2.
-    Pas encore branchée sur un moteur actif."""
-    if mt5 is None:
-        return {"support": [], "resistance": [], "supply_demand": [], "institutional": []}
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
-    if rates is None or len(rates) < 2 * swing_lookback + 5:
-        return {"support": [], "resistance": [], "supply_demand": [], "institutional": []}
-    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
-    swings = detect_swings(ohlc, lookback=swing_lookback)
-    return market_zones(swings)
-
-
-def kb4_fibonacci(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
-    """KB1000 Gold AI — KB4. Niveaux de Fibonacci automatiques à partir du
-    dernier mouvement (swing précédent -> dernier swing), réutilise
-    detect_swings() de KB2. Pas encore branchée sur un moteur actif."""
-    empty = {"levels": {}, "direction": None, "swing_low": None, "swing_high": None,
-             "golden_zone": None, "in_golden_zone": None, "nearest_level": None}
-    if mt5 is None:
-        return empty
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
-    if rates is None or len(rates) < 2 * swing_lookback + 5:
-        return empty
-    ohlc = [{"high": float(row[2]), "low": float(row[3])} for row in rates]
-    swings = detect_swings(ohlc, lookback=swing_lookback)
-    current_price = float(rates[-1][4])
-    return fibonacci_from_swings(swings, current_price=current_price)
-
-
-def kb5_smart_money(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2) -> dict:
-    """KB1000 Gold AI — KB5. FVG, Order Blocks, BOS/CHOCH, Liquidity Grab,
-    Equal Highs/Lows, Premium/Discount. Réutilise detect_swings()/
-    classify_swings() de KB2 et la logique de range de KB4.
-    Pas encore branchée sur un moteur actif."""
-    empty = {"fvg": [], "order_blocks": [], "bos_choch": [], "liquidity_grabs": [],
-             "equal_highs": [], "equal_lows": [], "premium_discount": {"zone": None, "position_pct": None}}
-    if mt5 is None:
-        return empty
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
-    if rates is None or len(rates) < 2 * swing_lookback + 5:
-        return empty
-    ohlc = [{"open": float(row[1]), "high": float(row[2]), "low": float(row[3]), "close": float(row[4])} for row in rates]
-    swings = detect_swings(ohlc, swing_lookback)
-    labeled = classify_swings(swings)
-
-    leg = fibonacci_from_swings(swings, current_price=float(rates[-1][4]))
-    pd = {"zone": None, "position_pct": None}
-    if leg["swing_low"] is not None and leg["swing_high"] is not None:
-        pd = premium_discount(leg["swing_low"], leg["swing_high"], float(rates[-1][4]))
-
-    equals = detect_equal_levels(swings)
-    return {
-        "fvg": detect_fvg(ohlc),
-        "order_blocks": detect_order_blocks(ohlc),
-        "bos_choch": detect_bos_choch(labeled),
-        "liquidity_grabs": detect_liquidity_grabs(ohlc, swings),
-        "equal_highs": equals["equal_highs"],
-        "equal_lows": equals["equal_lows"],
-        "premium_discount": pd,
-    }
-
-
-def kb6_confirmations(symbol: str, candidate_direction: str, timeframe: str = "H1", candles: int = 300,
-                       min_confirmations: int = 3) -> dict:
-    """KB1000 Gold AI — KB6. EMA/RSI/MACD/Momentum comme simples filtres de
-    confirmation d'une direction déjà identifiée par KB1-KB5 (pas le cœur de
-    la décision, contrairement à AlphaTrade AI). Pas encore branchée sur un
-    moteur actif."""
-    empty = {"direction": candidate_direction, "checks": {}, "confirmed_count": 0,
-             "total": 4, "confirmation_pct": 0.0, "confirmed": False, "min_confirmations": min_confirmations}
-    if mt5 is None:
-        return empty
-    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, max(60, candles))
-    if rates is None or len(rates) < 55:
-        return {"direction": candidate_direction, "checks": {}, "confirmed_count": 0,
-                "total": 4, "confirmation_pct": 0.0, "confirmed": False, "min_confirmations": min_confirmations}
-    closes = [float(row[4]) for row in rates]
-    return kb6_confirmations_check(closes, candidate_direction, min_confirmations=min_confirmations)
-
-
-def _near_level(current_price: float | None, level: float | None, tolerance_pct: float) -> bool:
-    if current_price is None or level is None or level <= 0:
-        return False
-    return abs(current_price - level) / level * 100 <= tolerance_pct
-
-
-def _near_range(current_price: float | None, bottom: float | None, top: float | None, tolerance_pct: float) -> bool:
-    if current_price is None or bottom is None or top is None or current_price <= 0:
-        return False
-    lo, hi = min(bottom, top), max(bottom, top)
-    buffer = current_price * tolerance_pct / 100
-    return (lo - buffer) <= current_price <= (hi + buffer)
-
-
-def kb7_decision(symbol: str, timeframe: str = "H1", candles: int = 300, swing_lookback: int = 2,
-                  entry_threshold: float = 70.0, kb1_candles_per_level: int = 160,
-                  kb1_coherence_threshold_pct: float = 60.0, kb6_min_confirmations: int = 3,
-                  price_proximity_pct: float = 0.5) -> dict:
-    """KB1000 Gold AI — KB7. Synthèse pondérée de KB1-KB6 (voir
-    market_decision.decision_score). La direction candidate vient du biais
-    global de KB1 (contexte le plus large en premier, comme demandé) ; si KB1
-    ne donne aucun biais exploitable, aucune décision n'est prise.
-    Les correspondances zones/FVG/Order Block/Liquidity Grab exigent désormais
-    que le prix actuel soit réellement proche (price_proximity_pct) du niveau
-    concerné — corrige un bug trouvé le 16/07/2026 où une entrée pouvait
-    scorer haut alors que le prix n'était pas du tout au niveau du signal
-    invoqué. premium_discount (déjà calculé par KB5, jamais utilisé avant ce
-    correctif) est désormais transmis au score : vendre en zone DISCOUNT
-    (proche des creux) ou acheter en zone PREMIUM est pénalisé — c'est
-    exactement la situation qui a coûté 150$ (SELL ouvert à RSI 17, zone de
-    survente extrême, sans que rien dans KB1000 ne le détecte)."""
-    cascade = kb1_multi_timeframe_cascade(
-        symbol, candles_per_level=kb1_candles_per_level, coherence_threshold_pct=kb1_coherence_threshold_pct,
-    )
-    if cascade["global_bias"] == "BULLISH":
-        candidate_direction = "bullish"
-    elif cascade["global_bias"] == "BEARISH":
-        candidate_direction = "bearish"
-    else:
-        return {"candidate_direction": None, "reason": "Biais KB1 non exploitable (RANGE/collecte).",
-                "entry_authorized": False}
-
-    structure = kb2_market_structure(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
-    zones = kb3_market_zones(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
-    fibo = kb4_fibonacci(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
-    smart_money = kb5_smart_money(symbol, timeframe=timeframe, candles=candles, swing_lookback=swing_lookback)
-    confirm = kb6_confirmations(symbol, candidate_direction, timeframe=timeframe, candles=candles,
-                                 min_confirmations=kb6_min_confirmations)
-
-    current_price = None
-    if mt5 is not None:
-        rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, 1)
-        if rates is not None and len(rates):
-            current_price = float(rates[-1][4])
-
-    zone_type = "demand" if candidate_direction == "bullish" else "supply"
-    opposing_type = "supply" if candidate_direction == "bullish" else "demand"
-    zone_match = None
-    if any(z.get("type") == zone_type and _near_level(current_price, z.get("price"), price_proximity_pct)
-           for z in zones.get("institutional", [])):
-        zone_match = "institutional"
-    elif any(z["type"] == zone_type and _near_level(current_price, z.get("price"), price_proximity_pct)
-             for z in zones.get("supply_demand", [])):
-        zone_match = "supply_demand"
-    elif any(z["type"] == opposing_type and _near_level(current_price, z.get("price"), price_proximity_pct)
-             for z in zones.get("supply_demand", []) + zones.get("institutional", [])):
-        zone_match = "opposing"
-
-    bos_choch = smart_money.get("bos_choch", [])
-    last_event = max(bos_choch, key=lambda e: e["index"]) if bos_choch else None
-
-    signals = {
-        "kb1_bias_strength": cascade.get("bias_strength"),
-        "kb1_usable": cascade.get("usable", True),
-        "kb2_regime": structure.get("regime"),
-        "kb3_zone_match": zone_match,
-        "kb4_in_golden_zone": fibo.get("in_golden_zone"),
-        "kb5_last_event": last_event,
-        "kb5_fvg_match": any(
-            g["type"] == candidate_direction and _near_range(current_price, g.get("bottom"), g.get("top"), price_proximity_pct)
-            for g in smart_money.get("fvg", [])
-        ),
-        "kb5_order_block_match": any(
-            o["type"] == candidate_direction and _near_range(current_price, o.get("bottom"), o.get("top"), price_proximity_pct)
-            for o in smart_money.get("order_blocks", [])
-        ),
-        "kb5_liquidity_grab_supportive": any(
-            g["type"] == candidate_direction and _near_level(current_price, g.get("level"), price_proximity_pct)
-            for g in smart_money.get("liquidity_grabs", [])
-        ),
-        "kb5_premium_discount": (smart_money.get("premium_discount") or {}).get("zone"),
-        "kb6_confirmation_pct": confirm.get("confirmation_pct"),
-    }
-    result = decision_score(signals, candidate_direction, entry_threshold=entry_threshold)
-    result["signals"] = signals
-    return result
-
-
-# ── Registre de moteurs IA (Phase 3bis) ─────────────────────────────────────
-# AlphaTrade AI reste calculé inline dans status_payload() pour l'instant
-# (extraction dans une fonction dédiée volontairement différée pour ne pas
-# risquer de modifier son comportement en direct — c'est le moteur qui trade
-# aujourd'hui). Seul le routage change : status_payload() choisit quel
-# résultat utiliser comme decision finale ("simulated_decision") selon
-# active_engine. KB1000 Gold AI est le premier moteur réellement branché ici.
-def kb1000_gold_ai_entry_decision(symbol: str, symbol_key: str, params: dict) -> dict:
-    """Construit une decision compatible avec le format 'simulated_decision'
-    d'AlphaTrade AI (mêmes clés attendues par auto_trade_step), à partir de la
-    synthèse KB7 (qui orchestre elle-même KB1-KB6)."""
-    entry_threshold = float(params.get("kb1000_entry_threshold", 70.0))
-    kb7 = kb7_decision(
-        symbol,
-        entry_threshold=entry_threshold,
-        kb1_candles_per_level=int(params.get("kb1000_candles_per_level", 160)),
-        kb1_coherence_threshold_pct=float(params.get("kb1000_coherence_min_pct", 60.0)),
-        kb6_min_confirmations=int(params.get("kb1000_min_confirmations", 3)),
-    )
-    if kb7.get("candidate_direction") is None:
-        return {
-            "symbol": symbol_key, "signal": "WAIT", "confidence": 0, "eligible": False,
-            "reason": kb7.get("reason", "KB1000 Gold AI: aucun biais exploitable."),
-            "engine": "kb1000_gold_ai",
-        }
-    signal = "BUY" if kb7["candidate_direction"] == "bullish" else "SELL"
-    eligible = bool(kb7.get("entry_authorized"))
-    reason = (
-        f"KB1000 Gold AI: setup {kb7['grade']} ({kb7['score']}%), "
-        f"BUY {kb7['probability_buy_pct']}% / SELL {kb7['probability_sell_pct']}%."
-        if eligible else
-        f"KB1000 Gold AI: score {kb7['score']}% insuffisant (seuil {kb7['entry_threshold']}%)."
-    )
-    return {
-        "symbol": symbol_key, "signal": signal, "confidence": kb7["score"],
-        "eligible": eligible, "reason": reason, "engine": "kb1000_gold_ai",
-        "grade": kb7["grade"], "probability_buy_pct": kb7["probability_buy_pct"],
-        "probability_sell_pct": kb7["probability_sell_pct"], "subscores": kb7["subscores"],
-    }
-
-
 def external_signal_entry_decision(symbol_key: str, params: dict) -> dict:
     """Construit une decision compatible avec le format 'simulated_decision'
     a partir du dernier signal recu de Strategy Lab (electron/main.js ecrit
@@ -1078,17 +909,24 @@ def external_signal_entry_decision(symbol_key: str, params: dict) -> dict:
     confidence = data.get("confidence")
     confidence = float(confidence) if isinstance(confidence, (int, float)) else 100.0
     strategy_name = data.get("strategy_name") or "Strategy Lab"
+    # allow_reinforcement : seul reglage que Strategy Lab peut faire varier
+    # par signal (Louis, 24/07/2026) -- tout le reste (seuils de confiance,
+    # take-profit/break-even, calcul du lot) reste entierement pilote par
+    # les reglages globaux existants d'AlphaTrade, pas duplique ici. True
+    # par defaut si absent du payload (comportement inchange pour les
+    # signaux qui ne le precisent pas).
+    allow_reinforcement = bool(data.get("allow_reinforcement", True))
     # entry_price/stop_loss/take_profit sont conserves pour affichage/journalisation
-    # uniquement -- comme pour KB1000 Gold AI, la decision d'entree ne fait que
-    # choisir la direction (BUY/SELL) ; le lot, le stop-loss et le take-profit
-    # reels restent entierement calcules par le pipeline commun existant
-    # (lot_info, symbol_params), jamais par la source du signal.
+    # uniquement -- la decision d'entree ne fait que choisir la direction
+    # (BUY/SELL) ; le lot, le stop-loss et le take-profit reels restent
+    # entierement calcules par le pipeline commun existant (lot_info,
+    # symbol_params), jamais par la source du signal.
     return {
         "symbol": symbol_key, "signal": action, "confidence": confidence,
         "eligible": True, "engine": "external_signal",
         "reason": f"Signal externe Strategy Lab: {strategy_name} ({confidence:.0f}%).",
         "entry_price": data.get("entry_price"), "stop_loss": data.get("stop_loss"),
-        "take_profit": data.get("take_profit"),
+        "take_profit": data.get("take_profit"), "allow_reinforcement": allow_reinforcement,
     }
 
 
@@ -1102,15 +940,6 @@ ENGINE_REGISTRY = {
             "ia_cloud": True, "memoire": True, "lot_auto": False, "tp_paliers": False, "break_even_reel": False,
         },
     },
-    "kb1000_gold_ai": {
-        "label": "KB1000 Gold AI",
-        "description": "Structure, zones, Fibonacci, Smart Money (FVG/BOS/CHOCH), confirmations, gestion de position intelligente.",
-        "capabilities": {
-            "multi_timeframe": True, "ema_rsi_macd": True, "smart_money": True,
-            "fibonacci": True, "zones_institutionnelles": True, "ia_locale": True,
-            "ia_cloud": True, "memoire": False, "lot_auto": True, "tp_paliers": True, "break_even_reel": True,
-        },
-    },
     "external_signal": {
         "label": "Strategy Lab (signaux externes)",
         "description": "Decision d'entree pilotee par les signaux BUY/SELL exportes depuis AlphaTrade Strategy Lab. En mode REEL, n'ouvre une position que si \"Accepter les signaux externes en mode reel\" est active dans Parametres.",
@@ -1121,6 +950,22 @@ ENGINE_REGISTRY = {
         },
     },
 }
+
+
+def fetch_candles(symbol: str, timeframe: str, limit: int) -> list[dict]:
+    """Bougies recentes au format attendu par les modules purs KB2/KB3/KB5
+    (open/high/low/close, ordre chronologique). Meme pattern MT5 que
+    symbol_analysis() (copy_rates_from_pos). Liste vide si indisponible --
+    les agents degradent proprement en UNAVAILABLE plutot que de planter."""
+    if mt5 is None:
+        return []
+    rates = mt5.copy_rates_from_pos(symbol, tf_const(timeframe), 0, limit)
+    if rates is None:
+        return []
+    return [
+        {"open": float(r[1]), "high": float(r[2]), "low": float(r[3]), "close": float(r[4])}
+        for r in rates
+    ]
 
 
 def symbol_analysis(symbol: str, params: dict, symbol_key: str | None = None, learning_state: dict | None = None) -> dict:
@@ -1558,6 +1403,63 @@ def daily_stats(trades: list[dict], positions: list[dict]) -> dict:
     return stats(today_trades, positions)
 
 
+def utc_trade_week(value: str | None) -> str:
+    """Identifiant semaine ISO (annee-Wxx) pour regrouper close_time -- meme
+    conversion UTC que utc_trade_day()."""
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.astimezone()
+        parsed = parsed.astimezone(timezone.utc)
+        iso = parsed.isocalendar()
+        return f"{iso[0]}-W{iso[1]:02d}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def utc_trade_month(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.astimezone()
+        return parsed.astimezone(timezone.utc).strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return ""
+
+
+def performance_manager_report(trades: list[dict], positions: list[dict], now: datetime | None = None) -> AgentReport:
+    """Performance Manager (v5.1.0) -- agent de constat, agrege les resultats
+    realises par jour/semaine/mois. Distinct du Trading Mission Manager, qui
+    decide des consequences comportementales a partir de ces chiffres.
+    Voir Proposition_Technique_MiseEnOeuvre_v5.1.0.html, "Detail technique"."""
+    now = now or datetime.now(timezone.utc)
+    today = now.date().isoformat()
+    week_id = utc_trade_week(now.isoformat())
+    month_id = utc_trade_month(now.isoformat())
+    day_trades = [t for t in trades if utc_trade_day(t.get("close_time")) == today]
+    week_trades = [t for t in trades if utc_trade_week(t.get("close_time")) == week_id]
+    month_trades = [t for t in trades if utc_trade_month(t.get("close_time")) == month_id]
+    horizons = {
+        "day": stats(day_trades, positions),
+        "week": stats(week_trades, positions),
+        "month": stats(month_trades, positions),
+    }
+    return make_agent_report(
+        "performance_manager",
+        status="OK",
+        confidence=100,
+        priority="LOW",
+        recommendation={"action": "REPORT", "horizons": horizons},
+        ttl_seconds=60,
+        now=now,
+        metadata={"week_id": week_id, "month_id": month_id},
+    )
+
+
 def application_session_stats(trades: list[dict], positions: list[dict], account_login: int | None) -> dict:
     stored = read_json("session_state.json", {}) or {}
     if stored.get("account") != account_login:
@@ -1726,6 +1628,105 @@ def protection_state(params: dict, daily: dict, account_login: int | None) -> di
     return payload
 
 
+def mission_state(
+    params: dict,
+    trades: list[dict],
+    positions: list[dict],
+    daily: dict,
+    account_login: int | None,
+    now: datetime | None = None,
+) -> AgentReport:
+    """Trading Mission Manager v1 (v5.1.0). Etend protection_state() (jour
+    seulement, tout-ou-rien) aux horizons semaine/mois et a un mode gradue.
+    Le Risk Manager gere un trade ; celui-ci gere la journee entiere et les
+    objectifs semaine/mois. Voir Proposition_Technique_MiseEnOeuvre_v5.1.0.html,
+    section "Mission Manager -- ce qu'il publie"."""
+    now = now or datetime.now(timezone.utc)
+    day_state = protection_state(params, daily, account_login)  # inchangee, reutilisee telle quelle
+    perf_report = performance_manager_report(trades, positions, now)
+    horizons = perf_report.recommendation["horizons"]
+    week_profit = float(horizons["week"]["profit_live"])
+    month_profit = float(horizons["month"]["profit_live"])
+
+    daily_target = float(params.get("daily_target", 50))
+    weekly_target_configured = float(params.get("mission_weekly_target", 0))
+    monthly_target_configured = float(params.get("mission_monthly_target", 0))
+    weekly_target = weekly_target_configured or daily_target * 5
+    monthly_target = monthly_target_configured or daily_target * 20
+    session_max_loss = float(params.get("session_max_loss", -150))
+    session_profit = float(day_state["session_profit"])
+    daily_ratio = (session_profit / daily_target) if daily_target > 0 else 0.0
+
+    closed_sorted = sorted(
+        (t for t in trades if t.get("status") == "CLOSED"),
+        key=lambda t: t.get("close_time") or "",
+        reverse=True,
+    )
+    consecutive_losses = 0
+    for t in closed_sorted:
+        if float(t.get("profit") or 0) < 0:
+            consecutive_losses += 1
+        else:
+            break
+
+    defense_threshold = int(params.get("mission_consecutive_loss_defense", 3))
+    if day_state["state"] == "HARD_LOCK" or session_profit <= session_max_loss:
+        mode = "Protection"
+    elif consecutive_losses >= defense_threshold:
+        mode = "Defense"
+    elif daily_ratio >= 0.9 or day_state["state"] == "WARNING":
+        mode = "Prudent"
+    else:
+        mode = "Normal"
+
+    if mode in ("Defense", "Protection"):
+        psychological_state = "Sous pression"
+    elif daily_ratio >= 0.5 and consecutive_losses == 0:
+        psychological_state = "Confiant"
+    else:
+        psychological_state = "Neutre"
+
+    aggressiveness_level = {"Normal": 70, "Prudent": 45, "Defense": 20, "Protection": 0}[mode]
+    # Coussin restant avant le plancher dur de session -- budget de risque
+    # macro (journee), distinct du budget micro par-trade du Risk Manager.
+    risk_appetite = max(0.0, session_profit - session_max_loss)
+    new_positions_allowed = mode != "Protection" and day_state["state"] not in ("HARD_LOCK", "TARGET_REACHED")
+
+    priority = {"Normal": "LOW", "Prudent": "MEDIUM", "Defense": "HIGH", "Protection": "CRITICAL"}[mode]
+    recommendation = {
+        "action": "MISSION_MODE",
+        "mode": mode,
+        "new_positions_allowed": new_positions_allowed,
+    }
+    report = make_agent_report(
+        "trading_mission_manager",
+        status="OK",
+        confidence=100,
+        priority=priority,
+        recommendation=recommendation,
+        arguments=[day_state["reason"]],
+        ttl_seconds=30,
+        now=now,
+        metadata={
+            "daily_target": daily_target,
+            "weekly_target": weekly_target,
+            "monthly_target": monthly_target,
+            "weekly_target_auto": weekly_target_configured <= 0,
+            "monthly_target_auto": monthly_target_configured <= 0,
+            "daily_profit": session_profit,
+            "weekly_profit": week_profit,
+            "monthly_profit": month_profit,
+            "psychological_state": psychological_state,
+            "aggressiveness_level": aggressiveness_level,
+            "risk_appetite": risk_appetite,
+            "consecutive_losses": consecutive_losses,
+            "day_state": day_state["state"],
+        },
+    )
+    SHARED_MEMORY.write_report("trading_objectives", "trading_mission_manager", report, now=now)
+    return report
+
+
 def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dict:
     is_demo = bool(account and ("demo" in str(account.server).lower() or int(account.trade_mode) == 0))
     configured_account_cap = max(
@@ -1811,6 +1812,386 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             ),
         }
     return result
+
+
+def risk_manager_report(
+    params: dict, account, symbol_names: dict[str, str], now: datetime | None = None
+) -> AgentReport:
+    """Risk Manager (v5.1.0) -- formalise lot_safety_state() en AgentReport.
+    Determine le risque acceptable pour CE trade precis (en fonction du
+    contexte et de l'exposition deja engagee) -- distinct du Trading Mission
+    Manager, qui gere la journee entiere. priority CRITICAL des qu'un symbole
+    est rejete (lot minimal broker superieur a la limite de securite) : le
+    CAIO doit alors bloquer toute entree quelle que soit la confiance des
+    autres agents (veto direct, voir caio_decide()).
+    Voir Proposition_Technique_MiseEnOeuvre_v5.1.0.html, "Detail technique"."""
+    now = now or datetime.now(timezone.utc)
+    if account is None:
+        report = make_agent_report(
+            "risk_manager", status="UNAVAILABLE", confidence=0, priority="CRITICAL",
+            recommendation={"action": "RISK_CAP", "lots": {}, "any_rejected": True},
+            risks=["Compte MT5 indisponible -- aucun budget de risque calculable."],
+            ttl_seconds=15, now=now,
+        )
+        SHARED_MEMORY.write_report("risk", "risk_manager", report, now=now)
+        return report
+    lots = lot_safety_state(params, account, symbol_names)
+    any_rejected = any(v.get("rejected") for v in lots.values())
+    reasons = [f"{key}: {v['reason']}" for key, v in lots.items()]
+    report = make_agent_report(
+        "risk_manager",
+        status="OK",
+        confidence=40.0 if any_rejected else 92.0,
+        priority="CRITICAL" if any_rejected else "LOW",
+        recommendation={"action": "RISK_CAP", "lots": lots, "any_rejected": any_rejected},
+        arguments=[] if any_rejected else reasons,
+        risks=reasons if any_rejected else [],
+        ttl_seconds=30,
+        now=now,
+    )
+    SHARED_MEMORY.write_report("risk", "risk_manager", report, now=now)
+    return report
+
+
+def _unavailable_agent_report(agent: str, compartment: str, reason: str, now: datetime | None = None) -> AgentReport:
+    now = now or datetime.now(timezone.utc)
+    report = make_agent_report(
+        agent, status="UNAVAILABLE", confidence=0, priority="LOW",
+        recommendation={"action": "WAIT"}, risks=[reason], ttl_seconds=30, now=now,
+    )
+    SHARED_MEMORY.write_report(compartment, agent, report, now=now)
+    return report
+
+
+def structure_analyst_report(
+    candles: list[dict], current_price: float, timeframe: str = "H1", lookback: int = 2, now: datetime | None = None
+) -> AgentReport:
+    """Structure Analyst (v5.1.0) -- formalise KB2 (market_structure) + KB3
+    (market_zones), deja codes et testes (15/07/2026), en AgentReport. Identifie
+    la structure de marche -- zones, supply/demand, regime -- competence
+    absente du moteur historique. `candles` : liste chronologique de dicts
+    {"high","low"} minimum. Voir Proposition_Technique..., "Detail technique"."""
+    now = now or datetime.now(timezone.utc)
+    if len(candles) < (2 * lookback + 3):
+        return _unavailable_agent_report(
+            "structure_analyst", "structures", "Pas assez de bougies pour une structure fiable.", now
+        )
+    structure = market_structure(candles, lookback)
+    zones = market_zones(structure["swings"])
+    regime = structure["regime"]
+
+    demand = [z for z in zones["supply_demand"] if z["type"] == "demand" and z["price"] < current_price]
+    supply = [z for z in zones["supply_demand"] if z["type"] == "supply" and z["price"] > current_price]
+    nearest_demand = min(demand, key=lambda z: current_price - z["price"], default=None)
+    nearest_supply = min(supply, key=lambda z: z["price"] - current_price, default=None)
+
+    if regime == "UPTREND" and nearest_demand:
+        recommendation = {"action": "BUY_LIMIT", "price": round(nearest_demand["price"], 5)}
+        confidence, priority = 82, "MEDIUM"
+        arguments = [f"Regime {regime}, zone demand a {nearest_demand['price']:.2f}."]
+    elif regime == "DOWNTREND" and nearest_supply:
+        recommendation = {"action": "SELL_LIMIT", "price": round(nearest_supply["price"], 5)}
+        confidence, priority = 82, "MEDIUM"
+        arguments = [f"Regime {regime}, zone supply a {nearest_supply['price']:.2f}."]
+    else:
+        recommendation = {"action": "WAIT"}
+        confidence, priority = 55, "LOW"
+        arguments = [f"Regime {regime}, aucune zone exploitable proche du prix."]
+
+    report = make_agent_report(
+        "structure_analyst",
+        status="OK",
+        confidence=confidence,
+        priority=priority,
+        recommendation=recommendation,
+        arguments=arguments,
+        ttl_seconds=180,
+        now=now,
+        metadata={
+            "timeframe": timeframe,
+            "regime": regime,
+            "swing_count": structure["swing_count"],
+            "institutional_zones": len(zones["institutional"]),
+        },
+    )
+    SHARED_MEMORY.write_report("structures", "structure_analyst", report, now=now)
+    return report
+
+
+def smart_money_analyst_report(
+    candles: list[dict], current_price: float, lookback: int = 2, now: datetime | None = None
+) -> AgentReport:
+    """Smart Money Analyst (v5.1.0) -- formalise KB5 (market_smart_money),
+    deja code et teste (15/07/2026), en AgentReport. Lit l'empreinte
+    institutionnelle -- sweeps de liquidite, CHOCH, premium/discount -- pour
+    distinguer une vraie cassure d'un piege. Distinct du Structure Analyst :
+    celui-ci detecte la structure technique, celui-la en interprete l'intention.
+    Voir Proposition_Technique..., "Detail technique"."""
+    now = now or datetime.now(timezone.utc)
+    if len(candles) < (2 * lookback + 3):
+        return _unavailable_agent_report(
+            "smart_money_analyst", "smart_money", "Pas assez de bougies pour une lecture fiable.", now
+        )
+    swings = detect_swings(candles, lookback)
+    labeled = classify_swings(swings)
+    fvgs = detect_fvg(candles)
+    order_blocks = detect_order_blocks(candles)
+    bos_choch = detect_bos_choch(labeled)
+    liquidity_grabs = detect_liquidity_grabs(candles, swings)
+    equal_levels = detect_equal_levels(swings)
+    fib = fibonacci_from_swings(swings, current_price=current_price)
+    pd = (
+        premium_discount(fib["swing_low"], fib["swing_high"], current_price)
+        if fib["swing_low"] is not None
+        else {"zone": None, "position_pct": None}
+    )
+
+    recent_cutoff = max(0, len(candles) - 5)
+    recent_grabs = [g for g in liquidity_grabs if g["index"] >= recent_cutoff]
+    recent_choch = [e for e in bos_choch if e["type"] == "CHOCH" and e["index"] >= recent_cutoff]
+
+    if recent_grabs:
+        g = recent_grabs[-1]
+        action = "SELL_LIMIT" if g["type"] == "bearish" else "BUY_LIMIT"
+        recommendation = {"action": action, "price": round(g["level"], 5)}
+        confidence, priority = 78, "MEDIUM"
+        arguments = [f"Sweep de liquidite ({g['type']}) sur {g['level']:.2f} -- biais contraire au balayage."]
+        risks: list[str] = []
+    elif recent_choch:
+        e = recent_choch[-1]
+        recommendation = {"action": "WAIT"}
+        confidence, priority = 65, "MEDIUM"
+        arguments = []
+        risks = [f"CHOCH {e['direction']} recent -- changement de biais pas encore confirme."]
+    elif pd["zone"] in ("DISCOUNT", "PREMIUM"):
+        action = "BUY_LIMIT" if pd["zone"] == "DISCOUNT" else "SELL_LIMIT"
+        price = fib["nearest_level"][1] if fib["nearest_level"] else current_price
+        recommendation = {"action": action, "price": round(price, 5)}
+        confidence, priority = 60, "LOW"
+        arguments = [f"Prix en zone {pd['zone']} ({pd['position_pct']}%) du dernier range."]
+        risks = []
+    else:
+        recommendation = {"action": "WAIT"}
+        confidence, priority = 50, "LOW"
+        arguments = []
+        risks = []
+
+    report = make_agent_report(
+        "smart_money_analyst",
+        status="OK",
+        confidence=confidence,
+        priority=priority,
+        recommendation=recommendation,
+        arguments=arguments,
+        risks=risks,
+        ttl_seconds=180,
+        now=now,
+        metadata={
+            "fvg_count": len(fvgs),
+            "order_block_count": len(order_blocks),
+            "bos_choch_count": len(bos_choch),
+            "equal_highs": len(equal_levels["equal_highs"]),
+            "equal_lows": len(equal_levels["equal_lows"]),
+            "premium_discount": pd,
+        },
+    )
+    SHARED_MEMORY.write_report("smart_money", "smart_money_analyst", report, now=now)
+    return report
+
+
+def _caio_no_trade(reason: str) -> dict:
+    return {"decision": "NO_TRADE", "order_type": None, "price": None, "raison": reason, "overrides": []}
+
+
+def _direction_of(action: str) -> str | None:
+    if action.startswith("BUY"):
+        return "BUY"
+    if action.startswith("SELL"):
+        return "SELL"
+    return None
+
+
+def _apply_entry_policy(action: str, entry_policy: str, overrides: list[str], source_agent: str) -> str:
+    """entry_policy est une PREFERENCE, pas un filtre dur (correction de
+    Louis, 31/07/2026) : le CAIO peut s'ecarter du mode si le contexte le
+    justifie -- pour la v1, chaque ecart reel est journalise dans `overrides`
+    (ecrit ensuite dans shared_memory["learning_history"])."""
+    if action == "WAIT":
+        return action
+    if entry_policy == "immediate":
+        market_action = "BUY_MARKET" if action.startswith("BUY") else "SELL_MARKET"
+        if market_action != action:
+            overrides.append(f"entry_policy=immediate: {action} -> {market_action} (source: {source_agent}).")
+        return market_action
+    if entry_policy == "pending_limit":
+        limit_action = "BUY_LIMIT" if action.startswith("BUY") else "SELL_LIMIT"
+        if limit_action != action:
+            overrides.append(f"entry_policy=pending_limit: {action} -> {limit_action} (source: {source_agent}).")
+        return limit_action
+    return action  # adaptive : aucune contrainte de type d'ordre
+
+
+def caio_decide(
+    params: dict,
+    reports: list[AgentReport],
+    mission_report: AgentReport,
+    entry_policy: str,
+    now: datetime | None = None,
+    record: bool = True,
+) -> dict:
+    """Chief AI Officer v1 (v5.1.0) -- arbitre les rapports de tous les agents
+    et rend la decision finale : GO ou NO_TRADE. Ne fait AUCUNE analyse de
+    marche lui-meme -- etend server_trade_confirmation() (precedent le plus
+    proche), mais compare de vraies hypotheses plutot que des scores nus.
+    Pas encore l'arbitrage multi-scenarios complet (Scenario Generator,
+    v5.1.1) : un seul candidat retenu par cycle parmi les rapports fournis.
+
+    Regle d'or de l'implementation : aucun agent n'appelle mt5.order_send --
+    seul le retour de cette fonction pilote place_order() (Execution Manager).
+    Voir Proposition_Technique_MiseEnOeuvre_v5.1.0.html, "Le CAIO arbitre des
+    rapports, pas des scores" et "Regle d'or de l'implementation".
+
+    `record=False` : passage d'observation (panneau Gold Brain rafraichi en
+    continu meme sans tentative d'entree) -- n'ecrit rien dans
+    learning_history, qui ne doit tracer que de vraies tentatives, jamais un
+    flux d'arrieres-plan a 2 Hz."""
+    now = now or datetime.now(timezone.utc)
+
+    # 1. Priorite CRITICAL d'abord -- une contrainte dure bloque tout,
+    # independamment de la confiance des autres agents.
+    if not mission_report.recommendation.get("new_positions_allowed", True):
+        decision = _caio_no_trade(
+            f"Trading Mission Manager: mode {mission_report.recommendation.get('mode')}, "
+            "nouvelles positions interdites."
+        )
+        if record:
+            SHARED_MEMORY.write("learning_history", "caio", decision, confidence=100, now=now)
+        return decision
+    for report in sort_by_priority(reports):
+        if report.priority == "CRITICAL" and report.recommendation.get("any_rejected"):
+            reason = f"{report.agent}: " + ("; ".join(report.risks) or "risque critique.")
+            decision = _caio_no_trade(reason)
+            if record:
+                SHARED_MEMORY.write("learning_history", "caio", decision, confidence=100, now=now)
+            return decision
+
+    # 2. Rapports exploitables : fiables (ni UNAVAILABLE ni perimes) et
+    # porteurs d'une recommandation directionnelle (pas WAIT).
+    usable = [r for r in reports if r.is_trustworthy(now) and r.recommendation.get("action") != "WAIT"]
+    if not usable:
+        decision = _caio_no_trade("Aucun agent ne propose de scenario exploitable -- WAIT unanime ou indisponible.")
+        if record:
+            SHARED_MEMORY.write("learning_history", "caio", decision, confidence=100, now=now)
+        return decision
+
+    directions = {_direction_of(r.recommendation["action"]) for r in usable} - {None}
+    if len(directions) > 1:
+        decision = _caio_no_trade("Contradiction entre agents (directions opposees) -- pas de consensus exploitable.")
+        if record:
+            SHARED_MEMORY.write("learning_history", "caio", decision, confidence=100, now=now)
+        return decision
+
+    # 3. Retient la meilleure hypothese (priorite puis confiance) -- jamais
+    # une moyenne de scores.
+    ranked = sorted(usable, key=lambda r: (PRIORITY_ORDER.get(r.priority, len(PRIORITY_ORDER)), -r.confidence))
+    winner = ranked[0]
+    min_confidence = float(params.get("caio_min_confidence", 60.0))
+    if winner.confidence < min_confidence:
+        decision = _caio_no_trade(
+            f"Meilleure hypothese ({winner.agent}, {winner.confidence:.0f}%) sous le seuil de qualite "
+            f"({min_confidence:.0f}%) -- le meilleur trade est parfois de ne rien faire."
+        )
+        if record:
+            SHARED_MEMORY.write("learning_history", "caio", decision, confidence=100, now=now)
+        return decision
+
+    overrides: list[str] = []
+    action = winner.recommendation["action"]
+    order_type = _apply_entry_policy(action, entry_policy, overrides, winner.agent)
+    decision = {
+        "decision": "GO",
+        "order_type": order_type,
+        "price": winner.recommendation.get("price"),
+        "raison": f"{winner.agent}: " + ("; ".join(winner.arguments) or action) + f" (confiance {winner.confidence:.0f}%).",
+        "overrides": overrides,
+        "source_agent": winner.agent,
+    }
+    if record:
+        SHARED_MEMORY.write("learning_history", "caio", decision, confidence=winner.confidence, now=now)
+    return decision
+
+
+def trading_coach_observe(learning_state: dict, min_samples: int = 10, now: datetime | None = None) -> AgentReport:
+    """Trading Coach (v5.1.0) -- observe les resultats sur la duree et
+    detecte des motifs. JAMAIS de decision, jamais d'ajustement applique
+    directement (c'est le role du Learning Manager). Lit `learning_state`
+    (deja alimente par track_position_contexts(), non modifie ici -- lecture
+    seule). Jamais de constat base sur un echantillon trop petit."""
+    now = now or datetime.now(timezone.utc)
+    patterns = []
+    for symbol_key, learned in (learning_state.get("symbols") or {}).items():
+        samples = int(learned.get("samples", 0))
+        if samples < min_samples:
+            continue
+        winrate = round(int(learned.get("wins", 0)) / samples * 100, 1)
+        patterns.append({
+            "symbol": symbol_key,
+            "samples": samples,
+            "winrate": winrate,
+            "total_profit": round(float(learned.get("total_profit", 0)), 2),
+            "last_outcome": learned.get("last_outcome", ""),
+        })
+    confidence = 90.0 if patterns else 30.0
+    arguments = [
+        f"{p['symbol']}: {p['winrate']}% sur {p['samples']} trades (P&L {p['total_profit']})." for p in patterns
+    ]
+    report = make_agent_report(
+        "trading_coach", status="OK", confidence=confidence, priority="LOW",
+        recommendation={"action": "OBSERVE", "patterns": patterns},
+        arguments=arguments, ttl_seconds=300, now=now,
+    )
+    SHARED_MEMORY.write("learning_history", "trading_coach", {"type": "observation", **report.to_dict()}, confidence=confidence, now=now)
+    return report
+
+
+def learning_manager_apply(before_state: dict, after_state: dict, now: datetime | None = None) -> AgentReport:
+    """Learning Manager (v5.1.0). Ne modifie PAS learning_state lui-meme --
+    track_position_contexts() reste la seule fonction qui applique des
+    ajustements (deja live-testee) ; approche volontairement prudente, meme
+    philosophie que la Phase 3bis (ne pas toucher un mecanisme deja en
+    production sans necessite). Compare un avant/apres pour PUBLIER les
+    ajustements reellement appliques en AgentReport et verifier que les
+    bornes existantes (clamp 0.65-1.35 poids, -4/10 confidence_offset) ont
+    tenu -- c'est la formalisation demandee, pas une reecriture du moteur
+    d'apprentissage. `priority` monte a MEDIUM si un ajustement depasse ses
+    bornes (ne devrait jamais arriver, alerte si observe)."""
+    now = now or datetime.now(timezone.utc)
+    adjustments = []
+    for symbol_key, after in (after_state.get("symbols") or {}).items():
+        before = (before_state.get("symbols") or {}).get(symbol_key, {})
+        before_weights = before.get("weights", {}) or {}
+        after_weights = after.get("weights", {}) or {}
+        changed = {k: [before_weights.get(k), v] for k, v in after_weights.items() if before_weights.get(k) != v}
+        offset_before = float(before.get("confidence_offset", 0))
+        offset_after = float(after.get("confidence_offset", 0))
+        if not changed and offset_before == offset_after:
+            continue
+        in_bounds = all(0.65 <= v <= 1.35 for _, v in changed.values()) and -4 <= offset_after <= 10
+        adjustments.append({
+            "symbol": symbol_key,
+            "weight_changes": changed,
+            "confidence_offset_before": offset_before,
+            "confidence_offset_after": offset_after,
+            "in_bounds": in_bounds,
+        })
+    priority = "MEDIUM" if any(not a["in_bounds"] for a in adjustments) else "LOW"
+    report = make_agent_report(
+        "learning_manager", status="OK", confidence=100, priority=priority,
+        recommendation={"action": "ADJUSTMENTS_APPLIED", "adjustments": adjustments},
+        ttl_seconds=300, now=now,
+    )
+    SHARED_MEMORY.write("learning_history", "learning_manager", {"type": "adjustment", **report.to_dict()}, confidence=100, now=now)
+    return report
 
 
 def is_demo_account(account) -> bool:
@@ -2072,14 +2453,29 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
         money_price_distance(symbol, direction, volume, price, info, effective_target),
     )
     tp = price + tp_distance if direction == "BUY" else price - tp_distance
+    # v5.1.0 — filet de sécurité broker obligatoire (lacune critique de l'audit
+    # stratégique du 30/07/2026 : aucun stop-loss n'était jamais posé côté broker).
+    # Ancré sur le pire cas déjà toléré par la logique de sortie logicielle
+    # (max_position_loss, sinon emergency_loss_limit — voir position_exit_reason())
+    # avec une marge de sécurité, pour ne jamais se déclencher avant elle en
+    # fonctionnement normal : il ne sert que de dernier recours (crash du process,
+    # coupure MT5, gap de prix) là où la protection logicielle n'a pas pu agir.
+    protective_limit = abs(float(symbol_params.get("max_position_loss", 0) or 0))
+    if protective_limit <= 0:
+        protective_limit = abs(float(symbol_params.get("emergency_loss_limit", 50.0)))
+    broker_sl_safety_margin = 1.25
+    sl_distance = max(
+        min_distance,
+        money_price_distance(symbol, direction, volume, price, info, protective_limit * broker_sl_safety_margin),
+    )
+    sl = price - sl_distance if direction == "BUY" else price + sl_distance
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
         "volume": volume,
         "type": order_type,
         "price": price,
-        # No broker-side SL: brief negative fluctuations stay under engine review.
-        "sl": 0.0,
+        "sl": round(sl, int(info.digits)),
         "tp": round(tp, int(info.digits)),
         "deviation": 30,
         "magic": MAGIC,
@@ -2107,13 +2503,157 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
         "comment": str(getattr(result, "comment", "")) if result is not None else str(mt5.last_error()),
         "latency_ms": latency_ms,
         "analysis": analysis,
-        "broker_stop_loss": False,
+        "broker_stop_loss": ok,
+        "broker_stop_loss_price": round(sl, int(info.digits)) if ok else None,
         "catastrophic_loss_limit": float(symbol_params.get("emergency_loss_limit", 3.0)),
         "profit_target": float(symbol_params.get("profit_target", 0.50)),
     }
     append_jsonl("learning_events.jsonl", event)
     if ok:
         return True, f"{direction} {volume:.3f} {symbol} execute en {latency_ms:.0f} ms.", event
+    return False, f"Ordre refuse: {event['retcode']} {event['comment']}", event
+
+
+# v5.1.0 -- (direction, "LIMIT"/"STOP"/None) par order_type. None = marche
+# immediat, delegue a open_position() (deja teste, pas duplique).
+ORDER_TYPE_KIND = {
+    "BUY_MARKET": ("BUY", None),
+    "SELL_MARKET": ("SELL", None),
+    "BUY_LIMIT": ("BUY", "LIMIT"),
+    "SELL_LIMIT": ("SELL", "LIMIT"),
+    "BUY_STOP": ("BUY", "STOP"),
+    "SELL_STOP": ("SELL", "STOP"),
+}
+
+
+def place_order(
+    symbol_key: str,
+    symbol: str,
+    order_type: str,
+    params: dict,
+    lot_info: dict,
+    analysis: dict,
+    allow_real: bool,
+    price_hint: float | None = None,
+    position_type: str = "NORMAL",
+):
+    """Execution Manager (v5.1.0). Regle d'or de l'implementation : SEULE
+    fonction autorisee a appeler mt5.order_send pour une ouverture -- aucun
+    agent ne decide du type d'ordre ici, il execute fidelement `order_type`
+    deja fixe par caio_decide(). Gere les 6 types (Market delegue a
+    open_position(), Limit/Stop nouveaux ici). Voir
+    Proposition_Technique_MiseEnOeuvre_v5.1.0.html, "Types d'ordre MT5"."""
+    if order_type not in ORDER_TYPE_KIND:
+        return False, f"Type d'ordre inconnu: {order_type}.", None
+    direction, kind = ORDER_TYPE_KIND[order_type]
+    if kind is None:
+        return open_position(symbol_key, symbol, direction, params, lot_info, analysis, allow_real, position_type)
+
+    account = mt5.account_info()
+    if not account:
+        return False, "Compte MT5 indisponible.", None
+    if not is_demo_account(account) and not allow_real:
+        return False, "Confirmation du compte reel requise.", None
+    info = mt5.symbol_info(symbol)
+    tick = mt5.symbol_info_tick(symbol)
+    if info is None or tick is None:
+        return False, "Prix ou specification symbole indisponible.", None
+    volume = float(lot_info.get("effective_lot") or 0)
+    if volume <= 0:
+        return False, str(lot_info.get("reason") or "Lot invalide."), None
+    if not price_hint or price_hint <= 0:
+        return False, "Prix requis pour un ordre en attente.", None
+
+    point = float(info.point)
+    current = float(tick.ask if direction == "BUY" else tick.bid)
+    spread_distance = max(0.0, float(tick.ask) - float(tick.bid))
+    broker_stop_distance = float(getattr(info, "trade_stops_level", 0)) * point
+    min_distance = max(point, broker_stop_distance + spread_distance + (5 * point))
+
+    # Coherence du prix demande avec le type -- rejet explicite (avec raison
+    # lisible) plutot qu'un rejet MT5 opaque si le sens est incoherent.
+    if kind == "LIMIT":
+        if direction == "BUY" and price_hint >= current - min_distance:
+            return False, "Buy Limit doit etre sous le prix courant (distance broker respectee).", None
+        if direction == "SELL" and price_hint <= current + min_distance:
+            return False, "Sell Limit doit etre au-dessus du prix courant (distance broker respectee).", None
+        mt5_type = mt5.ORDER_TYPE_BUY_LIMIT if direction == "BUY" else mt5.ORDER_TYPE_SELL_LIMIT
+    else:
+        if direction == "BUY" and price_hint <= current + min_distance:
+            return False, "Buy Stop doit etre au-dessus du prix courant (distance broker respectee).", None
+        if direction == "SELL" and price_hint >= current - min_distance:
+            return False, "Sell Stop doit etre sous le prix courant (distance broker respectee).", None
+        mt5_type = mt5.ORDER_TYPE_BUY_STOP if direction == "BUY" else mt5.ORDER_TYPE_SELL_STOP
+
+    symbol_params = params.get("symbols", {}).get(symbol_key, {})
+    # Meme filet de securite broker que open_position() (voir sa note v5.1.0).
+    protective_limit = abs(float(symbol_params.get("max_position_loss", 0) or 0))
+    if protective_limit <= 0:
+        protective_limit = abs(float(symbol_params.get("emergency_loss_limit", 50.0)))
+    sl_distance = max(
+        min_distance,
+        money_price_distance(symbol, direction, volume, price_hint, info, protective_limit * 1.25),
+    )
+    sl = price_hint - sl_distance if direction == "BUY" else price_hint + sl_distance
+
+    if bool(symbol_params.get("take_profit_enabled", False)) and symbol_params.get("take_profit_levels"):
+        raw_target = float(symbol_params["take_profit_levels"][-1].get("threshold", 0) or 0)
+    else:
+        raw_target = float(symbol_params.get("profit_target", 0.50))
+    if raw_target <= 0:
+        raw_target = float(symbol_params.get("profit_target", 0.50))
+    tp_distance = max(min_distance, money_price_distance(symbol, direction, volume, price_hint, info, raw_target))
+    tp = price_hint + tp_distance if direction == "BUY" else price_hint - tp_distance
+
+    # Un ordre en attente non declenche n'a pas vocation a rester actif
+    # indefiniment si le contexte qui l'a justifie a disparu (voir shared
+    # memory `valid_until` du rapport qui l'a genere).
+    expire_minutes = max(1, int(params.get("pending_order_expire_min", 60)))
+    expiration_dt = datetime.now() + timedelta(minutes=expire_minutes)
+
+    request = {
+        "action": mt5.TRADE_ACTION_PENDING,
+        "symbol": symbol,
+        "volume": volume,
+        "type": mt5_type,
+        "price": round(price_hint, int(info.digits)),
+        "sl": round(sl, int(info.digits)),
+        "tp": round(tp, int(info.digits)),
+        "deviation": 30,
+        "magic": MAGIC,
+        "comment": f"AlphaTrade {VERSION} {order_type}" if position_type == "NORMAL" else f"AlphaTrade {VERSION} {position_type}",
+        "type_time": mt5.ORDER_TIME_SPECIFIED,
+        "expiration": int(expiration_dt.timestamp()),
+    }
+    started = time.perf_counter()
+    result = send_deal(request)
+    latency_ms = round((time.perf_counter() - started) * 1000, 1)
+    ok = bool(result is not None and int(result.retcode) in {
+        mt5.TRADE_RETCODE_DONE,
+        mt5.TRADE_RETCODE_DONE_PARTIAL,
+        mt5.TRADE_RETCODE_PLACED,
+    })
+    event = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "PENDING_ORDER",
+        "ok": ok,
+        "symbol": symbol,
+        "symbol_key": symbol_key,
+        "order_type": order_type,
+        "direction": direction,
+        "volume": volume,
+        "price_requested": price_hint,
+        "sl": round(sl, int(info.digits)),
+        "tp": round(tp, int(info.digits)),
+        "expiration": expiration_dt.isoformat(),
+        "retcode": int(result.retcode) if result is not None else None,
+        "comment": str(getattr(result, "comment", "")) if result is not None else str(mt5.last_error()),
+        "latency_ms": latency_ms,
+        "analysis": analysis,
+    }
+    append_jsonl("learning_events.jsonl", event)
+    if ok:
+        return True, f"{order_type} {volume:.3f} {symbol} pose a {price_hint:.2f} en {latency_ms:.0f} ms.", event
     return False, f"Ordre refuse: {event['retcode']} {event['comment']}", event
 
 
@@ -2343,10 +2883,10 @@ def fast_breakeven_step(positions: list[dict], params: dict, symbol_names: dict[
     17/07/2026 : sécuriser le minimum de profit techniquement atteignable dès
     que possible, pour limiter les pertes en cas de retournement — avant même
     d'atteindre la cible de profit configurée. S'applique à toute position
-    ouverte par le bot, quel que soit le moteur source du signal (AlphaTrade
-    AI ou KB1000 — pipeline de sortie déjà partagé). Le seuil réel inclut
-    aussi le spread courant : un BE placé sous le spread se ferait
-    immédiatement toucher par le bruit normal du marché."""
+    ouverte par le bot, quel que soit le moteur source du signal (pipeline
+    de sortie partagé). Le seuil réel inclut aussi le spread courant : un BE
+    placé sous le spread se ferait immédiatement toucher par le bruit normal
+    du marché."""
     global FAST_BE_STATE
     if mt5 is None or not bool(params.get("fast_be_enabled", True)):
         return
@@ -2449,6 +2989,19 @@ def position_exit_reason(
     if max_position_loss > 0 and profit <= -abs(max_position_loss):
         return "MAX_POSITION_LOSS"
 
+    # Time stop (02/08/2026, audit statistique 500 trades) -- avant ce
+    # correctif, max_hold_sec ne fermait JAMAIS une position perdante : il
+    # n'etait verifie que dans la branche TARGET plus bas, qui exige en plus
+    # profit >= profit_target. Deux positions du 22/07 sont restees ouvertes
+    # 127h (profil scalping, duree mediane 44s) avant d'etre stoppees en
+    # catastrophe (-516$ a elles seules) faute de filet de securite base sur
+    # le temps pour une position en perte. Ce filet est desormais reellement
+    # universel (independant de rebond_enabled/take_profit_enabled), comme
+    # l'annonce deja l'infobulle "Max hold (s)" dans Parametres.
+    max_hold_sec = int(pos_params.get("max_hold_sec", 3600) or 0)
+    if max_hold_sec > 0 and age >= max_hold_sec and profit < 0:
+        return "TIME_STOP"
+
     # Reaching the session target stops new entries, but must not liquidate
     # positions that were already open. Only a critical hard lock may force
     # an immediate protection exit.
@@ -2501,13 +3054,16 @@ def position_exit_reason(
 # docstring de should_open_rebond() pour le détail de ce changement.
 
 
-def rebond_lot(main_lot: float, params: dict, is_demo: bool) -> float:
-    """Calcule le lot du rebond : lot principal × lot_multiplicateur_rebond (configurable),
-    plafonné par le plafond de compte configuré (demo_lot_cap / real_lot_cap)."""
+def rebond_lot(main_lot: float, params: dict, is_demo: bool, tier: str = "normal") -> float:
+    """Calcule le lot du rebond : lot principal × multiplicateur (configurable,
+    different pour le palier Fort), plafonné par le plafond de compte
+    configuré (demo_lot_cap / real_lot_cap) -- ce plafond de compte reste le
+    vrai garde-fou absolu, quel que soit le multiplicateur choisi."""
     sym_params = params.get("symbols", {}).get("XAUUSD", {})
     lot_min = float(sym_params.get("lot_min", 0.01))
     account_cap = float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10))
-    mult_rebond = float(sym_params.get("lot_multiplicateur_rebond", 1.0))
+    mult_key = "lot_multiplicateur_rebond_fort" if tier == "fort" else "lot_multiplicateur_rebond"
+    mult_rebond = float(sym_params.get(mult_key, 1.0))
     lot = main_lot * max(0.0, mult_rebond)
     lot = min(lot, account_cap) if account_cap > 0 else lot
     lot = max(lot_min, lot)
@@ -2546,10 +3102,16 @@ def should_open_rebond(
     sym_meta = REBOND_META.get(symbol_key, {"last_rebond_at": 0.0})
     if time.time() - float(sym_meta.get("last_rebond_at", 0)) < cooldown:
         return False, "Cooldown rebond en cours.", None
-    # Chercher une position principale ouverte par le bot (exclure les rebonds)
+    # Chercher une position principale ouverte par le bot (exclure les rebonds
+    # ET les positions issues d'un signal Strategy Lab -- Louis, 24/07/2026 :
+    # AlphaTrade ne doit jamais ouvrir de position inverse contre un signal
+    # que l'utilisateur a lui-meme choisi de suivre. Seule cette exclusion
+    # cible le Rebond ; le Renfort et le verrou directionnel restent
+    # inchanges (origin reste "BOT" pour ces positions partout ailleurs).
     rebond_t_check = {int(s.get("ticket") or 0) for s in REBOND_STATES}
     bot_positions = [p for p in positions if p.get("symbol_key") == symbol_key
                      and p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+                     and p.get("origin_name") != "Strategy Lab"
                      and int(p.get("ticket", 0)) not in rebond_t_check]
     if not bot_positions:
         return False, "Aucune position principale ouverte (rebond promu — pas de nouveau rebond).", None
@@ -2570,51 +3132,78 @@ def should_open_rebond(
     score_buy = float(analysis.get("score_buy", 0))
     score_sell = float(analysis.get("score_sell", 0))
     rsi_val = float(analysis.get("rsi", 50))
-    # Signal contra-tendance doit être VRAIMENT significatif (≥65%)
-    # ET le signal principal ne doit pas être trop fort (< 85%)
-    # Car si le signal principal est à 90%+, le rebond sera court et risqué
     main_score = score_sell if contra_dir == "BUY" else score_buy
-    if main_score >= 85:
-        return False, f"Signal principal trop fort ({main_score:.0f}%) — rebond trop risqué.", None
     if contra_dir == "BUY":
         contra_score = score_buy
         rsi_ok = rsi_val <= 35
     else:
         contra_score = score_sell
         rsi_ok = rsi_val >= 65
-    min_signal_pct = float(params.get("rebond_min_signal_pct", 55))
-    if contra_score < min_signal_pct and not rsi_ok:
-        reason_reject = f"Signal contra ({contra_score:.0f}%) insuffisant et RSI non extrême — rebond refusé."
-        append_jsonl("rebond_log.jsonl", {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
-            "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
-            "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
-            "main_profit": round(main_profit, 2),
-        })
-        return False, reason_reject, None
+
+    tier = "normal"
+    if main_score >= 85:
+        # Rebond normal (scalp 1-2 points) est volontairement desactive
+        # quand la tendance principale est forte -- c'est justement le cas
+        # d'un mouvement soutenu (ex: incident du 23/07/2026, 4160->4020)
+        # ou aucune contre-position ne se declenchait jamais. Rebond Fort
+        # est le seul palier qui peut encore s'ouvrir ici, avec une barre de
+        # confiance beaucoup plus haute et un plafond d'essais par position
+        # perdante (pas de "doublage" repete).
+        if not bool(params.get("rebond_fort_enabled", False)):
+            return False, f"Signal principal trop fort ({main_score:.0f}%) — Rebond normal desactive, Rebond Fort non active.", None
+        fort_threshold = float(params.get("rebond_fort_min_signal_pct", 80))
+        if contra_score < fort_threshold:
+            return False, f"Signal principal fort ({main_score:.0f}%) — signal contra ({contra_score:.0f}%) sous le seuil Rebond Fort ({fort_threshold:.0f}%).", None
+        main_ticket = int(main_pos.get("ticket", 0))
+        fort_state = REBOND_META.setdefault(symbol_key, {}).setdefault("fort_attempts", {"main_ticket": None, "count": 0})
+        if fort_state.get("main_ticket") != main_ticket:
+            fort_state["main_ticket"] = main_ticket
+            fort_state["count"] = 0
+        max_attempts = int(params.get("rebond_fort_max_attempts", 1))
+        if fort_state["count"] >= max_attempts:
+            return False, f"Rebond Fort: {max_attempts} tentative(s) deja utilisee(s) pour cette position perdante.", None
+        tier = "fort"
+    else:
+        min_signal_pct = float(params.get("rebond_min_signal_pct", 55))
+        if contra_score < min_signal_pct and not rsi_ok:
+            reason_reject = f"Signal contra ({contra_score:.0f}%) insuffisant et RSI non extrême — rebond refusé."
+            append_jsonl("rebond_log.jsonl", {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "symbol": symbol_key, "result": "REJECTED", "reason": reason_reject,
+                "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
+                "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
+                "main_profit": round(main_profit, 2),
+            })
+            return False, reason_reject, None
+
     # Obtenir le prix actuel via le nom MT5 résolu
     tick = mt5.symbol_info_tick(symbol) if mt5 else None
     if tick is None:
         return False, "Prix actuel indisponible.", None
     current_price = float(tick.bid if contra_dir == "SELL" else tick.ask)
-    # Cible rapprochée calculée en temps réel (distance fixe configurable) —
-    # plus d'attente d'une ancienne zone S&D : on vise à capter vite le
-    # retracement en cours, pas un niveau structurel lointain.
-    target_pips = max(0.10, float(params.get("rebond_target_pips", 1.50)))
+    # Cible calculée en temps réel (distance fixe configurable, differente
+    # par palier) — plus d'attente d'une ancienne zone S&D : on vise à
+    # capter le retracement en cours, pas un niveau structurel lointain.
+    target_key = "rebond_fort_target_pips" if tier == "fort" else "rebond_target_pips"
+    target_default = 15.0 if tier == "fort" else 1.50
+    target_pips = max(0.10, float(params.get(target_key, target_default)))
     target = current_price + target_pips if contra_dir == "BUY" else current_price - target_pips
+    if tier == "fort":
+        fort_state["count"] += 1
     append_jsonl("rebond_log.jsonl", {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "symbol": symbol_key, "result": "OK", "reason": "Rebond autorisé (perte en cours + retracement détecté).",
+        "symbol": symbol_key, "result": "OK", "tier": tier,
+        "reason": "Rebond autorisé (perte en cours + retracement détecté).",
         "contra_score": round(contra_score, 1), "rsi": round(rsi_val, 1),
         "main_score": round(main_score, 1), "rsi_ok": rsi_ok,
         "main_profit": round(main_profit, 2), "contra_dir": contra_dir,
         "target_price": round(target, 5),
     })
-    return True, "Rebond autorisé.", {
+    return True, "Rebond autorisé." if tier == "normal" else "Rebond Fort autorisé.", {
         "direction": contra_dir,
         "target_price": target,
         "current_price": current_price,
+        "tier": tier,
     }
 
 
@@ -2634,8 +3223,13 @@ def check_close_rebond(symbol: str, rebond_state: dict, params: dict) -> tuple[b
     open_price = float(rebond_state.get("open_price", 0))
     current = float(tick.bid if direction == "BUY" else tick.ask)
     age = now - float(rebond_state.get("opened_at", now))
-    max_hold = float(params.get("rebond_max_hold_sec", 90))
-    stop_pts = float(params.get("rebond_stop_pips", 2.00))
+    tier = rebond_state.get("tier", "normal")
+    if tier == "fort":
+        max_hold = float(params.get("rebond_fort_max_hold_sec", 900))
+        stop_pts = float(params.get("rebond_fort_stop_pips", 8.00))
+    else:
+        max_hold = float(params.get("rebond_max_hold_sec", 90))
+        stop_pts = float(params.get("rebond_stop_pips", 2.00))
     if direction == "BUY" and current >= target:
         return True, "Cible rebond atteinte (résistance approchée)."
     if direction == "SELL" and current <= target:
@@ -2782,10 +3376,12 @@ def auto_rebond_step(
         }
 
     # ── 3. Calcul du lot dynamique ──────────────────────────────────────────────
+    tier = rebond_info.get("tier", "normal")
     sym_params = params.get("symbols", {}).get(symbol_key, {})
     main_lot = float(sym_params.get("lot", 0.05))
-    lot = rebond_lot(main_lot, params, is_demo)
-    lot_info_rebond = {"effective_lot": lot, "reason": "Rebond contra-tendance (perte en cours + retracement)"}
+    lot = rebond_lot(main_lot, params, is_demo, tier=tier)
+    lot_reason = "Rebond Fort contra-tendance (signal principal fort)" if tier == "fort" else "Rebond contra-tendance (perte en cours + retracement)"
+    lot_info_rebond = {"effective_lot": lot, "reason": lot_reason}
 
     # ── 4. Ouverture ────────────────────────────────────────────────────────────
     direction = str(rebond_info["direction"])
@@ -2812,12 +3408,13 @@ def auto_rebond_step(
             "open_price": float(rebond_info["current_price"]),
             "target_price": target_price,
             "lot": lot,
+            "tier": tier,
             "opened_at": time.time(),
         }
         REBOND_STATES.append(new_entry)
         REBOND_META[symbol_key]["last_rebond_at"] = time.time()
         log(
-            f"[REBOND] {direction} {lot:.3f} ouvert @ {rebond_info['current_price']:.2f} "
+            f"[REBOND{'-FORT' if tier == 'fort' else ''}] {direction} {lot:.3f} ouvert @ {rebond_info['current_price']:.2f} "
             f"| Cible: {target_price:.2f} "
             f"| Rebonds actifs: {len(REBOND_STATES)}/{params.get('rebond_max_active', 3)}",
             "SUCCESS",
@@ -2827,6 +3424,7 @@ def auto_rebond_step(
             "rebond_count": len(REBOND_STATES),
             "direction": direction,
             "lot": lot,
+            "tier": tier,
             "open_price": rebond_info["current_price"],
             "target_price": target_price,
             "last_action": msg_open,
@@ -2839,9 +3437,71 @@ def auto_rebond_step(
 # ── Fin module Capture Rebond ──────────────────────────────────────────────────
 
 
+def gold_brain_snapshot(
+    params: dict,
+    account,
+    symbol: str,
+    symbol_names: dict[str, str],
+    symbol_params: dict,
+    analysis: dict,
+    decision: dict,
+    payload: dict,
+    positions: list[dict],
+    trades: list[dict] | None,
+    *,
+    record: bool = True,
+) -> dict:
+    """v5.1.0 -- calcule un instantane Gold Brain complet (rapports des 4
+    agents + arbitrage CAIO), utilise a la fois pour l'observation continue
+    (record=False, chaque cycle, panneau toujours alimente) et pour une
+    vraie tentative d'entree (record=True, seul cas trace dans
+    learning_history). Factorise pour ne jamais diverger entre les deux
+    chemins d'appel."""
+    candle_timeframe = str(symbol_params.get("timeframe", "M5"))
+    candles = fetch_candles(symbol, candle_timeframe, 300)
+    current_price = candles[-1]["close"] if candles else float(analysis.get("close") or 0)
+    reports = [
+        structure_analyst_report(candles, current_price, timeframe=candle_timeframe),
+        smart_money_analyst_report(candles, current_price),
+        risk_manager_report(params, account, symbol_names),
+    ]
+    classic_signal = str(decision.get("signal") or "")
+    if classic_signal in ("BUY", "SELL"):
+        reports.append(make_agent_report(
+            "alphatrade_ai_classic", status="OK",
+            confidence=float(analysis.get("confidence") or 0), priority="MEDIUM",
+            recommendation={"action": f"{classic_signal}_MARKET"},
+            arguments=[str(decision.get("reason") or "Signal du pipeline classique.")],
+            ttl_seconds=60,
+        ))
+    daily = payload.get("today_stats", {})
+    mission_report = mission_state(
+        params, trades or [], positions, daily, int(account.login) if account else None,
+    )
+    entry_policy = entry_policy_for_mode(str(params.get("strategy_mode") or "scalping_fast"))
+    caio_result = caio_decide(params, reports, mission_report, entry_policy, record=record)
+    return {
+        "decision": caio_result["decision"],
+        "order_type": caio_result.get("order_type"),
+        "price": caio_result.get("price"),
+        "source_agent": caio_result.get("source_agent"),
+        "raison": caio_result.get("raison"),
+        "overrides": caio_result.get("overrides", []),
+        "entry_policy": entry_policy,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mission": {
+            "mode": mission_report.recommendation.get("mode"),
+            "new_positions_allowed": mission_report.recommendation.get("new_positions_allowed"),
+            "priority": mission_report.priority,
+            **mission_report.metadata,
+        },
+        "reports": {r.agent: r.to_dict() for r in reports},
+    }
 
 
-def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, positions: list[dict]) -> dict:
+def auto_trade_step(
+    params: dict, symbol_names: dict[str, str], payload: dict, positions: list[dict], trades: list[dict] | None = None
+) -> dict:
     state = load_trading_state()
     account = mt5.account_info()
     demo = is_demo_account(account)
@@ -2883,6 +3543,25 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
     symbol = symbol_names.get(active)
     symbol_params = params.get("symbols", {}).get(active, {})
     access = payload.get("session_access", {}).get(active, {})
+
+    gold_brain_enabled = bool(params.get("gold_brain_enabled", False))
+    if gold_brain_enabled and symbol:
+        # v5.1.0 -- observation continue : le panneau se remplit a chaque
+        # cycle (meme cadence que le reste du moteur), independamment de
+        # l'eligibilite du signal classique (tous les gates plus bas dans
+        # cette fonction -- eligibilite, session, cadence, renfort... --
+        # restent inchanges pour la VRAIE decision d'entree, plus loin dans
+        # cette meme fonction, qui ecrase cet instantane avec record=True).
+        try:
+            state["gold_brain"] = gold_brain_snapshot(
+                params, account, symbol, symbol_names, symbol_params,
+                payload.get("analysis", {}).get(active, {}),
+                payload.get("simulated_decision", {}),
+                payload, positions, trades, record=False,
+            )
+        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
+            log(f"Gold Brain (observation): {exc}", "ERROR")
+
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     contexts = position_contexts()
 
@@ -3007,6 +3686,16 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
             state["reason"] = "Renfort desactive dans les parametres."
             save_trading_state(state)
             return state
+        # Renfort desactive pour CE signal precis, choisi depuis Strategy Lab
+        # au moment de l'envoi (voir external_signal_entry_decision -- encode
+        # dans le commentaire MT5 de la position via position_type="STRATLABX",
+        # pas dans un etat local separe a synchroniser). Les reglages globaux
+        # de renfort (seuils, marge, cooldown) restent inchanges pour tout le
+        # reste -- seul ce signal precis est mis hors renfort.
+        if any("stratlabx" in str(position.get("comment") or "").lower() for position in symbol_main_positions):
+            state["reason"] = "Renfort desactive pour ce signal Strategy Lab."
+            save_trading_state(state)
+            return state
         first_profit = max(float(position.get("profit") or 0) for position in symbol_main_positions)
         threshold = float(analysis.get("learned_threshold") or symbol_params.get("confidence_min", 62))
         confidence = float(analysis.get("confidence") or 0)
@@ -3066,19 +3755,6 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
 
-    # Simplification du 16/07/2026 (décision de Louis) : KB1000 Gold AI n'est
-    # plus un second moteur d'exécution parallèle — c'est désormais une
-    # source de signal alternative (KB1-KB7 décide BUY/SELL/WAIT) qui passe
-    # par exactement le même pipeline qu'AlphaTrade AI (lot_safety_state déjà
-    # calculé plus haut dans lot_info, open_position sans TP dédié séparé,
-    # take_profit_step/position_exit_reason partagés sans exception).
-    # L'ancien calcul de lot dédié (KB8, kb8_position_plan) et la gestion de
-    # sortie dédiée (kb1000_manage_positions) sont retirés de l'exécution en
-    # direct : ils dupliquaient un système déjà éprouvé et en ont repris les
-    # mêmes bugs (lot minimum ignoré, entre autres) sans apporter de valeur
-    # que le partage n'apporte pas déjà. KB1-KB7 restent utilisés tels quels
-    # pour la décision d'entrée.
-
     approved_by_server, server_reply = server_trade_confirmation(
         params,
         active,
@@ -3102,15 +3778,46 @@ def auto_trade_step(params: dict, symbol_names: dict[str, str], payload: dict, p
         return state
     state["last_attempt_at"] = now
     save_trading_state(state)
-    ok, message, _ = open_position(
-        active,
-        symbol,
-        str(decision.get("signal")),
-        params,
-        lot_info,
-        analysis,
-        bool(demo or state.get("real_confirmed")),
-    )
+    # position_type encode l'origine (STRATLAB) et, pour les signaux Strategy
+    # Lab uniquement, si le Renfort reste autorise sur CETTE position -- lu
+    # plus tard directement depuis le commentaire MT5 par le gate de renfort
+    # (aucun etat local supplementaire a maintenir, le commentaire suit deja
+    # la position pendant toute sa duree de vie).
+    if str(decision.get("engine")) == "external_signal":
+        entry_position_type = "STRATLAB" if decision.get("allow_reinforcement", True) else "STRATLABX"
+    else:
+        entry_position_type = "NORMAL"
+
+    allow_real_entry = bool(demo or state.get("real_confirmed"))
+    if not gold_brain_enabled:
+        # Comportement inchange -- defaut, strictement identique a avant v5.1.0.
+        ok, message, _ = open_position(
+            active, symbol, str(decision.get("signal")), params, lot_info, analysis,
+            allow_real_entry, position_type=entry_position_type,
+        )
+    else:
+        # v5.1.0 -- CAIO v1 arbitre en dernier ressort avant execution (Regle
+        # d'or : seul le CAIO decide, seul place_order() execute). N'ecrase
+        # aucun des filtres deja passes ci-dessus (renfort, cooldown, session,
+        # validation IA serveur) -- les complete d'un avis independant
+        # Structure/Smart Money/Risk avant le dernier geste. record=True ici :
+        # c'est une vraie tentative d'entree (contrairement au passage
+        # d'observation plus haut dans cette fonction), donc tracee dans
+        # learning_history. Ecrase l'instantane d'observation avec cette
+        # decision plus significative pour l'onglet Gold Brain.
+        snapshot = gold_brain_snapshot(
+            params, account, symbol, symbol_names, symbol_params, analysis, decision,
+            payload, positions, trades, record=True,
+        )
+        state["gold_brain"] = snapshot
+        if snapshot["decision"] != "GO":
+            state["reason"] = f"Gold AI Brain: {snapshot['raison']}"
+            save_trading_state(state)
+            return state
+        ok, message, _ = place_order(
+            active, symbol, snapshot["order_type"], params, lot_info, analysis,
+            allow_real_entry, price_hint=snapshot.get("price"), position_type=entry_position_type,
+        )
     log(message, "SUCCESS" if ok else "ERROR")
     state["last_action"] = message
     state["reason"] = message
@@ -3405,13 +4112,7 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         "engine": "alphatrade_ai",
     }
     active_engine = str(params.get("active_engine") or "alphatrade_ai")
-    if active_engine == "kb1000_gold_ai":
-        # Le calcul AlphaTrade AI ci-dessus continue de tourner (analyses[key] est
-        # utilisé ailleurs dans le payload), mais la décision d'entrée retenue
-        # bascule entièrement sur KB1000 Gold AI — aucune ligne du bloc AlphaTrade AI
-        # n'est modifiée, seule la décision finale utilisée par auto_trade_step change.
-        simulated_decision = kb1000_gold_ai_entry_decision(symbol_names.get(active, ""), active, params)
-    elif active_engine == "external_signal":
+    if active_engine == "external_signal":
         # Garde-fou valide avec Louis (22/07/2026) : un signal externe ne peut
         # ouvrir une vraie position en mode REEL que si external_signals_allow_real
         # est actif -- ce parametre n'est jamais dans REMOTE_PARAM_ALLOWLIST
@@ -3441,6 +4142,13 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         "free_margin": round(float(account.margin_free), 2) if account else 0,
         "active_symbol": active,
         "strategy_profile": params.get("strategy_profile", {}),
+        # v5.1.0 -- source de verite unique exposee au frontend, corrige la
+        # desync deja documentee (audit Phase 3) entre STRATEGY_PROFILES
+        # (Python), strategyProfiles (renderer.js, valeurs differentes) et les
+        # <option> d'index.html. Le frontend doit lire ce champ plutot que
+        # garder sa propre copie locale.
+        "strategy_profiles": STRATEGY_PROFILES,
+        "gold_brain_version": GOLD_BRAIN_VERSION,
         "symbols": status_symbols,
         "analysis": analyses,
         "learning": learning,
@@ -3750,7 +4458,7 @@ def main() -> int:
         else:
             fast_breakeven_step(positions, params, symbol_names)
             take_profit_step(positions, params, symbol_names)
-            auto_state = auto_trade_step(params, symbol_names, payload, positions)
+            auto_state = auto_trade_step(params, symbol_names, payload, positions, trades)
             positions = live_positions(symbol_names, params)
             payload = status_payload(params, symbol_names, trades, positions)
             payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}

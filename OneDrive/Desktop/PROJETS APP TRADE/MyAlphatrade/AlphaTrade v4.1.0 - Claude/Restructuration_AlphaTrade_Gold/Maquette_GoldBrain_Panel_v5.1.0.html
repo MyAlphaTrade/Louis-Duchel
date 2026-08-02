@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Panneau Gold AI Brain</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --cyan:#5cc8ff; --blue:#5cc8ff; --green:#39ff88; --red:#ff5c6c; --orange:#ffb454;
+    --gold:#ffd166; --bronze:#c98a4b; --purple:#b79bf0;
+    --card2:#0f1811; --border-strong:#2a4433;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid #1c6e3f; border-radius:20px; color:var(--green); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:920px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:920px;}
+
+  /* ===== Chrome réel de l'app (reproduit tel quel) ===== */
+  .titlebar{display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px;}
+  .titlebar .brand small{color:var(--muted); font-weight:600; font-size:10px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--border-strong); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:#1c6e3f; background:rgba(57,255,136,.08);}
+  .titlebar .account{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);}
+  .titlebar .drag{flex:1;}
+  .titlebar .gmt{background:var(--panel2); border-radius:8px; padding:3px 10px; font-size:10.5px; color:var(--muted); text-align:center; line-height:1.3;}
+  .titlebar .gmt strong{display:block; color:var(--text); font-size:11px;}
+  .titlebar .session{font-size:11px; color:var(--muted); padding:0 6px;}
+  .titlebar .session b{color:var(--gold);}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted);}
+  .titlebar .srv{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); padding:0 6px;}
+  .titlebar .dot{width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0;}
+  .titlebar .icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px;}
+  .titlebar .lang{display:flex; border:1px solid var(--border-strong); border-radius:6px; overflow:hidden;}
+  .titlebar .lang span{padding:3px 8px; font-size:10px; color:var(--muted);}
+  .titlebar .lang span.active{background:var(--panel2); color:var(--green);}
+  .titlebar .winbtns{display:flex; gap:2px; margin-left:4px;}
+  .titlebar .winbtns span{width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;}
+
+  .metrics{display:grid; grid-template-columns:repeat(6,1fr); gap:0; border-bottom:1px solid var(--line); background:var(--panel);}
+  .metrics article{padding:10px 14px; border-right:1px solid var(--line);}
+  .metrics article:last-child{border-right:none;}
+  .metrics label{display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .metrics strong{display:block; font-size:15px; color:#fff; margin:2px 0;}
+  .metrics small{display:block; font-size:10px; color:var(--muted);}
+
+  .tabs{display:flex; gap:2px; padding:0 14px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs button{padding:10px 14px; font-size:12.5px; color:var(--muted); background:none; border:none; white-space:nowrap; cursor:default; font-family:inherit;}
+  .tabs button.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+  .tabs button.new{position:relative;}
+  .tabs button.new::after{content:'NOUVEAU'; position:absolute; top:2px; right:-2px; font-size:7px; background:var(--gold); color:#241a00; padding:1px 4px; border-radius:6px; font-weight:800; letter-spacing:.3px;}
+
+  /* ===== Page ===== */
+  .page{max-width:1360px; margin:0 auto; padding:20px 24px 90px;}
+
+  .master-toggle{display:flex; align-items:center; gap:16px; background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin-bottom:20px;}
+  .master-toggle .mt-icon{font-size:26px;}
+  .master-toggle .mt-text{flex:1;}
+  .master-toggle .mt-text h2{margin:0 0 4px; color:#fff; font-size:15px;}
+  .master-toggle .mt-text p{margin:0; color:var(--muted); font-size:12px; line-height:1.5; max-width:640px;}
+  .switch{position:relative; width:52px; height:28px; border-radius:16px; background:#1c2620; border:1px solid var(--border-strong); cursor:pointer; flex-shrink:0;}
+  .switch .knob{position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; background:var(--muted); transition:.18s;}
+  .switch.on{background:rgba(57,255,136,.15); border-color:var(--green);}
+  .switch.on .knob{left:26px; background:var(--green);}
+  .mt-state{font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap;}
+  .mt-state.off{background:#1a2620; color:var(--muted);}
+  .mt-state.on{background:#123a1c; color:var(--green);}
+
+  .scenario-switch{display:flex; gap:8px; margin-bottom:14px;}
+  .scenario-switch button{font-family:inherit; font-size:11.5px; padding:7px 14px; border-radius:20px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted); cursor:pointer;}
+  .scenario-switch button.active{border-color:var(--green); color:var(--green); background:rgba(57,255,136,.08); font-weight:700;}
+  .scenario-switch button.active[data-scn="notrade"]{border-color:var(--muted); color:#fff; background:var(--panel);}
+
+  .gb-off-notice{display:none; background:var(--panel2); border:1px dashed var(--border-strong); border-radius:10px; padding:18px 20px; color:var(--muted); font-size:13px; text-align:center; margin-bottom:16px;}
+
+  .caio-card{background:linear-gradient(135deg, rgba(255,209,102,0.10), var(--panel)); border:1px solid var(--gold); border-radius:14px; padding:18px 22px; margin-bottom:18px; resize:vertical; overflow:auto; min-height:140px;}
+  .caio-card .ch{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .caio-card .ch .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--gold); font-weight:700;}
+  .decision-badge{font-size:13px; font-weight:800; padding:4px 14px; border-radius:20px;}
+  .decision-badge.go{background:#123a1c; color:var(--green);}
+  .decision-badge.notrade{background:#241f0a; color:var(--muted); border:1px dashed var(--border-strong);}
+  .caio-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-top:12px;}
+  .caio-field label{display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px;}
+  .caio-field div{color:#fff; font-size:13.5px; font-weight:600;}
+  .caio-reason{margin-top:12px; padding:10px 14px; background:var(--panel2); border-radius:8px; font-size:12.5px; color:var(--text); line-height:1.5;}
+  .caio-overrides{margin-top:8px; font-size:11.5px; color:var(--orange);}
+
+  .agents-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:14px; margin-bottom:20px;}
+  .agent-card{background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:14px 16px; resize:vertical; overflow:auto; min-height:200px;}
+  .agent-card h3{margin:0 0 10px; font-size:12.5px; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .agent-card h3 .agent-name{display:flex; align-items:center; gap:6px;}
+  .prio{font-size:9.5px; font-weight:800; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px;}
+  .prio.critical{background:#4a1a1a; color:var(--red);}
+  .prio.high{background:#4a2f12; color:var(--orange);}
+  .prio.medium{background:#123a4a; color:var(--blue);}
+  .prio.low{background:#151f19; color:var(--muted);}
+  .conf-row{display:flex; align-items:center; gap:8px; margin:6px 0 10px; font-size:11px; color:var(--muted);}
+  .conf-bar{flex:1; height:5px; border-radius:3px; background:var(--border-strong); overflow:hidden;}
+  .conf-bar .fill{height:100%; background:var(--green);}
+  .rec-line{background:var(--panel2); border-radius:8px; padding:8px 10px; font-size:12.5px; color:#fff; font-weight:700; margin-bottom:8px;}
+  .rec-line .action-buy{color:var(--green);}
+  .rec-line .action-sell{color:var(--red);}
+  .rec-line .action-wait{color:var(--muted); font-weight:600;}
+  .arg-list{margin:0; padding-left:16px; font-size:11.5px; color:var(--muted); line-height:1.6;}
+  .meta-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .meta-chip{font-size:10px; background:var(--panel2); border:1px solid var(--border-strong); border-radius:6px; padding:3px 8px; color:var(--muted);}
+
+  /* Mission Manager -- carte enrichie */
+  .mission-card{grid-column:span 1;}
+  .mm-mode{display:inline-block; font-size:11px; font-weight:800; padding:3px 12px; border-radius:20px; margin-bottom:10px;}
+  .mm-mode.normal{background:#123a1c; color:var(--green);}
+  .mm-mode.prudent{background:#123a4a; color:var(--blue);}
+  .mm-mode.defense{background:#4a2f12; color:var(--orange);}
+  .mm-mode.protection{background:#4a1a1a; color:var(--red);}
+  .psy-badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 10px; border-radius:20px; background:#2c2140; color:var(--purple); margin-bottom:12px; margin-left:6px;}
+  .target-row{margin:8px 0;}
+  .target-row .tr-head{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:3px;}
+  .target-row .tr-head b{color:#fff;}
+  .target-bar{height:6px; border-radius:3px; background:var(--border-strong); overflow:hidden;}
+  .target-bar .fill{height:100%; background:var(--gold);}
+  .agg-gauge{margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
+  .agg-gauge .ag-head{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:4px;}
+  .agg-gauge .ag-head b{color:#fff;}
+  .agg-bar{height:8px; border-radius:4px; background:var(--border-strong); overflow:hidden;}
+  .agg-bar .fill{height:100%; background:linear-gradient(90deg, var(--red), var(--orange), var(--green));}
+
+  .policy-table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+  .policy-table th, .policy-table td{text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);}
+  .policy-table th{color:var(--green); font-weight:600; font-size:10.5px; text-transform:uppercase;}
+  .policy-table code{background:var(--panel2); padding:1px 6px; border-radius:4px; color:var(--muted); font-size:11px;}
+
+  .group-header{display:flex; align-items:center; gap:10px; margin:30px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line);}
+  .group-header h2{font-size:13px; color:var(--green); text-transform:uppercase; letter-spacing:.6px; margin:0;}
+  .scope-badge{font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px; white-space:nowrap; background:#4a3417; color:var(--gold);}
+  .scope-note{color:var(--muted); font-size:11.5px; margin-left:auto;}
+
+  .panel{border:1px solid var(--border-strong); border-radius:12px; background:var(--panel); padding:14px 16px; margin-bottom:8px; resize:vertical; overflow:auto;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px 16px;}
+  label.field{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--muted); font-weight:600;}
+  label.check{flex-direction:row; align-items:center; font-weight:600;}
+  input, select{background:#050805; border:1px solid var(--border-strong); border-radius:6px; color:var(--text); padding:7px 9px; font-size:13px;}
+  .info-dot{color:var(--cyan); font-size:10px; cursor:help; margin-left:3px;}
+
+  .flag{background:var(--panel2); border-left:3px solid var(--orange); border-radius:6px; padding:8px 12px; margin:8px 0; font-size:12px; color:var(--muted);}
+  .flag b{color:var(--orange);}
+
+  footer{padding:36px 22px; text-align:center; color:#4d6357; font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette — aucun code touché</div>
+  <h1>Panneau Gold AI Brain — visibilité CAIO / Mission Manager / agents</h1>
+  <p>Étape 2 du plan validé le 01/08/2026 : avant de coder l'UI, définir ce que voit réellement l'utilisateur quand <code>gold_brain_enabled</code> est actif. Nouvel onglet <b>Gold Brain</b> dans la barre réelle de l'app (chrome complet reproduit ci-dessous), plus le nouveau groupe de Paramètres correspondant, en bas de page.</p>
+  <div class="note">👉 Utilise le bouton <b>Gold AI Brain ON/OFF</b> pour voir la bascule, et <b>Scénario : GO / NO_TRADE</b> pour voir les deux issues possibles de l'arbitrage du CAIO. Toutes les valeurs viennent du contrat réel <code>AgentReport</code> déjà codé (agent/status/confidence/priority/recommendation/arguments/risks/metadata).</div>
+</div>
+
+<!-- ============ CHROME RÉEL DE L'APP ============ -->
+<div class="titlebar">
+  <div class="brand">🥇 <strong>AlphaTrade</strong><small>v5.1.0</small></div>
+  <div class="account">
+    <span class="badge demo">DEMO</span>
+    <span class="badge">RÉEL</span>
+    <span>#201660817</span>
+    <span>Deriv-Demo</span>
+  </div>
+  <div class="drag"></div>
+  <div class="gmt" title="Heure universelle GMT">GMT<strong>12:07:26</strong></div>
+  <div class="session">Session <b>Londres</b> — active</div>
+  <div class="clock">14:07:26</div>
+  <div class="srv"><span class="dot"></span>Serveur connecté</div>
+  <button class="icon-btn" title="Thème">◐</button>
+  <div class="lang"><span class="active">FRA</span><span>EN</span></div>
+  <div class="winbtns"><span>—</span><span>□</span><span>×</span></div>
+</div>
+
+<section class="metrics">
+  <article><label>Solde</label><strong>3 899.59$</strong><small>Réalisé MT5</small></article>
+  <article><label>Équité</label><strong>3 942.10$</strong><small>Solde + flottant</small></article>
+  <article><label>Profit net</label><strong style="color:var(--green)">+42.51$</strong><small>Session AlphaTrade</small></article>
+  <article><label>Profit flottant</label><strong style="color:var(--green)">+12.30$</strong><small>Positions AlphaTrade</small></article>
+  <article><label>Précision</label><strong>68.4%</strong><small>19 trades fermés</small></article>
+  <article><label>Espérance</label><strong>+1.84</strong><small>Sur 19 trades</small></article>
+</section>
+
+<nav class="tabs">
+  <button>Tableau de bord</button>
+  <button>Trades</button>
+  <button>Sessions IA</button>
+  <button>Microstructure</button>
+  <button>Sessions marché</button>
+  <button>Calendrier</button>
+  <button class="active new">Gold Brain</button>
+  <button>Paramètres</button>
+  <button>Journal</button>
+  <button>Assistant IA</button>
+</nav>
+
+<!-- ============ PAGE GOLD BRAIN ============ -->
+<div class="page">
+
+  <div class="master-toggle">
+    <div class="mt-icon">🧠</div>
+    <div class="mt-text">
+      <h2>Gold AI Brain</h2>
+      <p>Quand désactivé (défaut), le comportement est strictement identique à AlphaTrade AI classique. Activé, le CAIO arbitre en dernier ressort avant chaque entrée, en plus des filtres déjà existants (renfort, cooldown, session, validation IA serveur) — rien n'est retiré, une couche est ajoutée.</p>
+    </div>
+    <span id="mtState" class="mt-state on">Activé</span>
+    <div id="mtSwitch" class="switch on" onclick="toggleGoldBrain()"><div class="knob"></div></div>
+  </div>
+
+  <div id="gbOffNotice" class="gb-off-notice">Gold AI Brain désactivé — AlphaTrade AI fonctionne exactement comme avant la v5.1.0. Aucun rapport d'agent, aucune décision CAIO. Active l'interrupteur ci-dessus pour prévisualiser le panneau (nécessite un compte démo connecté en conditions réelles).</div>
+
+  <div id="gbContent">
+
+    <div class="scenario-switch">
+      <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">Scénario :</span>
+      <button class="active" data-scn="go" onclick="setScenario('go')">GO — entrée validée</button>
+      <button data-scn="notrade" onclick="setScenario('notrade')">NO_TRADE — refusé</button>
+    </div>
+
+    <!-- ===== Décision CAIO ===== -->
+    <div class="caio-card">
+      <div class="ch">
+        <span class="lbl">Chief AI Officer — décision finale</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span id="decisionBadge" class="decision-badge go">GO</span>
+        <span style="color:var(--muted); font-size:12px;" id="decisionTime">il y a 8 secondes</span>
+      </div>
+      <div class="caio-grid">
+        <div class="caio-field"><label>Type d'ordre</label><div id="fOrderType">BUY LIMIT</div></div>
+        <div class="caio-field"><label>Prix</label><div id="fPrice">2 385.40</div></div>
+        <div class="caio-field"><label>Agent retenu</label><div id="fSource">structure_analyst</div></div>
+      </div>
+      <div class="caio-reason" id="fReason">structure_analyst: Régime UPTREND, zone demand à 2385.40. (confiance 82%).</div>
+      <div class="caio-overrides" id="fOverrides">⚠ Écart appliqué : entry_policy=pending_limit — BUY_MARKET → BUY_LIMIT (source : structure_analyst).</div>
+    </div>
+
+    <!-- ===== Rapports des agents ===== -->
+    <div class="agents-row">
+
+      <div class="agent-card mission-card">
+        <h3><span class="agent-name">🎯 Trading Mission Manager</span><span class="prio low" id="mmPrio">LOW</span></h3>
+        <span class="mm-mode normal" id="mmMode">Normal</span><span class="psy-badge" id="mmPsy">Normal</span>
+
+        <div class="target-row">
+          <div class="tr-head"><span>Objectif jour</span><b id="mmDayVal">+42.51$ / 50$</b></div>
+          <div class="target-bar"><div class="fill" style="width:85%"></div></div>
+        </div>
+        <div class="target-row">
+          <div class="tr-head"><span>Objectif semaine</span><b id="mmWeekVal">+186$ / 250$</b></div>
+          <div class="target-bar"><div class="fill" style="width:74%"></div></div>
+        </div>
+        <div class="target-row">
+          <div class="tr-head"><span>Objectif mois</span><b id="mmMonthVal">+520$ / 1000$</b></div>
+          <div class="target-bar"><div class="fill" style="width:52%"></div></div>
+        </div>
+
+        <div class="agg-gauge">
+          <div class="ag-head"><span>Agressivité</span><b id="mmAggVal">70 / 100</b></div>
+          <div class="agg-bar"><div class="fill" style="width:70%"></div></div>
+        </div>
+        <div class="meta-row">
+          <span class="meta-chip">Pertes consécutives : <span id="mmLosses">0</span></span>
+          <span class="meta-chip">Coussin risque : <span id="mmRisk">150.00$</span></span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <h3><span class="agent-name">🗺️ Structure Analyst</span><span class="prio medium" id="saPrio">MEDIUM</span></h3>
+        <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:82%" id="saConfBar"></div></div><b id="saConf">82%</b></div>
+        <div class="rec-line"><span class="action-buy" id="saAction">BUY LIMIT · 2 385.40</span></div>
+        <ul class="arg-list" id="saArgs"><li>Régime UPTREND, zone demand à 2385.40.</li></ul>
+        <div class="meta-row">
+          <span class="meta-chip">Régime : <b id="saRegime">UPTREND</b></span>
+          <span class="meta-chip">Swings : <span id="saSwings">4</span></span>
+          <span class="meta-chip">Zones institutionnelles : <span id="saInst">1</span></span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <h3><span class="agent-name">🕵️ Smart Money Analyst</span><span class="prio medium" id="smPrio">MEDIUM</span></h3>
+        <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:78%" id="smConfBar"></div></div><b id="smConf">78%</b></div>
+        <div class="rec-line"><span class="action-buy" id="smAction">BUY LIMIT · 2 384.90</span></div>
+        <ul class="arg-list" id="smArgs"><li>Sweep de liquidité (bullish) sur 2384.90 — biais contraire au balayage.</li></ul>
+        <div class="meta-row">
+          <span class="meta-chip">FVG : <span id="smFvg">2</span></span>
+          <span class="meta-chip">Order Blocks : <span id="smOb">1</span></span>
+          <span class="meta-chip">BOS/CHOCH : <span id="smBc">3</span></span>
+          <span class="meta-chip">Zone : <span id="smPd">DISCOUNT</span></span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <h3><span class="agent-name">🛡️ Risk Manager</span><span class="prio low" id="rmPrio">LOW</span></h3>
+        <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:92%" id="rmConfBar"></div></div><b id="rmConf">92%</b></div>
+        <div class="rec-line" id="rmLine"><span style="color:var(--text)">Lot effectif : 0.10 (XAUUSD)</span></div>
+        <ul class="arg-list" id="rmArgs"><li>XAUUSD: Lot limité par le profil de risque et le plafond de compte 0.100.</li></ul>
+        <div class="meta-row">
+          <span class="meta-chip">Statut : <span id="rmStatus" style="color:var(--green)">OK</span></span>
+          <span class="meta-chip">Rejeté : <span id="rmRejected">Non</span></span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="group-header">
+      <h2>🟦 Politique d'entrée par mode de stratégie</h2>
+      <span class="scope-note">Le mode reste une préférence — le CAIO peut s'en écarter selon le contexte (voir l'écart journalisé ci-dessus)</span>
+    </div>
+    <div class="panel">
+      <table class="policy-table">
+        <tr><th>Mode de stratégie</th><th>Politique d'entrée</th><th>Comportement</th></tr>
+        <tr><td>Scalping rapide</td><td><code>immediate</code> — Entrée immédiate</td><td>Privilégie BUY/SELL au marché</td></tr>
+        <tr><td>Scalping prudent</td><td><code>immediate</code> — Entrée immédiate</td><td>Privilégie BUY/SELL au marché</td></tr>
+        <tr><td>Analyse longue</td><td><code>pending_limit</code> — Retour sur zone</td><td>Privilégie les ordres en attente ancrés sur une zone</td></tr>
+        <tr><td>Mode combiné</td><td><code>adaptive</code> — Adaptatif</td><td>Le CAIO choisit librement selon le contexte</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ============ NOUVEAU GROUPE PARAMÈTRES ============ -->
+  <div class="group-header" style="margin-top:46px;">
+    <h2>🟦 Gold AI Brain (v5.1.0)</h2>
+    <span class="scope-badge">Nouveau</span>
+    <span class="scope-note">Section ajoutée à la page Paramètres existante — tous les champs lus par le moteur</span>
+  </div>
+  <div class="panel">
+    <div class="flag"><b>Sécurité :</b> désactiver Gold AI Brain ici ramène instantanément au pipeline classique — aucun redémarrage requis.</div>
+    <div class="grid">
+      <label class="check"><input type="checkbox" checked> Activer Gold AI Brain <span class="info-dot">ⓘ</span></label>
+      <label class="field">Confiance minimum CAIO % <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+      <label class="field">Expiration ordre en attente (min) <span class="info-dot">ⓘ</span><input type="number" value="60"></label>
+      <label class="field">Objectif hebdomadaire $ <span class="info-dot">ⓘ</span><input type="number" value="0" placeholder="0 = auto (×5 objectif jour)"></label>
+      <label class="field">Objectif mensuel $ <span class="info-dot">ⓘ</span><input type="number" value="0" placeholder="0 = auto (×20 objectif jour)"></label>
+      <label class="field">Pertes consécutives → mode Défense <span class="info-dot">ⓘ</span><input type="number" value="3"></label>
+    </div>
+  </div>
+
+</div>
+
+<footer>Maquette interactive — 01/08/2026 — AlphaTrade Gold v5.1.0 — aucun code de l'application modifié</footer>
+
+<script>
+const SCENARIOS = {
+  go: {
+    decisionBadge: {cls:'decision-badge go', text:'GO'},
+    fOrderType: 'BUY LIMIT', fPrice: '2 385.40', fSource: 'structure_analyst',
+    fReason: 'structure_analyst: Régime UPTREND, zone demand à 2385.40. (confiance 82%).',
+    fOverrides: '⚠ Écart appliqué : entry_policy=pending_limit — BUY_MARKET → BUY_LIMIT (source : structure_analyst).',
+    showOverrides: true,
+  },
+  notrade: {
+    decisionBadge: {cls:'decision-badge notrade', text:'NO_TRADE'},
+    fOrderType: '—', fPrice: '—', fSource: '—',
+    fReason: 'Contradiction entre agents (directions opposées) — pas de consensus exploitable.',
+    fOverrides: '',
+    showOverrides: false,
+  }
+};
+
+function setScenario(name) {
+  document.querySelectorAll('.scenario-switch button').forEach(b => b.classList.toggle('active', b.dataset.scn === name));
+  const s = SCENARIOS[name];
+  const badge = document.getElementById('decisionBadge');
+  badge.className = s.decisionBadge.cls;
+  badge.textContent = s.decisionBadge.text;
+  document.getElementById('fOrderType').textContent = s.fOrderType;
+  document.getElementById('fPrice').textContent = s.fPrice;
+  document.getElementById('fSource').textContent = s.fSource;
+  document.getElementById('fReason').textContent = s.fReason;
+  const ov = document.getElementById('fOverrides');
+  ov.style.display = s.showOverrides ? 'block' : 'none';
+  ov.textContent = s.fOverrides;
+
+  if (name === 'notrade') {
+    document.getElementById('saAction').innerHTML = '<span class="action-buy">BUY LIMIT · 2 385.40</span>';
+    document.getElementById('smAction').innerHTML = '<span class="action-sell">SELL LIMIT · 2 392.10</span>';
+    document.getElementById('smArgs').innerHTML = '<li>CHOCH bearish récent — changement de biais pas encore confirmé.</li>';
+  } else {
+    document.getElementById('saAction').innerHTML = '<span class="action-buy">BUY LIMIT · 2 385.40</span>';
+    document.getElementById('smAction').innerHTML = '<span class="action-buy">BUY LIMIT · 2 384.90</span>';
+    document.getElementById('smArgs').innerHTML = '<li>Sweep de liquidité (bullish) sur 2384.90 — biais contraire au balayage.</li>';
+  }
+}
+
+function toggleGoldBrain() {
+  const sw = document.getElementById('mtSwitch');
+  const st = document.getElementById('mtState');
+  const off = document.getElementById('gbOffNotice');
+  const content = document.getElementById('gbContent');
+  const isOn = sw.classList.toggle('on');
+  st.textContent = isOn ? 'Activé' : 'Désactivé';
+  st.className = 'mt-state ' + (isOn ? 'on' : 'off');
+  off.style.display = isOn ? 'none' : 'block';
+  content.style.display = isOn ? 'block' : 'none';
+}
+</script>
+
+</body>
+</html>

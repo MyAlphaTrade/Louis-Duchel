@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Carte Take Profit / BE recréée</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --cyan:#5cc8ff; --green:#39ff88; --green-dim:#1c6e3f; --red:#ff5c6c; --orange:#ffb454;
+    --card2:#0f1811; --border-strong:#2a4433;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px; color:var(--green); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:920px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:920px;}
+
+  .titlebar{display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--border-strong); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:var(--green-dim);}
+  .titlebar .spacer{flex:1;}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted); text-align:center;}
+  .tabs{display:flex; gap:2px; padding:0 16px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs .tab{padding:10px 14px; font-size:12.5px; color:var(--muted); white-space:nowrap; cursor:default;}
+  .tabs .tab.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+
+  .page{max-width:1300px; margin:0 auto; padding:20px 24px 90px;}
+
+  .panel{border:1px solid var(--border-strong); border-radius:12px; background:var(--panel); padding:16px 18px; margin-bottom:16px;}
+  .panel-title{color:var(--green); font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+  .mini-help{color:var(--muted); font-size:11.5px; margin:4px 0 12px; line-height:1.5;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px 16px;}
+  label{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--muted); font-weight:600;}
+  label.check{flex-direction:row; align-items:center; font-weight:600; grid-column:1/-1;}
+  input, select{background:#050805; border:1px solid var(--border-strong); border-radius:6px; color:var(--text); padding:7px 9px; font-size:13px;}
+  .info-dot{color:var(--cyan); font-size:10px; cursor:help; margin-left:3px;}
+
+  .tp-row{display:grid; grid-template-columns:32px 1fr 1fr 32px; gap:10px; align-items:end; margin-bottom:8px; padding:8px; background:var(--panel2); border-radius:8px; border:1px solid var(--border-strong);}
+  .tp-row .tp-num{color:var(--green); font-weight:800; font-size:13px; align-self:center; text-align:center;}
+  .tp-remove{background:transparent; border:1px solid var(--border-strong); color:var(--red); border-radius:6px; cursor:pointer; font-size:14px; align-self:center; height:32px;}
+  .tp-remove:hover{border-color:var(--red);}
+  .tp-remove:disabled{opacity:.25; cursor:not-allowed;}
+  #addTpBtn{background:var(--panel2); border:1px dashed var(--green-dim); color:var(--green); border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:700; cursor:pointer; margin-top:4px;}
+  #addTpBtn:hover{border-color:var(--green); background:var(--card2);}
+  #addTpBtn:disabled{opacity:.35; cursor:not-allowed;}
+
+  .card2-fields{transition:opacity .15s;}
+  .card2-fields.dim{opacity:.4;}
+  .cond-flag{display:inline-block; font-size:9.5px; font-weight:700; padding:1px 7px; border-radius:10px; background:#4a3417; color:var(--orange); margin-left:6px;}
+  .universal-flag{display:inline-block; font-size:9.5px; font-weight:700; padding:1px 7px; border-radius:10px; background:var(--green-dim); color:#8fd8ab; margin-left:6px;}
+
+  .flag{background:var(--panel2); border-left:3px solid var(--orange); border-radius:6px; padding:8px 12px; margin:10px 0; font-size:12px; color:var(--muted);}
+  .flag b{color:var(--orange);}
+
+  footer{padding:36px 22px; text-align:center; color:#4d6357; font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette v2 — aucun code touché, interactive</div>
+  <h1>Carte "Trailing &amp; Protection profit" recréée en deux cartes</h1>
+  <p>Suite à ta demande : tout ce qui était "Palier" disparaît (ce n'était pas des Take Profit). La carte est recréée en <b>deux cartes distinctes</b> : <b>"Take Profit / BE"</b> (les niveaux TP1-TP6 + les 2 réglages Break-Even) et une carte séparée pour le reste (Cible profit, Protection catastrophe, etc.).</p>
+  <div class="note">👉 Coche/décoche <b>"Activer la clôture par Take Profit"</b> dans la première carte pour voir l'effet sur la seconde. Un point important à valider est signalé en encadré orange en bas — je ne voulais pas décider seul.</div>
+</div>
+
+<div class="titlebar">
+  <div class="brand">🥇 AlphaTrade <span class="badge">v5.0.0</span></div>
+  <span class="badge demo">DEMO</span>
+  <span class="badge">RÉEL</span>
+  <span class="badge">#201660817 Deriv-Demo</span>
+  <div class="spacer"></div>
+  <div class="clock">GMT<br>15:40:22</div>
+  <span class="badge">Session Londres</span>
+</div>
+<div class="tabs">
+  <div class="tab">Tableau de bord</div>
+  <div class="tab">Trades</div>
+  <div class="tab">Sessions IA</div>
+  <div class="tab">Microstructure</div>
+  <div class="tab">Sessions marché</div>
+  <div class="tab">Calendrier</div>
+  <div class="tab active">Paramètres</div>
+  <div class="tab">Journal</div>
+  <div class="tab">Assistant IA</div>
+</div>
+
+<div class="page">
+
+  <!-- CARTE 1 : Take Profit / BE -->
+  <div class="panel">
+    <div class="panel-title">🟦 Take Profit / BE</div>
+    <p class="mini-help">Carte recréée le 17/07/2026 — remplace l'ancien "Palier 1/2" (qui n'était pas des Take Profit, source de confusion). Chaque Take Profit ferme le % indiqué du volume initial une fois son seuil de profit atteint.</p>
+
+    <label class="check"><input type="checkbox" id="tpToggle"> <b>Activer la clôture par Take Profit</b> <span class="info-dot" title="Ex 'Activer la clôture partielle par paliers', renommé.">ⓘ</span></label>
+
+    <div id="tpRows" style="margin-top:10px;"></div>
+    <button id="addTpBtn" type="button">+ Ajouter un Take Profit</button>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:16px 0;">
+
+    <label class="check"><input type="checkbox" checked> Break-Even rapide (broker) <span class="info-dot" title="Ajouté le 17/07/2026 — dès que le profit dépasse la distance technique minimale du broker + spread, le stop remonte au prix d'entrée. Indépendant des Take Profit.">ⓘ</span></label>
+    <label class="check"><input type="checkbox" checked> Passer à Break-Even après le 1er Take Profit <span class="info-dot" title="Ex 'Passer à Break-Even après le 1er palier', renommé. Ne s'applique que si Take Profit est activé ci-dessus.">ⓘ</span></label>
+  </div>
+
+  <!-- CARTE 2 : Cible profit & Protection -->
+  <div class="panel">
+    <div class="panel-title">🟦 Cible profit &amp; Protection</div>
+    <p class="mini-help">Carte séparée, sans lien avec "Palier". <b>Un seul champ ici dépend de Take Profit</b> (voir badges) — les autres sont des protections universelles qui restent actives dans tous les cas, Take Profit activé ou non.</p>
+    <div id="card2Fields" class="grid card2-fields">
+      <label>Cible profit $ <span class="cond-flag" id="cibleFlag">SI TP DÉSACTIVÉ</span> <span class="info-dot" title="Sert de cible broker UNIQUEMENT si Take Profit est désactivé ci-dessus. Si Take Profit est actif, c'est le dernier niveau TP qui fixe la vraie cible.">ⓘ</span><input value="15" id="cibleInput"></label>
+      <label>Max hold (s) <span class="universal-flag">TOUJOURS ACTIF</span> <span class="info-dot" title="Durée max de maintien avant fermeture forcée — protection universelle, indépendante de Take Profit.">ⓘ</span><input value="120"></label>
+      <label>Délai de réanalyse (s) <span class="universal-flag">TOUJOURS ACTIF</span> <span class="info-dot" title="Intervalle entre deux vérifications de sortie — universel.">ⓘ</span><input value="120"></label>
+      <label>Protection catastrophe $ <span class="universal-flag">TOUJOURS ACTIF</span> <span class="info-dot" title="Corrigée le 17/07/2026 pour avoir priorité sur le plafond brutal — filet de sécurité universel, jamais désactivé.">ⓘ</span><input value="200"></label>
+      <label>Profit min. sortie $ <span class="universal-flag">TOUJOURS ACTIF</span> <span class="info-dot" title="Universel.">ⓘ</span><input value="2"></label>
+      <label>Score momentum sortie <span class="universal-flag">TOUJOURS ACTIF</span> <span class="info-dot" title="Universel.">ⓘ</span><input value="55"></label>
+    </div>
+  </div>
+
+  <div class="flag">
+    <b>Point à valider avant que je code</b> — tu as dit que cette 2e carte "ne doit intervenir que lorsque TP/BE n'est pas activé". C'est vrai pour "Cible profit $" (badge orange) — une fois Take Profit actif, c'est le dernier niveau TP qui devient la vraie cible, "Cible profit $" ne sert plus. Mais "Max hold", "Délai de réanalyse", "Protection catastrophe $", "Profit min. sortie $" et "Score momentum sortie" sont des <b>protections de sécurité</b> qui doivent, je pense, rester actives tout le temps — même avec Take Profit activé, une position doit quand même être protégée par un délai max, une perte catastrophe, etc. Je ne les ai donc pas rendues inactives en même temps que Cible profit $. Confirme si c'est bien ce que tu veux, ou dis-moi si tu voulais vraiment tout désactiver ensemble.
+  </div>
+
+</div>
+
+<footer>Maquette v2 produite le 17/07/2026 — en attente de validation avant tout code.</footer>
+
+<script>
+  const defaultTps = [
+    { seuil: 3.75, pct: 25 },
+    { seuil: 7.50, pct: 25 },
+    { seuil: 11.25, pct: 25 },
+  ];
+  let tps = defaultTps.map(t => ({...t}));
+  const MAX_TP = 6;
+
+  function renderTps() {
+    const wrap = document.getElementById('tpRows');
+    wrap.innerHTML = tps.map((tp, i) => `
+      <div class="tp-row">
+        <div class="tp-num">TP${i+1}</div>
+        <label>Seuil $<input type="number" step="0.05" value="${tp.seuil}" data-i="${i}" data-f="seuil"></label>
+        <label>% fermé<input type="number" step="5" value="${tp.pct}" data-i="${i}" data-f="pct"></label>
+        <button class="tp-remove" type="button" data-remove="${i}" ${tps.length <= 1 ? 'disabled' : ''}>✕</button>
+      </div>
+    `).join('');
+    document.getElementById('addTpBtn').disabled = tps.length >= MAX_TP;
+    document.getElementById('addTpBtn').textContent = tps.length >= MAX_TP
+      ? `Maximum ${MAX_TP} Take Profit atteint`
+      : '+ Ajouter un Take Profit';
+    wrap.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => { tps.splice(Number(btn.dataset.remove), 1); renderTps(); });
+    });
+    wrap.querySelectorAll('input[data-i]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        tps[Number(inp.dataset.i)][inp.dataset.f] = parseFloat(inp.value) || 0;
+      });
+    });
+  }
+
+  document.getElementById('addTpBtn').addEventListener('click', () => {
+    if (tps.length >= MAX_TP) return;
+    const last = tps[tps.length - 1] || { seuil: 0, pct: 20 };
+    tps.push({ seuil: Math.round((last.seuil + 3.75) * 100) / 100, pct: 20 });
+    renderTps();
+  });
+
+  const tpToggle = document.getElementById('tpToggle');
+  const cibleInput = document.getElementById('cibleInput');
+  const cibleFlag = document.getElementById('cibleFlag');
+  function applyMode() {
+    const tpOn = tpToggle.checked;
+    cibleInput.disabled = tpOn;
+    cibleInput.style.opacity = tpOn ? .4 : 1;
+    cibleFlag.textContent = tpOn ? 'INACTIF (TP prend le relais)' : 'SI TP DÉSACTIVÉ';
+    cibleFlag.style.background = tpOn ? '#3a1414' : '#4a3417';
+    cibleFlag.style.color = tpOn ? 'var(--red)' : 'var(--orange)';
+  }
+  tpToggle.addEventListener('change', applyMode);
+
+  renderTps();
+  applyMode();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Proposition Technique — Mise en œuvre v5.1.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --gold:#ffd166; --bronze:#c98a4b; --purple:#b79bf0; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid #1c6e3f; border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin:0 4px 14px;}
+  header h1{font-size:1.85rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:860px; margin:8px auto 0;}
+  header a{color:var(--gold);}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.2rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.02rem; margin:20px 0 8px;}
+  p{line-height:1.68;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.2px; line-height:1.55; color:var(--green-soft);}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:12.8px;}
+  th, td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:18px 22px; margin:14px 0;}
+  .correction{border-left:4px solid var(--orange); background:linear-gradient(135deg, rgba(255,180,84,0.08), transparent);}
+  .golden{border-left:4px solid var(--green); background:linear-gradient(135deg, rgba(57,255,136,0.07), transparent); text-align:center;}
+  .golden p.rule{font-size:1.08rem; color:#fff; font-weight:600; margin:0;}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.orange{background:#4a2f12; color:var(--orange);}
+  .badge.green{background:#123a1c; color:var(--green);}
+  .badge.red{background:#4a1a1a; color:var(--red);}
+  .badge.blue{background:var(--blue-dim); color:var(--blue);}
+  .badge.dim{background:#151f19; color:var(--dim);}
+  .badge.purple{background:#2c2140; color:var(--purple);}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--green); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;}
+  .toc li{break-inside:avoid; margin-bottom:4px;}
+  .steps{counter-reset:step;}
+  .step{position:relative; padding:12px 16px 12px 52px; margin:10px 0; background:var(--card2); border:1px solid var(--border-strong); border-radius:10px;}
+  .step::before{counter-increment:step; content:counter(step); position:absolute; left:14px; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border-radius:50%; background:var(--green-dim); color:#02120a; font-weight:700; font-size:13px;
+    display:flex; align-items:center; justify-content:center;}
+  .step.gate::before{background:var(--red); color:#fff;}
+  .step b{color:#fff;}
+  .policy-row{display:flex; gap:12px; flex-wrap:wrap; margin:12px 0;}
+  .policy{flex:1; min-width:220px; background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:14px 16px;}
+  .policy h4{margin:0 0 6px; color:var(--gold); font-size:0.95rem;}
+  .qwrap{display:flex; gap:12px; flex-wrap:wrap; margin:14px 0;}
+  .qcard{flex:1; min-width:200px; background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:14px 16px;}
+  .qcard .qn{color:var(--red); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:0.5px;}
+  .hyp-row{display:flex; gap:10px; flex-wrap:wrap; margin:12px 0; align-items:stretch;}
+  .hyp{flex:1; min-width:150px; background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px; text-align:center;}
+  .hyp .agent{color:var(--green-soft); font-size:11px; text-transform:uppercase; letter-spacing:0.5px;}
+  .hyp .rec{color:#fff; font-weight:700; font-size:1rem; margin:6px 0;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Proposition technique — toujours aucun code</div>
+  <div class="tag" style="border-color:#5a3d1f; color:var(--bronze);">v5.0.3 → v5.1.0</div>
+  <h1>Proposition Technique — Mise en œuvre v5.1.0</h1>
+  <p>Ce document répond à la question laissée ouverte par <a href="Architecture_AlphaTrade_AI_Brain_v1.0.html">Architecture_AlphaTrade_AI_Brain_v1.0.html</a> (§ « Découpage vers la v5.1.0 ») : on sait déjà <b>quoi</b> construire, ce document fixe le <b>comment</b>. Revu une 2<sup>e</sup> fois le 31/07/2026 suite à la relecture de Louis, qui a validé les fondations (Shared Memory, CAIO v1, <code>strategy_mode</code>→politique d'entrée, Mission Manager, diagnostic KB8, ordre de construction) mais demandé plusieurs précisions structurantes avant tout code, intégrées ci-dessous.</p>
+</header>
+
+<div class="wrap">
+
+<section class="toc">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#corrections">Corrections intégrées (2 passes)</a></li>
+    <li><a href="#regle-or">Règle d'or de l'implémentation</a></li>
+    <li><a href="#contrat">Contrat unifié — AgentReport</a></li>
+    <li><a href="#archi">Décision d'architecture centrale</a></li>
+    <li><a href="#caio-arbitre">Le CAIO arbitre des rapports, pas des scores</a></li>
+    <li><a href="#kb8">KB8 / gestion de position — diagnostic avant tout</a></li>
+    <li><a href="#mission">Mission Manager — ce qu'il publie</a></li>
+    <li><a href="#detail">Détail technique par élément</a></li>
+    <li><a href="#ordres">Types d'ordre MT5 — détail</a></li>
+    <li><a href="#memoire">Shared Market Memory — implémentation</a></li>
+    <li><a href="#reserve">Réservé pour la v5.1.1 — Scenario Generator</a></li>
+    <li><a href="#ordre">Ordre de construction</a></li>
+    <li><a href="#securite">Plan de sécurité et de déploiement</a></li>
+    <li><a href="#tests">Plan de tests</a></li>
+    <li><a href="#questions">Questions ouvertes pour Louis</a></li>
+    <li><a href="#suite">Prochaine étape</a></li>
+  </ol>
+</section>
+
+<section id="corrections">
+<h2>Corrections intégrées (2 passes)</h2>
+<div class="card correction">
+  <span class="badge orange">Passe 1 — Louis, 31/07/2026</span>
+  <p><b>KB8 n'était pas « en attente de branchement »</b> — déjà branché et testé en live, puis retiré car il causait des pertes réelles. Traité depuis comme un diagnostic obligatoire, pas une finalisation. <b>Les types d'ordre ne se limitent pas à Buy/Sell Limit</b> — tous les types doivent être possibles, la sélection étant pilotée par <code>strategy_mode</code>.</p>
+</div>
+<div class="card correction">
+  <span class="badge orange">Passe 2 — Louis, 31/07/2026, relecture de cette proposition</span>
+  <p>Neuf précisions structurantes, intégrées dans ce document : (1) enveloppe de métadonnées sur chaque compartiment de la Shared Memory (timestamp/source/confidence/version/valid_until) ; (2) contrat unique <code>AgentReport</code> pour tous les rapports d'agent ; (3) le CAIO compare des recommandations complètes, jamais des scores nus ; (4) <code>entry_policy</code> devient une <b>préférence</b> que le CAIO peut outrepasser selon le contexte, pas une contrainte absolue ; (5) diagnostic KB8 structuré autour de 4 questions précises obligatoires ; (6) Mission Manager publie beaucoup plus (objectifs jour/semaine/mois, état psychologique, agressivité, risque, mode) ; (7) notion de priorité (CRITICAL/HIGH/MEDIUM/LOW) sur chaque rapport ; (8) règle d'or explicite sur le chemin unique vers MT5 ; (9) le contrat CAIO est conçu dès 5.1.0 pour accueillir le futur Scenario Generator sans refonte en 5.1.1.</p>
+</div>
+</section>
+
+<section id="regle-or">
+<h2>Règle d'or de l'implémentation</h2>
+<div class="card golden">
+  <span class="badge green">Ajoutée par Louis — à respecter dans tout code futur</span>
+  <p class="rule">« Aucun agent n'est autorisé à déclencher directement un ordre MT5. Tous les agents proposent, seul le CAIO décide, et seul l'Execution Manager exécute. »</p>
+  <p style="color:var(--muted); margin-top:12px; font-size:13.5px;">Un seul chemin de décision vers le marché. Concrètement : aucune fonction agent (<code>risk_manager_report()</code>, <code>structure_analyst_report()</code>, <code>smart_money_analyst_report()</code>, <code>mission_state()</code>...) n'a accès à <code>mt5.order_send</code>. Seule <code>place_order()</code> (appelée uniquement depuis le résultat de <code>caio_decide()</code>) touche MT5.</p>
+</div>
+</section>
+
+<section id="contrat">
+<h2>Contrat unifié — AgentReport</h2>
+<p>Aujourd'hui chaque rapport (<code>Risk Report</code>, <code>Structure Report</code>, <code>Smart Money Report</code>) aurait sa propre forme ad hoc. Louis a raison : un seul format, plus évolutif, plus simple à arbitrer pour le CAIO.</p>
+<div class="tbl-wrap">
+<table>
+<tr><th style="width:140px">Champ</th><th>Description</th></tr>
+<tr><td><code>agent</code></td><td>Identifiant de l'agent émetteur (ex : <code>"structure_analyst"</code>).</td></tr>
+<tr><td><code>status</code></td><td><code>OK</code> / <code>DEGRADED</code> (données partielles, ex : MT5 brièvement déconnecté) / <code>UNAVAILABLE</code> (aucun rapport ce cycle). Le CAIO traite <code>DEGRADED</code>/<code>UNAVAILABLE</code> avec méfiance quelle que soit la confiance affichée.</td></tr>
+<tr><td><code>confidence</code></td><td>0-100, propre à l'agent.</td></tr>
+<tr><td><code>priority</code></td><td><code>CRITICAL</code> / <code>HIGH</code> / <code>MEDIUM</code> / <code>LOW</code> — un rapport <code>CRITICAL</code> (ex : Risk Manager signalant un dépassement) prime sur tout rapport <code>LOW</code>/<code>MEDIUM</code> favorable, quelle que soit sa confiance.</td></tr>
+<tr><td><code>recommendation</code></td><td>Objet structuré, jamais un simple nombre — ex : <code>{action:"BUY_LIMIT", price:2385.40}</code>, <code>{action:"WAIT"}</code>, <code>{action:"RISK_CAP", max_risk_pct:0.6}</code>.</td></tr>
+<tr><td><code>arguments</code></td><td>Liste de raisons à l'appui de la recommandation.</td></tr>
+<tr><td><code>risks</code></td><td>Liste de raisons de s'en méfier.</td></tr>
+<tr><td><code>expiration</code></td><td><code>valid_until</code> — au-delà, le rapport est considéré périmé et ignoré par le CAIO même s'il est encore présent en mémoire.</td></tr>
+<tr><td><code>metadata</code></td><td>Champ libre propre à l'agent (ex : timeframe utilisé, zone source).</td></tr>
+</table>
+</div>
+<p><b>Toute fonction d'agent retourne exactement cette forme</b> — <code>risk_manager_report()</code>, <code>structure_analyst_report()</code>, <code>smart_money_analyst_report()</code> notamment. Le CAIO ne reçoit jamais qu'une <code>List[AgentReport]</code>, jamais un format spécifique par agent.</p>
+</section>
+
+<section id="archi">
+<h2>Décision d'architecture centrale : où vit cette nouvelle intelligence ?</h2>
+<p>Deux mécanismes de sélection existent déjà dans le code : <code>active_engine</code> (AlphaTrade AI vs KB1000 Gold AI, <code>ENGINE_REGISTRY</code>) et <code>strategy_mode</code> (scalping_fast/scalping_safe/long_analysis/combined, <code>STRATEGY_PROFILES</code>). Créer un troisième mécanisme pour la nouvelle couche serait redondant. Décision, validée par Louis :</p>
+<div class="card">
+<p>La nouvelle couche (Mission Manager, CAIO v1, Structure/Smart Money Analyst) devient une infrastructure <b>partagée</b> entre les deux moteurs. <code>strategy_mode</code> devient l'endroit où l'on choisit une <b>préférence</b> d'entrée — pas une contrainte absolue (correction de Louis, voir ci-dessous) :</p>
+<pre>STRATEGY_PROFILES = {
+  "scalping_fast": {..., "entry_policy": "immediate"},
+  "scalping_safe": {..., "entry_policy": "immediate"},
+  "long_analysis": {..., "entry_policy": "pending_limit"},
+  "combined":      {..., "entry_policy": "adaptive"},
+}</pre>
+<div class="policy-row">
+  <div class="policy"><h4>immediate (préférence)</h4>Le CAIO privilégie BUY/SELL MARKET. Modes scalping — rapide, toujours informé par Structure/Smart Money/Risk.</div>
+  <div class="policy"><h4>pending_limit (préférence)</h4>Le CAIO privilégie BUY/SELL LIMIT, ancrés sur les zones de Structure/Smart Money. Modes d'analyse plus posée.</div>
+  <div class="policy"><h4>adaptive</h4>Aucune préférence fixe — le CAIO choisit librement, y compris Buy/Sell Stop sur cassure confirmée.</div>
+</div>
+<p style="margin-top:10px;"><b>Nuance de Louis, intégrée</b> : « le <code>strategy_mode</code> doit exprimer une philosophie, pas imposer totalement le type d'ordre ». Exemple donné : en scalping, préférence Market, mais si le prix est à 30 points d'une zone idéale, le CAIO doit pouvoir dire « finalement, Buy Limit ». <b>Le contexte garde le dernier mot.</b> Concrètement : <code>entry_policy</code> n'est plus un filtre dur consommé par <code>place_order()</code>, c'est un <b>défaut</b> lu par <code>caio_decide()</code>, qui peut s'en écarter — chaque écart est journalisé (<code>caio.entry_override</code>, écrit dans <code>shared_memory["learning_history"]</code> avec la raison) pour rester traçable et mesurable a posteriori.</p>
+<p style="margin-top:10px;"><b>Bénéfice collatéral inchangé</b> : ça force à corriger le bug de désync de <code>strategy_mode</code> déjà documenté dans l'audit Phase 3 (3 définitions indépendantes : <code>STRATEGY_PROFILES</code> Python, <code>strategyProfiles</code> renderer.js, <code>&lt;option&gt;</code> index.html). <code>STRATEGY_PROFILES</code> devient la source de vérité unique, sélecteur UI généré dynamiquement.</p>
+</div>
+</section>
+
+<section id="caio-arbitre">
+<h2>Le CAIO arbitre des rapports, pas des scores</h2>
+<p>Erreur à éviter, signalée par Louis : réduire le CAIO à un fusionneur de pourcentages (<code>Structure 83% + Smart Money 76% → moyenne</code>). Avec le contrat <code>AgentReport</code> ci-dessus, le CAIO compare de vraies hypothèses :</p>
+<div class="hyp-row">
+  <div class="hyp"><div class="agent">Structure Analyst</div><div class="rec">BUY LIMIT<br>2385.40</div><span style="color:var(--muted); font-size:11px;">confiance 83% · priority MEDIUM</span></div>
+  <div class="hyp"><div class="agent">Smart Money Analyst</div><div class="rec" style="color:var(--dim);">WAIT</div><span style="color:var(--muted); font-size:11px;">confiance 76% · priority MEDIUM</span></div>
+  <div class="hyp"><div class="agent">Risk Manager</div><div class="rec">Max 0.6%<br>de risque</div><span style="color:var(--muted); font-size:11px;">confiance 92% · priority CRITICAL</span></div>
+</div>
+<p><code>caio_decide(reports: List[AgentReport], mission_state, entry_policy)</code> — logique d'arbitrage en deux temps : <b>(1)</b> tout rapport <code>CRITICAL</code> est vérifié en premier et peut à lui seul imposer une contrainte dure (ici : aucun trade au-delà de 0.6% de risque, quelle que soit l'opinion de Structure/Smart Money) ; <b>(2)</b> parmi les recommandations restantes compatibles avec la contrainte, le CAIO compare les hypothèses entre elles (pas juste leurs confidences isolées) — un <code>WAIT</code> avec de bons arguments peut l'emporter sur un <code>BUY LIMIT</code> plus confiant, exactement comme documenté dans l'Architecture doc. Retour : <code>{decision: GO|NO_TRADE, order_type?, price?, raison, overrides:[...]}</code>.</p>
+</section>
+
+<section id="kb8">
+<h2>KB8 / gestion de position — diagnostic avant tout</h2>
+<div class="card" style="border-left:4px solid var(--red);">
+<p><b>Renforcé par Louis : aucune réintégration sans avoir documenté, par écrit, la réponse à ces 4 questions précises.</b> Tant qu'elles ne sont pas répondues, KB8 reste désactivé — pas de zone grise.</p>
+<div class="qwrap">
+  <div class="qcard"><div class="qn">1 — Pourquoi a-t-il perdu ?</div>Cause racine identifiée à partir des logs, pas une hypothèse.</div>
+  <div class="qcard"><div class="qn">2 — Qu'est-ce qui est faux ?</div>Le composant précis en cause (stop trop serré ? lot mal calibré ? BE prématuré ?).</div>
+  <div class="qcard"><div class="qn">3 — Qu'est-ce qu'on corrige ?</div>Le changement concret proposé, pas une réactivation telle quelle.</div>
+  <div class="qcard"><div class="qn">4 — Comment prouve-t-on que c'est corrigé ?</div>Le test/la période démo qui validera la correction avant tout retour en réel.</div>
+</div>
+<p style="margin-top:12px;"><b>Méthode pour répondre aux questions 1 et 2</b>, à partir des données déjà existantes (aucun nouveau code nécessaire pour l'investigation) : retrouver la période où KB8 était actif via <code>alphatrade.log</code> et l'historique <code>trades.json</code>/<code>alphatrade.db</code> ; comparer les sorties gérées par <code>manage_position()</code> (KB8) à celles de <code>position_exit_reason()</code> (générique) sur la même période ou en avant/après activation (<code>trade_exits.jsonl</code>/<code>rebond_log.jsonl</code> exploitables directement). Hypothèses prioritaires à vérifier : stop de <code>stop_placement_from_structure()</code> trop serré pour les mèches fréquentes de l'or ; lot de <code>calculate_lot()</code> en double comptage avec <code>real_lot_cap</code> ; Break-Even (<code>break_even_trigger()</code>/<code>break_even_level()</code>) déclenché trop tôt.</p>
+<p><b>Issue</b> : questions répondues + correction validée en démo → réintégration possible, mais en <b>fin</b> de construction 5.1.0 (jamais en tête). Problème de conception plus profond révélé → reporté à une refonte 5.1.1.</p>
+</div>
+</section>
+
+<section id="mission">
+<h2>Mission Manager — ce qu'il publie</h2>
+<p>Louis demande d'aller au-delà du simple objectif/perte max. <code>mission_state()</code> publie désormais, dans <code>shared_memory["trading_objectives"]</code> :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th style="width:200px">Champ</th><th>Définition proposée</th></tr>
+<tr><td><code>daily_target</code> / <code>weekly_target</code> / <code>monthly_target</code></td><td>Objectifs $ par horizon — les deux derniers sont nouveaux (aujourd'hui limités à la session/jour).</td></tr>
+<tr><td><code>psychological_state</code></td><td>Heuristique de trajectoire récente — <code>Neutre</code> / <code>Sous pression</code> (série de pertes ou drawdown qui s'approche des limites) / <code>Confiant</code> (série de gains, objectif en bonne voie). Pas une vraie mesure psychologique, un état dérivé nommé dans le langage du trader professionnel.</td></tr>
+<tr><td><code>aggressiveness_level</code></td><td>Scalaire 0-100 dérivé du mode + de l'état psychologique + de la proximité de l'objectif. Module la sélectivité du CAIO (seuil de confiance minimum) et le sizing proposé au Risk Manager.</td></tr>
+<tr><td><code>risk_appetite</code></td><td>Budget de risque au niveau <i>mission</i> (macro, journée/semaine) — distinct du budget du Risk Manager qui reste au niveau <i>trade</i> (micro, ce cycle précis). Le second ne peut jamais dépasser le premier.</td></tr>
+<tr><td><code>mode</code></td><td>Normal / Prudent / Défense / Protection (inchangé depuis l'Architecture doc).</td></tr>
+</table>
+</div>
+<p>Tous les agents en aval (Risk Manager, Scenario/CAIO) lisent cet état enrichi plutôt qu'un simple booléen mode — <code>aggressiveness_level</code> et <code>psychological_state</code> sont les deux champs proposés par cette proposition (pas explicitement nommés par Louis dans le détail de leur calcul) : formule exacte à valider avec lui avant codage, voir Questions ouvertes.</p>
+</section>
+
+<section id="detail">
+<h2>Détail technique par élément retenu</h2>
+<div class="tbl-wrap">
+<table>
+<tr><th style="width:190px">Élément</th><th style="width:230px">Fichier(s)</th><th>Fonction(s) nouvelles/modifiées — où ça s'insère</th></tr>
+<tr><td>Stop-loss broker systématique</td><td><code>alphatrade_engine.py</code></td><td><code>open_position()</code> : remplace <code>"sl": 0.0</code> par un stop réel, calculé via la distance minimale broker (<code>trade_stops_level</code>) + marge de sécurité. Isolé, aucun prérequis.</td></tr>
+<tr><td>Registre <code>STRATEGY_PROFILES</code> unifié + <code>entry_policy</code></td><td><code>alphatrade_engine.py</code>, <code>index.html</code>, <code>renderer.js</code></td><td>Backend : source de vérité unique (corrige la désync Phase 3). Frontend : sélecteur généré dynamiquement.</td></tr>
+<tr><td>Contrat <code>AgentReport</code></td><td>nouveau <code>agent_report.py</code></td><td>Structure de données partagée (dataclass/dict typé) utilisée par tous les wrappers d'agent ci-dessous — aucune logique métier, juste le contrat.</td></tr>
+<tr><td>Shared Market Memory (fondation)</td><td>nouveau <code>shared_memory.py</code></td><td>Dict en mémoire process, enveloppe <code>{created_at, source, confidence, version, valid_until, payload}</code> par compartiment (détail section dédiée). Contrat lecture/écriture appliqué en code.</td></tr>
+<tr><td>Trading Mission Manager v1</td><td><code>alphatrade_engine.py</code></td><td>Extension de <code>protection_state()</code> → <code>mission_state()</code>, champs enrichis (section dédiée ci-dessus). Écrit dans <code>shared_memory["trading_objectives"]</code>.</td></tr>
+<tr><td>Capital Preservation Mode</td><td><code>alphatrade_engine.py</code></td><td>Dérivé de <code>mission_state()</code> (mode Défense/Protection) — effets déjà documentés, pas de nouvelle fonction dédiée.</td></tr>
+<tr><td>Risk Manager</td><td><code>alphatrade_engine.py</code></td><td>Formalisation de <code>lot_safety_state()</code> en <code>risk_manager_report()</code> → retourne un <code>AgentReport</code> (souvent <code>priority: CRITICAL</code> en cas de dépassement). Écrit dans <code>shared_memory["risk"]</code>.</td></tr>
+<tr><td>Structure Analyst</td><td><code>market_structure.py</code>, <code>market_zones.py</code> (existants) + wrapper</td><td><code>structure_analyst_report()</code> — branche KB2+KB3 en continu, retourne un <code>AgentReport</code> (<code>recommendation</code> = zone/niveau + direction suggérée). Écrit dans <code>shared_memory["structures"]</code>/<code>["liquidity"]</code>.</td></tr>
+<tr><td>Smart Money Analyst</td><td><code>market_smart_money.py</code> (existant) + wrapper</td><td><code>smart_money_analyst_report()</code> — formalise KB5 en <code>AgentReport</code>. Écrit dans <code>shared_memory["smart_money"]</code>.</td></tr>
+<tr><td>CAIO v1 (minimal)</td><td><code>alphatrade_engine.py</code></td><td><code>caio_decide(reports: List[AgentReport], mission_state, entry_policy)</code> — arbitrage priorité puis hypothèses (voir section dédiée). Étend <code>server_trade_confirmation()</code>.</td></tr>
+<tr><td>Types d'ordre complets</td><td><code>alphatrade_engine.py</code></td><td><code>place_order(direction, order_type, price_hint)</code> — seule fonction autorisée à appeler <code>mt5.order_send</code> (règle d'or), appelée uniquement depuis le résultat de <code>caio_decide()</code>.</td></tr>
+<tr><td>Performance Manager</td><td><code>alphatrade_engine.py</code></td><td>Extension de <code>sync_history()</code> pour agrégats jour/semaine/mois. Écrit dans <code>shared_memory["performance"]</code>.</td></tr>
+<tr><td>Trading Coach + Learning Manager</td><td><code>alphatrade_engine.py</code></td><td>Scission de <code>track_position_contexts()</code>/<code>learning_state.json</code> en <code>trading_coach_observe()</code> (lecture seule) et <code>learning_manager_apply()</code> (écriture bornée). Écrivent dans <code>shared_memory["learning_history"]</code> (même compartiment que les <code>caio.entry_override</code> journalisés).</td></tr>
+</table>
+</div>
+</section>
+
+<section id="ordres">
+<h2>Types d'ordre MT5 — détail technique</h2>
+<p>Le moteur pose déjà des ordres Market (<code>open_position()</code>/<code>send_deal()</code>, <code>TRADE_ACTION_DEAL</code>). Les 4 types en attente sont nouveaux, tous disponibles quel que soit le mode (la préférence n'est plus une restriction, voir plus haut) :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Type</th><th>Constante MT5</th><th>Point d'attention</th></tr>
+<tr><td>Buy Limit / Sell Limit</td><td><code>ORDER_TYPE_BUY_LIMIT</code> / <code>ORDER_TYPE_SELL_LIMIT</code></td><td>Prix doit respecter la distance minimale broker (<code>symbol_info().trade_stops_level</code>) — à valider avant envoi, sinon rejet MT5.</td></tr>
+<tr><td>Buy Stop / Sell Stop</td><td><code>ORDER_TYPE_BUY_STOP</code> / <code>ORDER_TYPE_SELL_STOP</code></td><td>Déclenchés uniquement quand le CAIO dispose d'une confirmation Smart Money Analyst (évite d'entrer sur un faux breakout) — pas réservés à un seul mode puisque <code>entry_policy</code> n'est plus un filtre dur.</td></tr>
+<tr><td>Gestion des ordres en attente non déclenchés</td><td>—</td><td>Expiration (<code>ORDER_TIME_SPECIFIED</code>) ou annulation si le contexte change avant déclenchement (ex : le rapport Structure qui l'a justifié expire — voir <code>valid_until</code>).</td></tr>
+</table>
+</div>
+</section>
+
+<section id="memoire">
+<h2>Shared Market Memory — implémentation</h2>
+<p>Toujours un dict Python en mémoire process (<code>shared_memory.py</code>), pas de nouvelle base de données. Mais chaque compartiment n'est plus une valeur brute — c'est une <b>enveloppe</b> :</p>
+<pre>shared_memory["structures"] = {
+  "created_at": "2026-07-31T14:22:03Z",
+  "source": "structure_analyst",
+  "confidence": 86,
+  "version": 214,
+  "valid_until": "2026-07-31T14:27:03Z",
+  "payload": { ...AgentReport complet... }
+}</pre>
+<p>Ainsi le CAIO sait immédiatement qui a produit l'information, quand, et si elle est encore valable — une information vieille de 30 minutes n'a pas la même valeur sur M1 que sur H4. <code>version</code> s'incrémente à chaque écriture (aide au débogage, détecte une lecture obsolète). Pour les compartiments qui ne sont pas des recommandations d'agent (<code>open_positions</code>, <code>performance</code> — de l'état factuel, pas une opinion), <code>confidence</code> reste fixée à 100 et <code>payload</code> contient la donnée brute plutôt qu'un <code>AgentReport</code>.</p>
+<p>9 compartiments pour 5.1.0 : <code>market_context</code>, <code>structures</code>, <code>smart_money</code>, <code>liquidity</code>, <code>risk</code>, <code>open_positions</code>, <code>trading_objectives</code>, <code>performance</code>, <code>learning_history</code>. Contrat « un agent n'écrit que dans son compartiment » appliqué en code. Snapshot JSON optionnel (<code>data/shared_memory_debug.json</code>) pour le débogage, jamais une source de vérité persistante.</p>
+</section>
+
+<section id="reserve">
+<h2>Réservé pour la v5.1.1 — Scenario Generator</h2>
+<div class="card">
+<p>Même si le Scenario Generator n'est pas construit en 5.1.0, la signature de <code>caio_decide(reports: List[AgentReport], ...)</code> est conçue pour l'accueillir sans refonte : en 5.1.0, chaque agent produit exactement un <code>AgentReport</code> par cycle, donc le CAIO reçoit une petite liste (Structure, Smart Money, Risk...). En 5.1.1, quand le Scenario Generator existera, il pourra produire <b>plusieurs</b> <code>AgentReport</code> candidats (un par scénario, ex : Scénario A/B/C de l'Architecture doc) à partir des mêmes signaux amont — le CAIO recevra simplement une liste plus longue, sans que sa fonction ni sa logique d'arbitrage priorité→hypothèses ne changent.</p>
+<pre>Aujourd'hui (5.1.0) :  Structure ─┐
+                                   ├─► CAIO
+Demain (5.1.1) :       Structure ─┤
+                        Scenario Generator (N scénarios) ─┘</pre>
+</div>
+</section>
+
+<section id="ordre">
+<h2>Ordre de construction</h2>
+<div class="steps">
+<div class="step gate"><b>Diagnostic KB8</b> — 4 questions répondues et documentées avant tout le reste, indépendant.</div>
+<div class="step"><b>Stop-loss broker systématique</b> — correction de sécurité isolée.</div>
+<div class="step"><b>Contrat <code>AgentReport</code></b> — structure de données pure, prérequis pour tous les agents.</div>
+<div class="step"><b>Registre <code>STRATEGY_PROFILES</code> unifié + <code>entry_policy</code> (préférence)</b> — corrige la désync existante.</div>
+<div class="step"><b>Shared Market Memory (fondation, avec enveloppe)</b> — prérequis pour tous les agents suivants.</div>
+<div class="step"><b>Trading Mission Manager v1 (champs enrichis) + Capital Preservation Mode</b>.</div>
+<div class="step"><b>Risk Manager</b> (formalisation en <code>AgentReport</code>).</div>
+<div class="step"><b>Structure Analyst + Smart Money Analyst</b> (formalisation KB2/KB3/KB5 en <code>AgentReport</code>).</div>
+<div class="step"><b>CAIO v1</b> — arbitrage priorité + hypothèses, override d'<code>entry_policy</code> journalisé.</div>
+<div class="step"><b>Types d'ordre complets</b> — <code>place_order()</code>, seule porte vers MT5 (règle d'or).</div>
+<div class="step"><b>Performance Manager, Trading Coach + Learning Manager</b> — moins couplés, faisables en parallèle.</div>
+<div class="step gate"><b>Réintégration KB8</b> — seulement si le diagnostic de l'étape 1 le permet, jamais avant, jamais sans validation démo dédiée.</div>
+</div>
+</section>
+
+<section id="securite">
+<h2>Plan de sécurité et de déploiement</h2>
+<div class="card">
+<ul>
+<li>Chaque élément qui touche l'exécution réelle (stop-loss, types d'ordre, décision CAIO) est <b>d'abord testé en compte démo</b>, comparaison explicite avant/après sur une période équivalente — jamais activé directement en réel.</li>
+<li>Nouveau paramètre global <code>gold_brain_enabled</code> (défaut <code>False</code>), bascule instantanée vers l'ancien comportement — même philosophie que <code>rebond_enabled</code>/<code>active_engine</code>.</li>
+<li><b>Règle d'or</b> (voir section dédiée) appliquée dès le premier commit touchant l'exécution : revue de code systématique pour vérifier qu'aucun agent n'appelle <code>mt5.order_send</code> hors de <code>place_order()</code>.</li>
+<li><b>Leçon de KB8 appliquée à tout le reste</b> : aucune fonctionnalité de gestion de position (stop, BE, trailing) n'est introduite sans session de tests démo dédiée.</li>
+</ul>
+</div>
+</section>
+
+<section id="tests">
+<h2>Plan de tests</h2>
+<p>Suit la convention déjà établie : scripts isolés <code>test_*.py</code>, sans dépendance MT5 quand possible, zéro régression sur les suites existantes (13 Phase 1 + 48 scénarios KB1-KB8 + 5 registre). Nouveaux scripts :</p>
+<ul>
+<li><code>test_agent_report_contract.py</code> — tous les wrappers retournent une forme conforme (champs obligatoires, <code>status</code>/<code>priority</code> valides).</li>
+<li><code>test_strategy_profiles_registry.py</code> — cohérence du registre unifié, <code>entry_policy</code> par profil.</li>
+<li><code>test_shared_memory.py</code> — enveloppe (version incrémentale, <code>valid_until</code> expire bien un rapport périmé), contrat lecture/écriture par compartiment.</li>
+<li><code>test_mission_manager.py</code> — graduation des modes, horizons semaine/mois, cohérence <code>aggressiveness_level</code>/<code>psychological_state</code>.</li>
+<li><code>test_caio_v1.py</code> — rapport <code>CRITICAL</code> qui prime sur des rapports favorables ; désaccord entre hypothèses ; aucun candidat suffisant → <code>NO_TRADE</code> ; override d'<code>entry_policy</code> correctement journalisé.</li>
+</ul>
+</section>
+
+<section id="questions">
+<h2>Questions ouvertes pour Louis</h2>
+<div class="card">
+<ul>
+<li>Formule exacte de <code>psychological_state</code>/<code>aggressiveness_level</code> — les seuils proposés (série de pertes, proximité d'objectif) sont une première hypothèse à valider ou ajuster avant codage.</li>
+<li>Nom du/des modes <code>entry_policy</code> visibles dans l'UI (ex : « Structuré » pour <code>pending_limit</code>) ?</li>
+<li>Pour le diagnostic KB8 : qui documente les réponses aux 4 questions — moi via les logs existants, toi directement si tu as déjà une piste, ou une session dédiée ensemble ?</li>
+</ul>
+</div>
+</section>
+
+<section id="suite">
+<h2>Prochaine étape</h2>
+<p>Une fois ces derniers points validés par Louis : maquette si un changement UI est nécessaire (champ « Politique d'entrée » en Paramètres), sinon code direct pour les éléments purement backend — un élément à la fois dans l'ordre de construction ci-dessus, testé avant de passer au suivant.</p>
+</section>
+
+</div>
+<footer>
+  Proposition Technique — Mise en œuvre v5.1.0 · 31/07/2026 · Toujours aucun code écrit.
+</footer>
+</body>
+</html>

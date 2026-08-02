@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Audit stratégique complet — AlphaTrade Gold AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.9rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:860px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.25rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.03rem; margin:22px 0 8px;}
+  h4{color:var(--green-soft); font-size:0.92rem; margin:16px 0 6px; text-transform:uppercase; letter-spacing:0.5px;}
+  p{line-height:1.68;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.3px; line-height:1.55; color:var(--green-soft);}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13px;}
+  th, td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600; position:sticky; top:0; background:var(--panel);}
+  tr:hover td{background:rgba(57,255,136,0.03);}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+  .badge.keep{background:#123a4a; color:var(--blue);}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .stat-row{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .stat-box{background:var(--card2); border:1px solid var(--border-strong); border-radius:8px; padding:10px 16px; flex:1; min-width:150px;}
+  .stat-box .k{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .stat-box .v{color:#fff; font-size:1.25rem; font-weight:700; margin-top:2px;}
+  .propose{background:var(--card2); border:1px dashed var(--border-strong); border-radius:10px; padding:12px 16px; margin:10px 0;}
+  .propose b{color:var(--green-soft);}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--green-soft); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;}
+  .toc li{break-inside:avoid; margin-bottom:4px;}
+  .verdict{background:linear-gradient(135deg, rgba(255,92,108,0.08), rgba(57,255,136,0.04)); border:1px solid var(--border-strong); border-radius:14px; padding:22px 26px; margin:20px 0;}
+  .verdict h3{margin-top:0; color:var(--orange);}
+  .roadmap-tier{border-left:4px solid var(--green-dim); padding-left:18px; margin:22px 0;}
+  .roadmap-tier.p0{border-left-color:#ffd166; background:linear-gradient(90deg, rgba(255,209,102,0.06), transparent);}
+  .roadmap-tier.p1{border-left-color:var(--red);}
+  .roadmap-tier.p2{border-left-color:var(--orange);}
+  .roadmap-tier.p3{border-left-color:var(--blue);}
+  .roadmap-tier.p4{border-left-color:#8f6bd8;}
+  .roadmap-tier.p5{border-left-color:var(--dim);}
+  .roadmap-tier h3{margin-top:0;}
+  .roadmap-tier ul{margin:8px 0; padding-left:20px;}
+  .roadmap-tier li{margin:5px 0; line-height:1.5;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Audit stratégique — aucun code touché</div>
+  <h1>Audit stratégique complet — AlphaTrade Gold AI</h1>
+  <p>Demandé par Louis le 30/07/2026 : évaluer objectivement le niveau réel d'intelligence du moteur, son architecture, ses limites, et ce qu'il faudrait pour en faire un véritable trader professionnel autonome plutôt qu'un moteur à paramètres statiques. Méthode : lecture exhaustive du code réel d'exécution (<code>alphatrade_engine.py</code>, 3595 lignes, et <code>alphatrade_ai_server.py</code>, 665 lignes), citations précises fichier:ligne partout, zéro supposition. Consigne explicite de Louis respectée : critique technique honnête, pas de validation de complaisance.</p>
+</header>
+
+<div class="wrap">
+
+<section id="philosophie">
+  <div class="card" style="border-color:#ffd166; background:linear-gradient(135deg, rgba(255,209,102,0.10), transparent);">
+    <span class="badge" style="background:#4a3b12; color:#ffd166;">Philosophie directrice — Louis, 30/07/2026</span>
+    <h3 style="color:#ffd166; margin-top:0;">« Je ne veux plus construire un Expert Advisor amélioré. Je veux construire un trader professionnel autonome. »</h3>
+    <p>Un EA applique des règles. Un trader prépare son marché, attend les bonnes opportunités, change d'avis lorsque le contexte évolue, adapte son risque, protège son capital, et poursuit des objectifs de performance plutôt qu'un simple signal. <b>Cette nuance doit désormais guider toute évolution d'AlphaTrade.</b> Avant toute nouvelle fonctionnalité, une seule question : <i>« Est-ce que cette évolution rapproche AlphaTrade du comportement d'un véritable trader professionnel expérimenté ? »</i> Si la réponse est non, elle ne devrait probablement pas faire partie de la prochaine version.</p>
+  </div>
+</section>
+
+<section class="toc">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#resume">Résumé exécutif</a></li>
+    <li><a href="#s1">1. Audit module par module</a></li>
+    <li><a href="#s2">2. Cartographie du pipeline de décision</a></li>
+    <li><a href="#s3">3. AlphaTrade pense-t-il réellement ?</a></li>
+    <li><a href="#s4">4. Dépendance aux paramètres</a></li>
+    <li><a href="#s5">5. Peut-on le rendre plus intelligent ?</a></li>
+    <li><a href="#s6">6. Architecture multi-stratégies</a></li>
+    <li><a href="#s7">7. Audit de l'intelligence artificielle</a></li>
+    <li><a href="#s8">8. Audit de l'apprentissage</a></li>
+    <li><a href="#s9">9. Audit des timeframes</a></li>
+    <li><a href="#s10">10. Gestion des positions</a></li>
+    <li><a href="#s11">11. Psychologie du trading</a></li>
+    <li><a href="#s12">12. Objectifs de performance</a></li>
+    <li><a href="#s13">13. Performance et code mort</a></li>
+    <li><a href="#s14">14. Vision long terme</a></li>
+    <li><a href="#s15">15. Feuille de route</a></li>
+  </ol>
+</section>
+
+<section id="resume">
+<h2>Résumé exécutif</h2>
+<div class="verdict">
+  <h3>Verdict en une phrase</h3>
+  <p><b>AlphaTrade Gold AI aujourd'hui n'est pas un trader qui réfléchit — c'est un système de règles techniques fixes (EMA/RSI/MACD/momentum), bien géré et parfois raffiné dans sa gestion de position, mais entièrement piloté par des seuils que vous réglez vous-même, avec une couche « IA » qui existe réellement (un modèle entraîné, deux appels LLM) mais qui n'intervient dans la décision finale que de façon décorative ou en tout-ou-rien.</b> Ce n'est pas un jugement moral sur le travail déjà fait — plusieurs mécanismes (Rebond, paliers de Take-Profit avec trailing, dimensionnement par risque) sont réellement bien pensés pour ce qu'ils sont. Le problème est que le moteur ne <i>raisonne</i> nulle part : il calcule un score, le compare à un seuil, et agit. Aucune comparaison de scénarios, aucune justification explicite, aucune adaptation au contexte de session (objectif atteint à moitié, série de pertes en cours, volatilité anormale) au-delà de verrous binaires.</p>
+</div>
+<div class="stat-row">
+  <div class="stat-box"><div class="k">Décisions basées sur un seuil fixe</div><div class="v">~100%</div></div>
+  <div class="stat-box"><div class="k">Modèle IA entraîné réellement consulté</div><div class="v">Non</div></div>
+  <div class="stat-box"><div class="k">Stop-loss côté broker à l'ouverture</div><div class="v">Aucun</div></div>
+  <div class="stat-box"><div class="k">Objectif hebdo/mensuel</div><div class="v">Inexistant</div></div>
+  <div class="stat-box"><div class="k">Sizing adaptatif à la série gains/pertes</div><div class="v">Aucun</div></div>
+  <div class="stat-box"><div class="k">Appels MT5 redondants / tick</div><div class="v">~18</div></div>
+</div>
+</section>
+
+<section id="s1">
+<h2>1. Audit module par module</h2>
+<p>Pour chaque brique du moteur : est-elle réellement utilisée par la décision finale, apporte-t-elle une valeur réelle, et que faut-il en faire.</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Module</th><th>Utilisé réellement ?</th><th>Verdict</th><th>Pourquoi</th></tr>
+<tr><td><code>symbol_analysis()</code> — scoring EMA/RSI/MACD/momentum/edge</td><td>Oui — cœur de la décision</td><td><span class="badge keep">GARDER, REPENSER</span></td><td>Base solide mais 100% règles fixes à poids fixes ; aucune brique n'y « pense », elle additionne des points.</td></tr>
+<tr><td><code>multi_timeframe_context()</code> M5/M15/M30/H1</td><td>Oui pour le score, partiel pour le veto dur</td><td><span class="badge keep">GARDER, ÉTENDRE</span></td><td>Le veto dur (<code>mtf_blocks</code>) n'est actif qu'en mode <code>combined</code>/<code>long_analysis</code> — pas dans <code>scalping_fast</code>, le mode par défaut livré.</td></tr>
+<tr><td><code>quant_veto</code> / <code>regime_risk</code></td><td>Oui, mais quasi-doublon</td><td><span class="badge warn">FUSIONNER</span></td><td>Arithmétiquement, ne peut quasiment jamais se déclencher sans que <code>gap_blocks</code> ne se soit déjà déclenché — deux noms pour presque le même verrou.</td></tr>
+<tr><td>Serveur IA — modèle RandomForest entraîné (<code>/v1/predict</code>)</td><td><b>Non</b></td><td><span class="badge bug">CÂBLER OU RETIRER</span></td><td>Tourne en mode <code>OBSERVATION</code>, entraîné, stocké — jamais lu par le chemin de décision. Décoratif.</td></tr>
+<tr><td>Serveur IA — validation LLM (<code>/v1/decision</code>, Claude/GPT)</td><td>Oui, en tout-ou-rien</td><td><span class="badge warn">REPENSER</span></td><td>Seul vrai point d'IA dans le chemin de trade — mais binaire (approuve/bloque), et bloque <i>tout</i> le trading par défaut si aucune clé API n'est configurée.</td></tr>
+<tr><td><code>learned_threshold</code> / <code>weights</code> (auto-ajustement)</td><td>Oui</td><td><span class="badge warn">REPENSER</span></td><td>Bornes très étroites — converge en quelques dizaines de trades, ne continue pas de se différencier avec l'expérience.</td></tr>
+<tr><td>Renfort</td><td>Oui</td><td><span class="badge warn">REPENSER LE SIZING</span></td><td>Bien gardé (marge de confiance, cooldown) mais multiplicateur fixe, aucun plafond d'exposition cumulée.</td></tr>
+<tr><td>Rebond / Rebond Fort</td><td>Oui</td><td><span class="badge keep">GARDER</span></td><td>Le mécanisme le mieux conçu du moteur — paliers selon force de tendance, plafond de tentatives, itéré après un vrai incident.</td></tr>
+<tr><td>Break-even (<code>fast_breakeven_step</code>)</td><td>Oui</td><td><span class="badge warn">REPENSER</span></td><td>Se déclenche « dès que techniquement possible », pas selon la formule lot/spread/volatilité/distance-au-TP visée à l'origine.</td></tr>
+<tr><td>Take-Profit par paliers + trailing</td><td>Oui</td><td><span class="badge keep">GARDER</span></td><td>Bien fait — paliers avec trailing individuel, verrouille les gains progressivement.</td></tr>
+<tr><td>Sorties catastrophe / retournement</td><td>Partiellement</td><td><span class="badge bug">CORRIGER</span></td><td>Seuil par défaut (<code>signal_reversal_margin=99</code>) rend deux branches de sortie mathématiquement inatteignables.</td></tr>
+<tr><td>Microstructure (OBI/OFI/Kyle λ/POC)</td><td><b>Non</b></td><td><span class="badge bug">DÉCIDER : câbler ou retirer</span></td><td>Calculée, affichée dans l'UI, jamais consultée par une décision de trade.</td></tr>
+<tr><td>Objectifs de session (target/max loss/giveback)</td><td>Oui</td><td><span class="badge warn">REPENSER</span></td><td>Fonctionne mais en verrou binaire (tout ou rien) — pas de ralentissement progressif.</td></tr>
+<tr><td>Stop-loss côté broker</td><td><b>Non — jamais posé</b></td><td><span class="badge bug">CRITIQUE</span></td><td><code>"sl": 0.0</code> systématique à l'ouverture — aucun filet si le process/la connexion tombe.</td></tr>
+<tr><td>Ordres en attente (pending)</td><td>Absent</td><td><span class="badge warn">ÉVOLUTION FUTURE</span></td><td>Toute entrée est un ordre au marché — le moteur ne se positionne jamais à l'avance sur un niveau.</td></tr>
+</table>
+</div>
+</section>
+
+<section id="s2">
+<h2>2. Cartographie du pipeline de décision</h2>
+<p>Chaîne réelle, du tick MT5 à l'ordre envoyé — chaque étage cité avec sa fonction et sa ligne dans <code>alphatrade_engine.py</code>.</p>
+<pre>MT5 (rates/tick)
+  → symbol_analysis() [896]          — score EMA/RSI/MACD/momentum/edge + MTF + quant_veto
+  → multi_timeframe_context() [789]  — biais M5/M15/M30/H1 (bonus toujours, verrou dur si mode combined/long_analysis)
+  → candle_reversal_context() [678]  — détection de rejet en zone extrême
+  → status_payload() [2997]          — assemble la décision finale : eligible = signal ∈ {BUY,SELL}
+        ET entries_allowed ET NOT protection_blocks ET NOT lot_blocks ET NOT edge_blocks
+        ET NOT rsi_blocks ET NOT fast_blocks ET NOT gap_blocks ET NOT mtf_blocks ET NOT quant_veto
+  → auto_trade_step() [2659]         — 20 portes séquentielles (compte, capital_min, permission MT5,
+        gestion des positions déjà ouvertes, max_positions, cadence, max_trades/heure, verrou directionnel,
+        renfort activé + marge de confiance + cooldown, cooldown après perte, sizing, confirmation IA serveur)
+  → open_position() [1809]           — calcule le lot + TP (pondéré par la confiance), AUCUN SL broker
+  → send_deal() [1773]                — envoi MT5 réel
+  → gestion post-entrée : fast_breakeven_step, take_profit_step, should_open_rebond, position_exit_reason
+</pre>
+<div class="card finding bug">
+  <span class="badge bug">Trouvaille notable</span>
+  <p><code>symbol_analysis()</code> est appelée <b>jusqu'à 3 fois par tick</b> pour le même symbole (préliminaire pour l'apprentissage, dans le premier <code>status_payload()</code> qui sert réellement à la décision, et une deuxième fois après <code>auto_trade_step()</code> dont le résultat est explicitement jeté). Chaque appel refait ~6 requêtes MT5 (M5/M15/M30/H1 + le M5 « fast » séparé) — environ 18 requêtes MT5 redondantes toutes les 0,5 seconde pour un seul symbole. Le code documente même ce contournement (commentaire ligne 3558) plutôt que d'éliminer la redondance.</p>
+</div>
+</section>
+
+<section id="s3">
+<h2>3. AlphaTrade pense-t-il réellement ?</h2>
+<div class="verdict">
+  <h3>Réponse honnête : non.</h3>
+  <p>« Penser » implique de comparer plusieurs hypothèses, pondérer des scénarios contradictoires et justifier un choix. Ce que fait réellement le moteur : calculer un score numérique (somme pondérée de composantes techniques fixes), le comparer à un seuil, et agir si le score dépasse le seuil. C'est un système de règles — sophistiqué, avec de bonnes idées (paliers de TP, Rebond contextuel), mais déterministe. Le seul endroit où un vrai raisonnement pourrait entrer — l'appel LLM (<code>server_trade_confirmation</code>, ligne 593) — n'est qu'un tampon binaire « approuve / bloque » posé sur une décision déjà figée par les règles ; le LLM ne propose jamais sa propre lecture du marché, ne compare jamais de scénarios, et n'est même pas garanti actif (voir section 7).</p>
+</div>
+<p>Concrètement, pour qu'AlphaTrade « pense », il faudrait qu'à un moment du pipeline, quelque chose <i>évalue plusieurs interprétations possibles du marché</i> (ex: « tendance haussière mais volume faible → probablement un piège » vs « tendance haussière confirmée par le volume et la structure ») et <i>explique pourquoi</i> il retient l'une plutôt que l'autre. Aujourd'hui, ce travail n'existe nulle part — le score agrège des indicateurs indépendamment, sans modéliser leurs interactions ni générer d'hypothèses concurrentes.</p>
+</section>
+
+<section id="s4">
+<h2>4. Dépendance aux paramètres</h2>
+<p>Quasiment <b>chaque</b> décision du moteur retrace directement à une valeur fixe que vous réglez — pas à quelque chose que le moteur infère lui-même du marché. Table des paramètres qui gouvernent réellement l'entrée (vérifié ligne par ligne, pas supposé) :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Paramètre</th><th>Branche réellement ?</th><th>Effet</th></tr>
+<tr><td><code>confidence_min</code></td><td>Oui</td><td>Barre que le score doit dépasser pour sortir de WAIT.</td></tr>
+<tr><td><code>min_score_gap</code></td><td>Oui</td><td>Un des deux verrous les plus contraignants avec <code>quant_veto</code> (quasi-doublon).</td></tr>
+<tr><td><code>edge_zone_pct</code>, <code>lookback_candles</code></td><td>Oui</td><td>Définit la zone haute/basse considérée extrême.</td></tr>
+<tr><td><code>signal_reversal_margin</code></td><td>Lue mais neutralisée à la valeur livrée (99)</td><td>Rend 2 branches de sortie mathématiquement inatteignables sans réglage manuel.</td></tr>
+<tr><td><code>strategy_mode</code></td><td>Oui, partiellement</td><td>Le veto MTF dur ne s'active que pour 2 des 4 modes.</td></tr>
+<tr><td><code>reinforcement_*</code> (5 paramètres)</td><td>Oui</td><td>Gouvernent entièrement si/quand le Renfort peut agir.</td></tr>
+<tr><td><code>rebond_*</code> / <code>rebond_fort_*</code> (~12 paramètres)</td><td>Oui</td><td>Gouvernent entièrement le Rebond — le module le plus paramétré du moteur.</td></tr>
+<tr><td><code>session_target</code>, <code>session_max_loss</code>, <code>giveback</code>, <code>profit_drawdown_pct</code></td><td>Oui</td><td>Verrous binaires stop/continue.</td></tr>
+</table>
+</div>
+<p>Aucune de ces valeurs n'est aujourd'hui recalculée par le moteur en fonction du contexte réel (volatilité du moment, qualité de la tendance, comportement récent du marché) — elles sont statiques jusqu'à ce que vous les changiez à la main. Le seul mécanisme qui bouge tout seul est l'auto-ajustement borné de <code>confidence_offset</code>/<code>weights</code> (section 8), et ses bornes sont elles-mêmes des constantes fixes.</p>
+</section>
+
+<section id="s5">
+<h2>5. Peut-on le rendre plus intelligent ?</h2>
+<p>Oui, concrètement, sur des points précis déjà identifiés par cet audit :</p>
+<ul>
+<li><b>Rendre le score sensible au contexte, pas juste au prix.</b> Volatilité réelle (ATR), qualité de tendance (déjà en partie présente via le score MTF, mais jamais exploitée pour <i>moduler</i> la taille de position ou les seuils), et régime de marché (range vs tendance) pourraient ajuster dynamiquement <code>confidence_min</code>, les distances de stop/target, et le sizing — au lieu de constantes fixes en dollars/pips.</li>
+<li><b>Faire du veto MTF un vrai filtre dans tous les modes</b>, pas seulement 2 sur 4 — aujourd'hui le mode par défaut (<code>scalping_fast</code>) peut trader contre la tendance H1 sans blocage dur.</li>
+<li><b>Consulter réellement le modèle entraîné</b> (RandomForest) au lieu de le laisser en observation pure, ou l'abandonner franchement s'il n'apporte rien de mesurable — le garder « pour la forme » sans jamais l'utiliser n'a pas de valeur.</li>
+<li><b>Faire de l'appel LLM un vrai second avis</b>, pas un simple tampon binaire — lui donner le contexte complet et lui demander une justification comparant au moins deux lectures possibles du marché, avec sa propre estimation de confiance intégrée au score plutôt qu'un simple approve/reject.</li>
+<li><b>Sizing et risque sensibles à la trajectoire de session</b> (voir section 12) et aux séries gains/pertes (voir section 11) — aujourd'hui totalement absents.</li>
+</ul>
+</section>
+
+<section id="s6">
+<h2>6. Architecture multi-stratégies</h2>
+<p>Bonne nouvelle : l'architecture supporte déjà, structurellement, plusieurs sources de signal via <code>active_engine</code> — <code>alphatrade_ai</code> (règles internes) et, depuis ce chantier, <code>external_signal</code> (signaux Strategy Lab). La gestion de position (Renfort/Rebond/BE/TP/sorties) est <b>partagée</b> entre tous les moteurs, seule la décision d'entrée change de source — c'est un découpage sain qui a fait ses preuves à l'intégration de Strategy Lab (marquage d'origine dédié, exclusion ciblée du Rebond, sans dupliquer le moteur de risque).</p>
+<p>Ce qui manque pour vraiment généraliser à « plusieurs stratégies IA indépendantes » : (1) aucune coordination de risque agrégé entre moteurs si plusieurs tournaient en parallèle sur le même compte — le plafond d'exposition reste par-position/par-nombre-de-positions, jamais un vrai budget de risque partagé ; (2) chaque nouveau moteur doit aujourd'hui être câblé à la main dans chaque porte de gating (comme fait pour Strategy Lab) plutôt que via une interface commune formalisée — fonctionnel mais pas encore une vraie architecture de plugin.</p>
+</section>
+
+<section id="s7">
+<h2>7. Audit de l'intelligence artificielle</h2>
+<p>Décomposition précise de ce qui existe vraiment sous le mot « IA » dans ce projet :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Composant</th><th>Nature réelle</th><th>Influence sur les trades</th></tr>
+<tr><td>Modèle RandomForest entraîné</td><td>Vrai ML (scikit-learn, 9 features techniques)</td><td><b>Aucune</b> — mode <code>OBSERVATION</code>, jamais lu par le chemin de décision.</td></tr>
+<tr><td>Assistant chat (Anthropic/OpenAI)</td><td>LLM conversationnel</td><td>Aucune — fonctionnalité séparée, hors trading.</td></tr>
+<tr><td>Validation d'entrée par LLM (<code>/v1/decision</code>)</td><td>Vrai appel LLM (Claude Haiku 4.5 / GPT-4.1-mini par défaut)</td><td><b>Réelle mais binaire</b> — approuve ou bloque une décision déjà prise par les règles fixes ; si les deux IA sont configurées et en désaccord, blocage automatique par précaution.</td></tr>
+<tr><td>Scoring EMA/RSI/MACD/momentum</td><td>Règles fixes, pas de l'IA</td><td>C'est le vrai moteur de décision.</td></tr>
+</table>
+</div>
+<div class="card finding bug">
+  <span class="badge bug">Point critique</span>
+  <p>Avec les réglages livrés par défaut (<code>ai_server_enabled=True</code>, <code>ai_server_trade_confirmation=True</code>) et <b>sans clé API configurée</b>, la porte de confirmation LLM échoue systématiquement fermée : <b>plus aucun trade ne peut s'ouvrir</b>. À l'inverse, si le serveur IA local n'est pas lancé du tout, même résultat. Le rôle réel de l'« IA » dans une installation donnée dépend donc entièrement d'une configuration externe au code, pas d'un comportement garanti.</p>
+</div>
+</section>
+
+<section id="s8">
+<h2>8. Audit de l'apprentissage</h2>
+<p>Le moteur ajuste réellement deux valeurs par symbole après chaque trade clôturé : <code>confidence_offset</code> (un scalaire) et 5 <code>weights</code> (trend/rsi/macd/edge/momentum). Formule exacte : récompense normalisée du trade × un pas fixe (0,025 pour les poids), et un ajustement <b>asymétrique</b> pour le seuil de confiance : <code>+0,45 après une perte</code> contre seulement <code>-0,12 après un gain</code> — une perte fait remonter la barre de confiance environ 3,75× plus vite qu'un gain ne la fait redescendre.</p>
+<p>Bornes strictes : poids entre 0,65 et 1,35 (départ à 1,0), seuil effectif entre 55 et 82. Avec ces pas, le système atteint ses limites en <b>quelques dizaines de trades</b> puis oscille dans une bande étroite — il ne continue pas de se différencier avec l'expérience. Ce n'est pas de l'apprentissage par renforcement au sens propre (pas d'état, pas de politique, pas de fonction de valeur, pas d'exploration/exploitation) : c'est un ajustement proportionnel borné, plus proche d'un régulateur réglé à la main que d'un système qui apprend. La commande <code>RESET_LEARNING</code> efface tout instantanément — cohérent avec le fait que la « mémoire » se résume à 6 scalaires par symbole, pas un modèle ou un jeu de données qui s'enrichit.</p>
+</section>
+
+<section id="s9">
+<h2>9. Audit des timeframes</h2>
+<p>Timeframe principal fixé par profil de stratégie (M5 pour <code>scalping_fast</code>/<code>scalping_safe</code>/<code>combined</code>, M15 pour <code>long_analysis</code>) — jamais choisi dynamiquement par le moteur. Une vraie confluence multi-timeframe existe (M5/M15/M30/H1, indépendamment du TF principal configuré) et influence toujours le score, mais <b>ne bloque durement une entrée que dans 2 des 4 modes de stratégie</b> — pas dans le mode livré par défaut. Un contrôle « fast » sur M5 fixe s'ajoute systématiquement, même quand le TF principal est M15, sans possibilité de le paramétrer autrement qu'en modifiant le code.</p>
+<p>Aucun D1 ni H4 n'est jamais utilisé nulle part dans le fichier — un vrai manque de contexte macro pour un instrument comme l'or, où la structure long terme (niveaux D1/H4) pèse beaucoup sur la fiabilité d'une entrée M5.</p>
+</section>
+
+<section id="s10">
+<h2>10. Gestion des positions</h2>
+<div class="tbl-wrap">
+<table>
+<tr><th>Mécanisme</th><th>Sophistication</th><th>Limite principale</th></tr>
+<tr><td>Renfort</td><td>Correctement gardé (marge de confiance, écart de score, cooldown)</td><td>Multiplicateur de lot fixe, aucun plafond d'exposition cumulée sur les renforts empilés.</td></tr>
+<tr><td>Rebond / Rebond Fort</td><td>Le plus abouti — paliers selon force de tendance, itéré après incident réel</td><td>Stop/cible en pips fixes, pas ajustés à la volatilité réelle du moment.</td></tr>
+<tr><td>Break-even</td><td>Intègre spread + distance minimum broker en temps réel</td><td>Se déclenche dès que <i>techniquement</i> possible — pas la formule lot/volatilité/distance-au-TP visée à l'origine ; coupe l'upside très tôt.</td></tr>
+<tr><td>Take-Profit paliers + trailing</td><td>Bien fait — trailing individuel par palier</td><td>Cible confiance-pondérée au niveau broker et cible « logique » au niveau du code Python ne sont jamais réconciliées (deux notions de cible coexistent).</td></tr>
+<tr><td>Sorties (catastrophe/retournement/momentum/trailing/cible)</td><td>Priorité claire entre les 9 raisons de sortie</td><td>2 des sorties les plus « intelligentes » (retournement) sont mathématiquement mortes avec les réglages livrés.</td></tr>
+<tr><td>Stop-loss</td><td>—</td><td><b>Jamais posé côté broker</b> — protection uniquement via la boucle Python ; si le process ou la connexion tombe pendant une position perdante, aucun filet.</td></tr>
+<tr><td>Coordination Renfort + Rebond simultanés</td><td>Possible et partiellement réconcilié (exclusions croisées de comptage)</td><td>Peuvent tourner en même temps sur le même symbole (renforcer la position perdante ET ouvrir un rebond inverse) sans coordination fine — seul un plafond de perte flottante agrégé les arrête ensemble.</td></tr>
+</table>
+</div>
+</section>
+
+<section id="s11">
+<h2>11. Psychologie du trading</h2>
+<p>Un trader senior discipliné adapte son comportement au contexte de la journée, pas seulement au signal du moment. Aujourd'hui, AlphaTrade n'a <b>aucune</b> des qualités suivantes, toutes vérifiées absentes dans le code :</p>
+<ul>
+<li><b>Pas de conscience de série</b> — aucune trace de « série de pertes » ou « série de gains » nulle part dans le fichier ; le seul geste après une perte est un cooldown de durée fixe (30s par défaut), jamais une réduction de taille ni un durcissement progressif des critères d'entrée.</li>
+<li><b>Pas de patience contextuelle</b> — les seuils de confiance/score sont fixes quelle que soit la qualité réelle du marché (range chaotique vs tendance nette) ; un vrai trader attend une meilleure configuration en range, le moteur applique la même barre partout.</li>
+<li><b>Protection du capital binaire, pas progressive</b> — l'objectif de session et la perte max fonctionnent en tout-ou-rien (stop total) plutôt qu'en réduction graduelle de taille à mesure que le compte s'approche d'une limite.</li>
+</ul>
+<p>Reproduire ces qualités demanderait : un suivi de série gains/pertes pilotant réellement le sizing, une notion de « qualité du contexte » (volatilité, netteté de tendance) qui module la barre d'entrée au lieu d'un seuil fixe, et un mode « protection progressive » qui réduit la taille des positions à l'approche d'une limite plutôt que de couper net.</p>
+</section>
+
+<section id="s12">
+<h2>12. Objectifs de performance</h2>
+<p>Le mécanisme réel (<code>protection_state()</code>, ligne 1418) est un verrou en deux temps : <code>session_target</code> atteint → bloque les <i>nouvelles</i> entrées seulement (les positions déjà ouvertes continuent normalement, aucune réduction de risque) ; <code>session_max_loss</code> ou perte de gain au-delà du <code>giveback</code> autorisé → verrouillage dur qui force la clôture de tout. C'est un comportement réel, pas juste un badge d'affichage — mais binaire, pas progressif.</p>
+<div class="card finding bug">
+  <span class="badge bug">Absence confirmée</span>
+  <p>Aucun objectif hebdomadaire ou mensuel n'existe nulle part dans le fichier (recherche exhaustive, zéro résultat) — tout le pilotage d'objectif est scopé à la session/journée en cours, remis à zéro chaque jour. Impossible aujourd'hui pour le moteur de « ralentir parce que l'objectif de la semaine est presque atteint » ou de « pousser un peu plus parce que le mois est en retard ».</p>
+</div>
+<p>Pour se rapprocher de ce que Louis décrit (ralentir après l'objectif, protéger les gains, privilégier la régularité), il faudrait : un suivi multi-horizon (jour/semaine/mois) avec sa propre trajectoire de progression, un mode « protection des gains » qui réduit le risque au lieu de couper le trading net, et une taille de position qui se resserre progressivement à mesure qu'un horizon approche de son objectif plutôt qu'un stop brutal.</p>
+</section>
+
+<section id="s13">
+<h2>13. Performance et code mort</h2>
+<ul>
+<li><b>Aucune fonction complètement morte</b> — les 64 fonctions de premier niveau sont toutes appelées quelque part (vérifié systématiquement).</li>
+<li><b>Deux branches de sécurité mathématiquement inatteignables</b> avec les réglages livrés : <code>signal_reversal_margin=99</code> rend le volet « retournement » de <code>CATASTROPHIC_PROTECTION</code> et toute la sortie <code>SIGNAL_REVERSED_POSITIVE</code> impossibles à déclencher (la confiance est plafonnée à 100, le calcul exige ~154-164).</li>
+<li><b>Une vérification redondante et jamais atteignable</b> dans <code>auto_trade_step</code> (ligne 2792) — re-teste une condition déjà garantie vraie par le test précédent.</li>
+<li><b><code>quant_veto</code> quasi-doublon de <code>gap_blocks</code></b> — arithmétiquement, ne peut presque jamais se déclencher seul.</li>
+<li><b>~18 requêtes MT5 redondantes toutes les 0,5s</b> par symbole (voir section 2) — <code>symbol_analysis()</code> recalculée 3× par tick sans aucun cache.</li>
+<li><b>Microstructure calculée mais jamais consultée</b> par une décision — coût de calcul (observation DOM, OBI/Kyle λ) payé pour un affichage seul.</li>
+</ul>
+</section>
+
+<section id="s14">
+<h2>14. Vision long terme</h2>
+<p><b>Ce qui manque aujourd'hui à AlphaTrade pour être un véritable trader professionnel autonome, honnêtement :</b></p>
+<ol>
+<li><b>Le raisonnement, pas juste le score.</b> Rien ne compare de scénarios ni ne justifie un choix — un score qui dépasse un seuil n'est pas une décision réfléchie, c'est une règle appliquée.</li>
+<li><b>Un risque qui s'adapte au contexte</b> — volatilité, qualité de tendance, trajectoire de session, série récente — au lieu de constantes fixes en dollars/pips partout (sizing, stops, cibles, cooldowns).</li>
+<li><b>Une vraie gestion d'objectifs multi-horizon</b> — aujourd'hui limité à la session/journée, aucune notion de semaine ou de mois.</li>
+<li><b>Une conscience de l'exposition globale</b> — Renfort et Rebond peuvent s'empiler sur le même symbole sans budget de risque agrégé cohérent, seul un plafond de perte flottante les arrête ensemble en dernier recours.</li>
+<li><b>Un vrai filet de sécurité</b> — l'absence de stop-loss côté broker est la lacune la plus concrètement dangereuse de tout l'audit : elle expose le compte à un risque illimité si le processus tombe, indépendamment de la qualité de toute la logique de décision.</li>
+<li><b>Une architecture nettoyée de ses quasi-doublons et branches mortes</b> — pas bloquant pour la performance, mais un obstacle réel à la confiance et à la maintenabilité à mesure que le moteur grandit.</li>
+</ol>
+<p>Rien de tout cela ne remet en cause les bonnes idées déjà en place (Rebond contextuel, paliers de TP avec trailing, séparation propre des moteurs par <code>active_engine</code>) — elles sont une vraie base. Ce qui manque, c'est la couche au-dessus : un système qui pèse le contexte plutôt que d'appliquer des seuils, et qui protège son capital de façon graduée plutôt que binaire.</p>
+
+<div class="verdict">
+<h3>Complément de Louis (30/07/2026) — la vision qui dépasse ce constat</h3>
+<p>Après lecture, Louis a validé l'ensemble des constats de cet audit mais a souligné qu'il manquait la couche la plus importante : <b>ce document décrit AlphaTrade tel qu'il est, pas tel qu'il doit devenir.</b> Sa reformulation, conservée ici telle quelle car elle fixe le cap de tout ce qui suit :</p>
+<p>Le moteur actuel : <code>Analyse → Score → Seuil → Trade</code>. La cible : <code>Lecture du marché → Compréhension du contexte → Construction de plusieurs scénarios → Comparaison des scénarios → Choix du meilleur scénario → Calcul du risque → Choix de la stratégie → Choix du timeframe → Choix du type d'entrée → Gestion dynamique → Adaptation permanente</code>.</p>
+<p>Trois idées structurantes à retenir :</p>
+<ul>
+<li><b>Objectifs plutôt que paramètres.</b> Remplacer progressivement <code>confidence_min=65</code> par « le marché est sale, je demande plus de confirmations » ; <code>timeframe=M5</code> par « M5 est trop bruité aujourd'hui, je construis sur M15 et j'exécute sur M1 » ; <code>lot=0.30</code> par « cette opportunité est exceptionnelle, j'accepte 1,2% de risque » — le moteur choisit lui-même sa traduction en chiffres, l'utilisateur fixe la mission, pas les seuils.</li>
+<li><b>Planification plutôt que réaction.</b> Un trader senior construit un plan multi-timeframe (D1 baissier → H4 revient sur un Order Block → H1 comprime → M15 casse la structure → M5 forme un FVG → attente d'un retour → Buy Limit posé) avant même que le marché n'atteigne son niveau, plutôt que de réagir tick par tick. Ceci recoupe directement les lacunes déjà identifiées en section 10 (aucun ordre en attente aujourd'hui) et section 9 (aucun contexte D1/H4).</li>
+<li><b>Mission plutôt que « trouver un trade ».</b> Ex: « faire +2% sans dépasser 0,8% de drawdown » — à partir de là, chaque décision (risque, sélectivité, fréquence) découle de la mission plutôt que d'un objectif de session binaire (recoupe section 12).</li>
+</ul>
+<p>Cette vision rejoint l'écosystème SaaS plus large déjà en tête (<i>Market Intelligence AI Lab</i>) : plusieurs moteurs spécialisés orchestrés par un cerveau commun, plutôt qu'un seul moteur qui tente de tout faire.</p>
+</div>
+</section>
+
+<section id="s15">
+<h2>15. Feuille de route</h2>
+
+<div class="roadmap-tier p0">
+<h3>Priorité 0 — Refonte du cerveau d'AlphaTrade (ajoutée et affinée par Louis, 30/07/2026)</h3>
+<p>Au-dessus de toutes les autres priorités : le problème actuel n'est pas un manque d'indicateurs, c'est que le cerveau d'AlphaTrade est construit comme un pipeline procédural (<code>Analyse → Scores → Seuils → Décision → Exécution</code>). La cible est un vrai bureau de trading : plusieurs agents spécialisés, aucun ne décidant seul, qui construisent ensemble la décision finale.</p>
+<pre>                ALPHATRADE AI BRAIN
+                       │
+     ┌─────────────────┼─────────────────┐
+     │                 │                 │
+Market Observer   Structure Analyst   Risk Manager
+     │                 │                 │
+     └──────────────┬──┴─────────────────┘
+                    │
+            Strategy Planner
+                    │
+           Scenario Generator
+                    │
+         Confidence Evaluator
+                    │
+          Execution Manager
+                    │
+          Position Manager
+                    │
+        Performance Manager
+</pre>
+<ul>
+<li><b>Market Observer</b> — collecte et synthétise le contexte de marché (remplace la simple lecture de bougies actuelle).</li>
+<li><b>Structure Analyst</b> — identifie structure, zones, FVG, Order Blocks, BOS/CHOCH (aujourd'hui totalement absent — le moteur actuel ne connaît que EMA/RSI/MACD).</li>
+<li><b>Risk Manager</b> — décide du risque acceptable selon le contexte et la mission, remplace les constantes fixes en $/pips identifiées dans tout cet audit (sections 1, 5, 10).</li>
+<li><b>Strategy Planner</b> — construit le plan à partir des trois lectures ci-dessus.</li>
+<li><b>Scenario Generator</b> — construit plusieurs scénarios possibles au lieu d'un score unique.</li>
+<li><b>Confidence Evaluator</b> — compare les scénarios et choisit le plus prometteur.</li>
+<li><b>Execution Manager</b> — choisit entre entrée immédiate, ordre en attente, ou attente — le moteur actuel n'a que l'entrée au marché (section 10).</li>
+<li><b>Position Manager</b> — pilote TP/BE/trailing/sorties (la partie déjà la plus mature aujourd'hui, à faire évoluer plutôt qu'à reconstruire — section 10).</li>
+<li><b>Performance Manager</b> — surveille les objectifs jour/semaine/mois, adapte le comportement, protège les gains progressivement (comble directement l'absence identifiée en section 12).</li>
+</ul>
+<p><b>Agent supplémentaire, hors du flux de décision : Trading Coach.</b> Il ne trade jamais — il surveille le système. Il analyse les 100 derniers trades, les performances par actif/session/stratégie/timeframe, et les erreurs récurrentes, puis fait évoluer le comportement global à partir de l'expérience — par exemple « les entrées M1 sur EURUSD sous-performent depuis deux semaines, réduisons leur priorité » ou « la session asiatique a un taux de réussite sous la moyenne, suspendons-la jusqu'à nouvel ordre ». C'est une couche d'expérience métier au-dessus des 6 scalaires bornés de l'auto-apprentissage actuel (section 8), pas un remplacement.</p>
+<p>Remplacer progressivement les paramètres par des objectifs : au lieu de <code>EMA=200, RSI=30, confidence=70 → entrée</code>, une mission du type « atteindre 1% aujourd'hui sans dépasser 0,5% de drawdown » — le cerveau décide alors lui-même s'il faut attendre, réduire le risque, augmenter les confirmations, changer de timeframe, utiliser un ordre en attente, ou ne plus trader du tout aujourd'hui.</p>
+<p>Cette architecture conditionne la plupart des priorités listées ci-dessous — beaucoup deviendront plus naturelles une fois ce cadre en place plutôt que d'être ajoutées une à une sur l'architecture actuelle à seuils fixes. Prochaine étape naturelle avant tout code : une proposition technique détaillée (contrat entre agents, ce qui reste dans <code>alphatrade_engine.py</code> vs ce qui devient un nouvel agent, séquencement des étapes), suivant la méthode déjà appliquée à ce projet (audit → proposition → maquette → validation → code).</p>
+</div>
+
+<div class="roadmap-tier p1">
+<h3>Priorité 1 — Corrections critiques</h3>
+<ul>
+<li>Poser systématiquement un stop-loss côté broker à l'ouverture (aujourd'hui <code>sl:0.0</code> partout) — filet de sécurité minimal indépendant du process Python.</li>
+<li>Corriger <code>signal_reversal_margin</code> (99 → une valeur réellement atteignable) pour réactiver les 2 branches de sortie retournement actuellement mortes.</li>
+<li>Décider : câbler réellement la Microstructure et le modèle RandomForest dans la décision, ou les retirer proprement — le statu quo (calculés, jamais utilisés) coûte des cycles et brouille la surface de paramètres.</li>
+<li>Ajouter un stop-temps inconditionnel sur les positions principales stagnantes (aujourd'hui seule la cible profit est bornée dans le temps).</li>
+<li>Nettoyer la vérification redondante ligne 2792 (inatteignable).</li>
+</ul>
+</div>
+
+<div class="roadmap-tier p2">
+<h3>Priorité 2 — Amélioration de l'intelligence</h3>
+<ul>
+<li>Activer le veto MTF dur dans tous les modes de stratégie, pas seulement 2 sur 4.</li>
+<li>Remplacer les multiplicateurs fixes de Renfort/Rebond par un sizing sensible à la distance/volatilité.</li>
+<li>Ajouter un plafond d'exposition agrégée (Renfort + Rebond + principal), pas seulement un plafond par ordre.</li>
+<li>Sizing sensible aux séries gains/pertes (réduction progressive après pertes consécutives).</li>
+<li>Sizing sensible à la trajectoire de session (réduction progressive à l'approche de l'objectif/de la perte max, au lieu d'un verrou binaire).</li>
+<li>Faire de l'appel LLM un vrai second avis argumenté plutôt qu'un tampon binaire.</li>
+</ul>
+</div>
+
+<div class="roadmap-tier p3">
+<h3>Priorité 3 — Architecture</h3>
+<ul>
+<li>Formaliser le cadre multi-moteurs (déjà amorcé via <code>active_engine</code>) en interface documentée, pour faciliter l'ajout de futurs moteurs sans câblage manuel à chaque porte.</li>
+<li>Fusionner <code>quant_veto</code> et <code>gap_blocks</code> (quasi-doublon confirmé).</li>
+<li>Implémenter la vraie formule de Break-even (lot/spread/volatilité/distance-au-TP/risque) prévue à l'origine du projet.</li>
+<li>Suivi d'objectifs multi-horizon (jour/semaine/mois) avec mode « protection des gains » progressif.</li>
+</ul>
+</div>
+
+<div class="roadmap-tier p4">
+<h3>Priorité 4 — Optimisation</h3>
+<ul>
+<li>Éliminer les appels redondants à <code>symbol_analysis()</code> (mise en cache dans le tick au lieu de 3 recalculs).</li>
+<li>Réduire le nombre de requêtes MT5 par tick (actuellement ~18 pour un seul symbole).</li>
+</ul>
+</div>
+
+<div class="roadmap-tier p5">
+<h3>Priorité 5 — Évolutions futures</h3>
+<ul>
+<li>Support des ordres en attente (se positionner à l'avance sur un niveau plutôt que de toujours chasser le prix au marché).</li>
+<li>Coordination de risque au niveau portefeuille si plusieurs moteurs (AlphaTrade AI + Strategy Lab + futurs) tournent en parallèle sur le même compte.</li>
+<li>Contexte D1/H4 réel pour la structure long terme, aujourd'hui totalement absent du pipeline.</li>
+</ul>
+</div>
+
+</section>
+
+</div>
+<footer>
+  Audit stratégique complet — AlphaTrade Gold AI · 30/07/2026 · Aucune modification de code effectuée, analyse uniquement.
+</footer>
+</body>
+</html>

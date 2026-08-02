@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Écran "Quoi de neuf" après mise à jour</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --blue:#5cc8ff; --green:#39ff88; --red:#ff5c6c; --orange:#ffb454;
+    --gold:#ffd166; --border-strong:#2a4433;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  svg{display:block;}
+
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid #1c6e3f; border-radius:20px; color:var(--green); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:920px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:920px;}
+
+  /* ===== Chrome réel de l'app (reproduit tel quel) ===== */
+  .titlebar{display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px;}
+  .titlebar .brand img{width:18px; height:18px; border-radius:4px;}
+  .titlebar .brand small{color:var(--muted); font-weight:600; font-size:10px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--border-strong); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:#1c6e3f; background:rgba(57,255,136,.08);}
+  .titlebar .account{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);}
+  .titlebar .drag{flex:1;}
+  .titlebar .gmt{background:var(--panel2); border-radius:8px; padding:3px 10px; font-size:10.5px; color:var(--muted); text-align:center; line-height:1.3;}
+  .titlebar .gmt strong{display:block; color:var(--text); font-size:11px;}
+  .titlebar .session{font-size:11px; color:var(--muted); padding:0 6px;}
+  .titlebar .session b{color:var(--gold);}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted);}
+  .titlebar .srv{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); padding:0 6px;}
+  .titlebar .dot{width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0;}
+  .titlebar .icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px;}
+  .titlebar .lang{display:flex; border:1px solid var(--border-strong); border-radius:6px; overflow:hidden;}
+  .titlebar .lang span{padding:3px 8px; font-size:10px; color:var(--muted);}
+  .titlebar .lang span.active{background:var(--panel2); color:var(--green);}
+  .titlebar .winbtns{display:flex; gap:2px; margin-left:4px;}
+  .titlebar .winbtns span{width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;}
+
+  .metrics{display:grid; grid-template-columns:repeat(6,1fr); gap:0; border-bottom:1px solid var(--line); background:var(--panel);}
+  .metrics article{padding:10px 14px; border-right:1px solid var(--line);}
+  .metrics article:last-child{border-right:none;}
+  .metrics label{display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .metrics strong{display:block; font-size:15px; color:#fff; margin:2px 0;}
+  .metrics small{display:block; font-size:10px; color:var(--muted);}
+
+  .tabs{display:flex; gap:2px; padding:0 14px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs button{padding:10px 14px; font-size:12.5px; color:var(--muted); background:none; border:none; white-space:nowrap; cursor:default; font-family:inherit;}
+  .tabs button.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+
+  /* ===== Page derrière (Tableau de bord, simplifié, juste pour le contexte) ===== */
+  .page{max-width:1360px; margin:0 auto; padding:20px 24px 90px;}
+  .bg-grid{display:grid; grid-template-columns:2fr 1fr; gap:16px;}
+  .bg-card{background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; min-height:120px;}
+  .bg-card.tall{min-height:280px;}
+  .bg-card h4{margin:0 0 8px; font-size:12.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .bg-line{height:10px; background:var(--panel2); border-radius:4px; margin:8px 0; width:70%;}
+  .bg-line.short{width:40%;}
+
+  /* ===== Overlay "Quoi de neuf" ===== */
+  .wn-backdrop{
+    position:fixed; inset:0; background:rgba(5,8,6,0.72); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:24px;
+  }
+  .wn-card{
+    width:100%; max-width:660px; max-height:88vh; display:flex; flex-direction:column;
+    background:linear-gradient(180deg, #0e1810, var(--panel)); border:1px solid var(--gold);
+    border-radius:18px; box-shadow:0 0 0 1px rgba(255,209,102,.08), 0 30px 70px rgba(0,0,0,.55);
+    overflow:hidden;
+  }
+  .wn-header{padding:26px 30px 16px; text-align:center; border-bottom:1px solid var(--line); position:relative;
+    background:radial-gradient(120% 100% at 50% 0%, rgba(255,209,102,.10), transparent 60%);}
+  .wn-badge{display:inline-block; font-size:10.5px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase;
+    color:#241a00; background:var(--gold); padding:4px 12px; border-radius:20px; margin-bottom:12px;}
+  .wn-header h1{margin:0 0 6px; font-size:1.3rem; color:#fff;}
+  .wn-header h1 .wn-version{color:var(--gold);}
+  .wn-header p{margin:0; color:var(--muted); font-size:12.5px;}
+  .wn-close{position:absolute; top:14px; right:16px; width:28px; height:28px; border-radius:8px; border:1px solid var(--border-strong);
+    background:var(--panel2); color:var(--muted); display:flex; align-items:center; justify-content:center; cursor:pointer;}
+
+  .wn-list{overflow-y:auto; padding:18px 26px; display:flex; flex-direction:column; gap:14px;}
+  .wn-item{background:var(--panel2); border:1px solid var(--border-strong); border-radius:12px; padding:16px 18px;}
+  .wn-item-head{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .wn-icon{flex-shrink:0; width:36px; height:36px; border-radius:10px; background:rgba(255,209,102,.10); color:var(--gold);
+    display:flex; align-items:center; justify-content:center;}
+  .wn-icon.fix{background:rgba(255,92,108,.10); color:var(--red);}
+  .wn-item-head h3{margin:0; font-size:14px; color:#fff; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .wn-tag{font-size:8.5px; font-weight:800; letter-spacing:.4px; padding:2px 7px; border-radius:20px; text-transform:uppercase;}
+  .wn-tag.new{background:rgba(255,209,102,.15); color:var(--gold);}
+  .wn-tag.fix{background:rgba(255,92,108,.15); color:var(--red);}
+
+  .wn-body p{margin:0 0 10px; font-size:12.5px; color:var(--text); line-height:1.6;}
+  .wn-sublabel{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:700; margin:12px 0 6px;}
+  .wn-agentlist{list-style:none; margin:0 0 10px; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .wn-agentlist li{display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.5;}
+  .wn-agentlist b{color:#fff; flex-shrink:0;}
+  .wn-mech{list-style:none; margin:0 0 10px; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .wn-mech li{display:flex; gap:8px; font-size:12px; color:var(--text); line-height:1.5; align-items:flex-start;}
+  .wn-mech li svg{flex-shrink:0; margin-top:2px; color:var(--green);}
+  .wn-mech li.before svg{color:var(--red);}
+
+  .wn-howto{display:flex; gap:9px; font-size:11.5px; color:var(--muted); background:var(--bg); border:1px dashed var(--border-strong); border-radius:8px; padding:9px 12px; line-height:1.55; align-items:flex-start;}
+  .wn-howto svg{flex-shrink:0; margin-top:2px; color:var(--blue);}
+
+  .wn-footer{padding:14px 26px 20px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .wn-dots{display:flex; gap:5px;}
+  .wn-dots span{width:5px; height:5px; border-radius:50%; background:var(--border-strong);}
+  .wn-dots span.on{background:var(--gold); width:14px; border-radius:3px;}
+  .wn-btns{display:flex; gap:10px; margin-left:auto;}
+  .wn-btn-secondary{font-family:inherit; font-size:12.5px; padding:9px 14px; border-radius:9px; border:1px solid var(--border-strong);
+    background:none; color:var(--muted); cursor:pointer;}
+  .wn-btn-primary{font-family:inherit; font-size:12.5px; font-weight:800; padding:9px 18px; border-radius:9px; border:none;
+    background:linear-gradient(135deg, var(--gold), #f0a93c); color:#241a00; cursor:pointer; display:flex; align-items:center; gap:8px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette v2 — corrections demandées, aucun code touché</div>
+  <h1>Écran "Quoi de neuf" au premier lancement après une mise à jour</h1>
+  <p>Corrections apportées : tous les émojis remplacés par des icônes SVG au même style que le reste de l'app (traits fins, <code>currentColor</code>, cohérent avec les icônes déjà présentes dans <code>index.html</code>) ; le contenu de chaque carte est maintenant détaillé en profondeur (contexte, mécanique précise, comment l'utiliser) plutôt qu'un résumé d'une phrase — la liste défile verticalement s'il y a plus de contenu que la hauteur visible.</p>
+  <div class="note">Version confirmée : <b>v5.1.0</b> (jamais publiée sur GitHub — dernier release réel : v5.0.3 du 21/07). Pas de bump vers 5.1.1.</div>
+</div>
+
+<!-- ============ CHROME RÉEL DE L'APP ============ -->
+<div class="titlebar">
+  <div class="brand">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <strong>AlphaTrade</strong><small>v5.1.0</small>
+  </div>
+  <div class="account">
+    <span class="badge demo">DEMO</span>
+    <span>#201660817</span>
+    <span>Deriv-Demo</span>
+  </div>
+  <div class="drag"></div>
+  <div class="gmt" title="Heure universelle GMT">GMT<strong>12:07:26</strong></div>
+  <div class="session">Session <b>Londres</b> — active</div>
+  <div class="clock">14:07:26</div>
+  <div class="srv"><span class="dot"></span>Serveur connecté</div>
+  <button class="icon-btn" title="Thème">◐</button>
+  <div class="lang"><span class="active">FRA</span><span>EN</span></div>
+  <div class="winbtns"><span>—</span><span>□</span><span>×</span></div>
+</div>
+
+<section class="metrics">
+  <article><label>Solde</label><strong>3 899.59$</strong><small>Réalisé MT5</small></article>
+  <article><label>Équité</label><strong>3 942.10$</strong><small>Solde + flottant</small></article>
+  <article><label>Profit net</label><strong style="color:var(--green)">+42.51$</strong><small>Session AlphaTrade</small></article>
+  <article><label>Profit flottant</label><strong style="color:var(--green)">+12.30$</strong><small>Positions AlphaTrade</small></article>
+  <article><label>Précision</label><strong>68.4%</strong><small>19 trades fermés</small></article>
+  <article><label>Espérance</label><strong>+1.84</strong><small>Sur 19 trades</small></article>
+</section>
+
+<nav class="tabs">
+  <button class="active">Tableau de bord</button>
+  <button>Trades</button>
+  <button>Sessions IA</button>
+  <button>Microstructure</button>
+  <button>Sessions marché</button>
+  <button>Calendrier</button>
+  <button>Gold Brain</button>
+  <button>Paramètres</button>
+  <button>Journal</button>
+  <button>Assistant IA</button>
+</nav>
+
+<!-- ============ PAGE DE FOND (Tableau de bord, dimmée par l'overlay) ============ -->
+<div class="page">
+  <div class="bg-grid">
+    <div class="bg-card tall">
+      <h4>Graphique XAUUSD</h4>
+      <div class="bg-line"></div><div class="bg-line short"></div><div class="bg-line"></div>
+    </div>
+    <div class="bg-card">
+      <h4>Décision IA</h4>
+      <div class="bg-line"></div><div class="bg-line short"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ OVERLAY "QUOI DE NEUF" ============ -->
+<div class="wn-backdrop">
+  <div class="wn-card">
+    <div class="wn-header">
+      <button class="wn-close" title="Fermer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="wn-badge">Mise à jour installée</div>
+      <h1>Quoi de neuf dans AlphaTrade <span class="wn-version">v5.1.0</span></h1>
+      <p>Voici en détail ce qui a changé depuis votre dernière session.</p>
+    </div>
+
+    <div class="wn-list">
+
+      <!-- Item 1 : Gold AI Brain -->
+      <div class="wn-item">
+        <div class="wn-item-head">
+          <div class="wn-icon">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+          </div>
+          <h3>Gold AI Brain <span class="wn-tag new">Nouveau</span></h3>
+        </div>
+        <div class="wn-body">
+          <p>Un nouvel onglet <b>Gold Brain</b> ajoute une couche d'arbitrage indépendante avant chaque entrée réelle sur XAUUSD. Quatre agents spécialisés analysent le marché en parallèle du signal classique, et un cinquième — le CAIO (Chief AI Officer) — arbitre entre leurs avis pour rendre une décision finale GO / NO_TRADE, visible en direct dans l'onglet.</p>
+
+          <div class="wn-sublabel">Les 4 agents consultés</div>
+          <ul class="wn-agentlist">
+            <li><b>Structure Analyst</b> — identifie le régime de marché (tendance haussière/baissière/range) et les zones offre/demande.</li>
+            <li><b>Smart Money Analyst</b> — repère les sweeps de liquidité, Order Blocks, Fair Value Gaps et cassures de structure (BOS/CHOCH).</li>
+            <li><b>Risk Manager</b> — vérifie le budget de risque disponible avant d'autoriser toute nouvelle position.</li>
+            <li><b>Trading Mission Manager</b> — suit vos objectifs jour/semaine/mois et adapte l'agressivité du système selon vos résultats en cours.</li>
+          </ul>
+
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Désactivé par défaut — tant que vous ne l'activez pas, AlphaTrade se comporte exactement comme avant, aucune différence.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Une fois activé, le CAIO n'ajoute qu'un filtre supplémentaire — il peut refuser une entrée, jamais en forcer une que le pipeline classique n'aurait pas déjà validée.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Le panneau se met à jour en continu (toutes les 0.5s) pour observation, même sans tentative d'entrée en cours.</li>
+          </ul>
+
+          <div class="wn-howto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Comment l'utiliser : Paramètres → section "Gold AI Brain" → activez le premier interrupteur. Puis ouvrez l'onglet <b>Gold Brain</b> pour suivre en direct le raisonnement des 4 agents et la décision du CAIO.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item 2 : Time Stop -->
+      <div class="wn-item">
+        <div class="wn-item-head">
+          <div class="wn-icon fix">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>Correctif de robustesse — Time Stop <span class="wn-tag fix">Correctif</span></h3>
+        </div>
+        <div class="wn-body">
+          <p>Un audit statistique complet sur 465 trades réels a mis en évidence un cas où une position perdante pouvait rester ouverte indéfiniment — deux positions étaient restées ouvertes <b>127 heures</b> avant d'être stoppées en catastrophe, pour une perte combinée de plus de 500$. La cause : le paramètre "Max hold (s)" ne fermait une position que si elle était déjà en profit — jamais une position en perte.</p>
+
+          <div class="wn-sublabel">Avant / après</div>
+          <ul class="wn-mech">
+            <li class="before"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Avant : une position en perte pouvait rester ouverte sans limite de temps, tant qu'elle ne touchait pas le plancher de protection catastrophique.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Maintenant : dès que "Max hold (s)" est dépassé sur une position toujours en perte, elle est fermée automatiquement — indépendamment du Take Profit, du renfort ou du module Rebond.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Ce filet de sécurité s'ajoute à ceux déjà existants (perte max par position, flottant max, protection catastrophe) — il ne les remplace pas.</li>
+          </ul>
+
+          <div class="wn-howto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Réglable dans Paramètres → "Cible profit &amp; Protection" → "Max hold (s)". Valeur par défaut : 2700 secondes (45 minutes) pour le profil Scalping rapide.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="wn-footer">
+      <div class="wn-dots"><span class="on"></span><span></span></div>
+      <div class="wn-btns">
+        <button class="wn-btn-secondary">Voir plus tard</button>
+        <button class="wn-btn-primary">Compris, c'est parti
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

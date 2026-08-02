@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Architecture AlphaTrade Gold AI Brain v1.0</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --gold:#ffd166; --bronze:#c98a4b; --purple:#b79bf0; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(255,209,102,0.07), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid #6e5a1c; border-radius:20px;
+    color:var(--gold); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin:0 4px 14px;}
+  header h1{font-size:1.9rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:860px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--gold); font-size:1.25rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.05rem; margin:22px 0 8px;}
+  h4{color:var(--green-soft); font-size:0.9rem; margin:14px 0 5px; text-transform:uppercase; letter-spacing:0.4px;}
+  p{line-height:1.68;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.3px; line-height:1.55; color:var(--green-soft);}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13px;}
+  th, td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .agent-card{background:var(--card); border:1px solid var(--border-strong); border-radius:14px; padding:20px 22px; margin:18px 0;}
+  .agent-card.caio{border-color:var(--gold); background:linear-gradient(135deg, rgba(255,209,102,0.08), transparent);}
+  .agent-card.mission{border-color:var(--orange); background:linear-gradient(135deg, rgba(255,180,84,0.08), transparent);}
+  .agent-card.memory{border-color:var(--blue); background:linear-gradient(135deg, rgba(92,200,255,0.06), transparent);}
+  .agent-card.coach{border-color:var(--purple); background:linear-gradient(135deg, rgba(183,155,240,0.07), transparent);}
+  .agent-card.preservation{border-color:var(--red); background:linear-gradient(135deg, rgba(255,92,108,0.07), transparent);}
+  .agent-card.goldintel{border-color:var(--bronze); background:linear-gradient(135deg, rgba(201,138,75,0.13), transparent);}
+  .agent-card.plan{border-color:var(--bronze); background:linear-gradient(135deg, rgba(201,138,75,0.09), transparent);}
+  .agent-card h3{margin-top:0; display:flex; align-items:center; gap:10px;}
+  .num-badge{display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px;
+    background:var(--card2); border:1px solid var(--border-strong); color:var(--green-soft); font-size:12px; font-weight:700; flex-shrink:0;}
+  .fiche-row{display:grid; grid-template-columns:180px 1fr; gap:4px 16px; margin:4px 0; font-size:13.5px; line-height:1.55;}
+  .fiche-row .k{color:var(--green-soft); font-weight:600; padding-top:1px;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .verdict{background:linear-gradient(135deg, rgba(255,209,102,0.09), rgba(57,255,136,0.03)); border:1px solid var(--border-strong); border-radius:14px; padding:22px 26px; margin:20px 0;}
+  .verdict h3{margin-top:0; color:var(--gold);}
+  .founding{background:linear-gradient(135deg, rgba(255,180,84,0.12), rgba(255,209,102,0.04)); border:1px solid var(--orange); border-radius:16px; padding:26px 30px; margin:20px 0; text-align:center;}
+  .founding p.statement{font-size:1.15rem; color:#fff; font-weight:600; line-height:1.5; margin:0;}
+  .single-asset{text-align:center; padding:20px; border:1px solid var(--bronze); border-radius:14px; background:linear-gradient(135deg, rgba(201,138,75,0.10), transparent);}
+  .single-asset .xauusd{font-family:Consolas,Menlo,monospace; font-size:2.1rem; font-weight:700; color:var(--bronze); letter-spacing:2px; margin:6px 0;}
+  .not-list{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:14px 0 4px;}
+  .not-list span{background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:5px 12px; font-size:12.5px; color:var(--dim); text-decoration:line-through;}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.gold{background:#4a3b12; color:var(--gold);}
+  .badge.orange{background:#4a2f12; color:var(--orange);}
+  .badge.blue{background:var(--blue-dim); color:var(--blue);}
+  .badge.purple{background:#2c2140; color:var(--purple);}
+  .badge.red{background:#4a1a1a; color:var(--red);}
+  .badge.bronze{background:#3d2a15; color:var(--bronze);}
+  .badge.green{background:#123a1c; color:var(--green);}
+  .badge.dim{background:#151f19; color:var(--dim);}
+  .cut-table td:first-child{white-space:nowrap; font-weight:600; color:#fff;}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--gold); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;}
+  .toc li{break-inside:avoid; margin-bottom:4px;}
+  .scenario-row{display:flex; gap:12px; flex-wrap:wrap; margin:12px 0;}
+  .scenario{flex:1; min-width:180px; background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:12px 14px;}
+  .scenario .dir{font-weight:700; font-size:0.95rem;}
+  .scenario .dir.buy{color:var(--green);}
+  .scenario .dir.sell{color:var(--red);}
+  .scenario .dir.wait{color:var(--dim);}
+  .scenario .conf{color:var(--muted); font-size:12px; margin-top:4px;}
+  .conf-bar{height:6px; border-radius:3px; background:var(--border); margin-top:6px; overflow:hidden;}
+  .conf-bar .fill{height:100%; background:var(--gold);}
+  .mission-box{background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:16px 20px; font-family:Consolas,Menlo,monospace; font-size:13px; color:var(--green-soft); line-height:1.9;}
+  .style-row{display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;}
+  .style-row span{background:var(--card2); border:1px solid var(--border-strong); border-radius:20px; padding:6px 16px; font-size:13px; color:var(--text);}
+  .style-row span.no{color:var(--dim); border-style:dashed;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Architecture — aucun code, conception seule</div>
+  <div class="tag" style="border-color:#5a3d1f; color:var(--bronze);">Spécialiste exclusif XAUUSD</div>
+  <div class="tag" style="border-color:#1c6e3f; color:var(--green);">v5.0.3 → v5.1.0</div>
+  <h1>Architecture AlphaTrade Gold AI Brain v1.0</h1>
+  <p><b>Ce n'est pas une nouvelle application.</b> C'est la feuille de route de l'évolution de l'application AlphaTrade Gold actuellement en production (<b>version 5.0.3</b>) vers sa prochaine version, la <b>version 5.1.0</b> — le numéro « v1.0 » de ce document désigne la version du plan d'architecture lui-même, pas celle de l'application. Chaque agent décrit plus bas s'appuie sur du code déjà existant dans <code>alphatrade_engine.py</code> (voir la section « Correspondance avec le code existant ») et le fait évoluer, il ne le remplace pas par un nouveau projet.</p>
+  <p>Document de conception demandé par Louis le 30/07/2026, suite à l'audit stratégique du même jour, affiné sur quatre passes successives. Cette passe recentre l'intégralité du document sur un principe non négociable : AlphaTrade Gold n'est pas un moteur multi-actifs, c'est un trader professionnel autonome <b>spécialisé uniquement sur l'or (XAUUSD)</b>. Ce document reste la <b>« constitution »</b> du cerveau d'AlphaTrade — le cadre de référence auquel toute évolution future devra se conformer. Aucun développement ne doit démarrer avant validation.</p>
+</header>
+
+<div class="wrap">
+
+<section id="mission-fondatrice">
+  <div class="founding">
+    <span class="badge orange">Phrase fondatrice — version Gold, Louis, 30/07/2026</span>
+    <p class="statement">« AlphaTrade Gold n'est pas conçu pour exécuter des ordres. Il est conçu pour prendre des décisions de trading de qualité sur XAUUSD, gérer un capital avec discipline et atteindre des objectifs de performance tout en protégeant durablement ce capital. »</p>
+    <p style="color:var(--muted); margin-top:14px; font-size:13.5px;">Cette formulation affine, sans la contredire, la phrase fondatrice posée à la passe précédente (<i>« AlphaTrade n'a pas pour mission de trouver des opportunités de trading. Sa mission est de gérer un capital avec discipline... »</i>) : elle lui ajoute la dimension qui manquait — la <b>qualité de la décision sur un actif précis</b>, pas seulement la discipline de gestion. Chaque agent, chaque décision, chaque évolution future doivent servir cet objectif unique, sur cet actif unique.</p>
+  </div>
+</section>
+
+<section id="seul-actif">
+<div class="single-asset">
+  <span class="badge bronze">Non négociable</span>
+  <p>AlphaTrade Gold ne recherche pas des actifs. Toute son intelligence est consacrée à comprendre un seul marché :</p>
+  <div class="xauusd">XAUUSD</div>
+  <p style="color:var(--muted); font-size:13px; margin-top:10px;">Il ne cherche jamais d'opportunité ailleurs :</p>
+  <div class="not-list">
+    <span>EURUSD</span><span>GBPUSD</span><span>BTCUSD</span><span>NASDAQ</span><span>tout autre actif</span>
+  </div>
+</div>
+<p style="margin-top:16px;">Ce choix n'est pas une limitation technique — c'est une décision stratégique. Un trader professionnel qui excelle réellement sur un marché passe des années à en apprendre les nuances : ses horaires de réaction, ses faux signaux, son comportement autour des publications macro, ses niveaux psychologiques récurrents. AlphaTrade Gold vise ce niveau d'expertise <i>verticale</i>, pas une couverture <i>horizontale</i> de plusieurs marchés compris superficiellement. Toute proposition future d'ajouter un second actif doit être reconnue comme un changement de nature du projet, pas comme une extension mineure.</p>
+</section>
+
+<section class="toc">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#regle-or">Règle d'or</a></li>
+    <li><a href="#vue">Vue d'ensemble — la salle de marché du Gold</a></li>
+    <li><a href="#cycle-mission">Le cycle de mission (jour/semaine/mois)</a></li>
+    <li><a href="#cycle-decision">Le cycle de décision (par bougie)</a></li>
+    <li><a href="#dynamique">Timeframes et style de trading dynamiques</a></li>
+    <li><a href="#plan">Le Trading Plan</a></li>
+    <li><a href="#mission-manager">Trading Mission Manager</a></li>
+    <li><a href="#caio">Chief AI Officer (CAIO)</a></li>
+    <li><a href="#preservation">Capital Preservation Mode</a></li>
+    <li><a href="#memoire">Shared Market Memory</a></li>
+    <li><a href="#confiance">Confiance par agent</a></li>
+    <li><a href="#scenarios">Scénarios concurrents</a></li>
+    <li><a href="#pending">Les Pending Orders, citoyens de première classe</a></li>
+    <li><a href="#agents">Fiches détaillées des agents</a></li>
+    <li><a href="#coach">Trading Coach &amp; Learning Manager</a></li>
+    <li><a href="#correspondance">Correspondance avec le code existant</a></li>
+    <li><a href="#v510">Découpage vers la v5.1.0</a></li>
+    <li><a href="#hors-scope">Ce que ce document ne couvre pas</a></li>
+    <li><a href="#suite">Prochaine étape</a></li>
+  </ol>
+</section>
+
+<section id="regle-or">
+<h2>Règle d'or</h2>
+<div class="verdict">
+<h3>« Aucun agent ne doit avoir une connaissance complète du système. »</h3>
+<p>Chaque agent est responsable d'une expertise précise sur le Gold, et d'une seule. La décision finale appartient uniquement au <b>Chief AI Officer</b>, encadré par le <b>Trading Mission Manager</b>, en s'appuyant sur la <b>mémoire partagée</b> et les contributions de tous les agents — jamais sur sa propre analyse du marché. Cette séparation rend le système plus modulaire, plus testable, et plus évolutif.</p>
+<p style="margin-top:10px;">Test décisif pour toute décision ou toute évolution future : <b>« Est-ce que cette décision se rapproche du comportement d'un véritable trader professionnel spécialisé sur le Gold ? »</b> Si la réponse est non, elle n'a pas sa place dans ce cerveau.</p>
+</div>
+</section>
+
+<section id="vue">
+<h2>Vue d'ensemble — la salle de marché du Gold</h2>
+<p>AlphaTrade Gold AI Brain n'est pas un pipeline procédural (<code>Analyse → Score → Seuil → Trade</code>) mais une organisation d'agents, tous spécialisés sur XAUUSD, qui collaborent à travers un état partagé, gouvernée par une mission et arbitrée par une autorité unique :</p>
+<pre>              Trading Mission Manager
+              (objectif du jour/semaine/mois)
+                         │
+                 Chief AI Officer
+                         │
+   ┌───────────┬─────────┼─────────┬───────────────┐
+   │           │         │         │               │
+Market      Structure  Smart Money  Risk      Gold Intelligence
+Observer     Analyst     Analyst   Manager   (expertise XAUUSD)
+   │           │         │         │               │
+   └───────────┴────┬────┴─────────┴───────────────┘
+                    │
+            Shared Market Memory
+                    │
+            Strategy Planner
+           (construit le Trading Plan,
+          choisit timeframes + style)
+                    │
+          Scenario Generator
+                    │
+         Confidence Evaluator
+                    │
+          Execution Manager
+                    │
+          Position Manager
+                    │
+          Performance Manager
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+  Trading Coach           Learning Manager
+   (constate)                (décide)
+</pre>
+<p>Cinq principes tiennent cette organisation ensemble :</p>
+<ul>
+<li><b>Un seul actif, une expertise totale.</b> Aucune dispersion — chaque agent est un spécialiste du Gold, pas un généraliste multi-marchés.</li>
+<li><b>Une mission gouverne la journée.</b> Le Trading Mission Manager définit le cadre (objectif, perte max, drawdown max, mode) avant même le premier cycle de décision.</li>
+<li><b>Communication indirecte.</b> Les agents ne se parlent jamais directement — ils lisent et écrivent la Shared Market Memory.</li>
+<li><b>Confiance individuelle, pas score unique.</b> Chaque agent publie son propre niveau de confiance dans ce qu'il rapporte.</li>
+<li><b>Décision unique et centralisée, y compris l'absence de décision.</b> Seul le CAIO tranche — et « aucun trade » est une décision aussi légitime que d'en prendre un.</li>
+</ul>
+</section>
+
+<section id="cycle-mission">
+<h2>Le cycle de mission (jour/semaine/mois)</h2>
+<p>Boucle de plus haut niveau, celle qui englobe toute une session de trading sur le Gold — chaque cycle de décision décrit plus bas n'en est qu'une itération :</p>
+<pre>MISSION
+   │
+Observation
+   │
+Compréhension
+   │
+Préparation  ← construction du Trading Plan
+   │
+Création de scénarios
+   │
+Validation
+   │
+Exécution
+   │
+Gestion
+   │
+Évaluation
+   │
+Apprentissage
+   │
+Nouvelle mission</pre>
+<p>Ce cycle est très proche de celui d'un desk de trading professionnel spécialisé : une mission n'est pas figée toute la journée — chaque clôture de position nourrit l'Évaluation et l'Apprentissage, qui peuvent redéfinir la mission en cours (ex : passage en <a href="#preservation">Capital Preservation Mode</a> après trois pertes) avant même la fin de la journée. La <b>Préparation</b> est l'étape où le <a href="#plan">Trading Plan</a> du jour est construit — avant elle, aucun scénario ne peut être généré.</p>
+</section>
+
+<section id="cycle-decision">
+<h2>Le cycle de décision (par bougie)</h2>
+<p>Une itération du bloc « Observation → ... → Exécution → Gestion » ci-dessus, déclenchée à chaque nouvelle bougie sur XAUUSD (ou à un intervalle fixe pour les agents qui n'ont pas besoin d'une fréquence aussi haute) :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th style="width:220px">Étape</th><td><b>Ce qui se passe</b></td></tr>
+<tr><th>1 — Observation (parallèle)</th><td><b>Market Observer</b>, <b>Structure Analyst</b>, <b>Smart Money Analyst</b> et <b>Risk Manager</b> tournent en parallèle sur XAUUSD, épaulés en continu par la connaissance accumulée de <b>Gold Intelligence</b>. Chacun écrit sa contribution + sa confiance dans son compartiment de la Shared Market Memory, sans connaître le travail des autres.</td></tr>
+<tr><th>2 — Planification</th><td>Le <b>Strategy Planner</b> lit la mémoire (contexte + structure + smart money + risque + mission active + connaissance Gold), choisit les timeframes et le style de trading du moment, et met à jour le <b>Trading Plan</b>.</td></tr>
+<tr><th>3 — Génération de scénarios</th><td>Le <b>Scenario Generator</b> décline le Trading Plan en plusieurs objets Scénario complets et concurrents (voir section dédiée), chacun avec son type d'entrée propre et sa confiance initiale.</td></tr>
+<tr><th>4 — Évaluation</th><td>Le <b>Confidence Evaluator</b> note chaque scénario en croisant sa confiance propre avec celles déjà publiées par les agents en amont, produit un classement.</td></tr>
+<tr><th>5 — Arbitrage</th><td>Le <b>CAIO</b> reçoit le classement, les rapports complets et les niveaux de confiance de tous les agents impliqués, ainsi que le mode courant du Trading Mission Manager. Il détecte les contradictions, applique la règle d'or, et rend une décision unique : exécuter tel scénario (avec son type d'entrée déjà fixé), ou <b>ne rien faire</b>.</td></tr>
+<tr><th>6 — Exécution</th><td>Si <code>GO</code> : l'<b>Execution Manager</b> exécute exactement le type d'ordre décidé — il ne choisit rien lui-même.</td></tr>
+<tr><th>7 — Gestion</th><td>Le <b>Position Manager</b> prend le relais pour toute la durée de vie de la position, timeframe de gestion défini par le scénario.</td></tr>
+<tr><th>8 — Évaluation</th><td>Le <b>Performance Manager</b> met à jour les statistiques réalisées à chaque clôture.</td></tr>
+<tr><th>9 — Apprentissage (asynchrone)</th><td>Le <b>Trading Coach</b> observe, le <b>Learning Manager</b> décide des ajustements, <b>Gold Intelligence</b> enrichit sa base de connaissance — les trois tournent indépendamment de ce cycle.</td></tr>
+</table>
+</div>
+</section>
+
+<section id="dynamique">
+<h2>Timeframes et style de trading dynamiques</h2>
+<h3>Les timeframes ne sont plus fixes</h3>
+<p>Le moteur actuel travaille en un timeframe fixe, décidé une fois pour toutes dans la configuration. Ce n'est pas ainsi que travaille un trader professionnel. Le cerveau doit désormais décider lui-même, à chaque Trading Plan, sur quel timeframe analyser le contexte, sur quel timeframe rechercher une opportunité, sur quel timeframe entrer, et sur quel timeframe gérer la position :</p>
+<pre>Analyse                Recherche              Entrée           Gestion
+  D1
+   ↓
+  H4                      M30
+   ↓                       ↓                  M5
+  H1                      M15               ou M1                M1
+</pre>
+<p>Cette cascade n'est pas figée non plus — un contexte très directionnel peut ne demander qu'un seul timeframe d'analyse (H4), un contexte incertain peut en demander trois (D1→H4→H1). C'est le <b>Strategy Planner</b> qui choisit cette cascade à chaque construction du Trading Plan, en s'appuyant sur les lectures multi-timeframe du Market Observer et sur les patterns historiques connus de Gold Intelligence. Le Scénario final n'enregistre que les trois timeframes qui comptent pour l'exécution et la gestion : <code>Timeframe d'analyse</code>, <code>Timeframe d'entrée</code>, <code>Timeframe de gestion</code> (voir schéma de Scénario plus bas).</p>
+<h3>Le style de trading devient une décision stratégique</h3>
+<p>Je ne veux pas imposer un mode unique — selon les conditions du marché, AlphaTrade Gold doit pouvoir décider librement son style pour la journée ou pour un scénario donné :</p>
+<div class="style-row">
+  <span>Scalping</span>
+  <span>Intraday</span>
+  <span>Swing court</span>
+  <span class="no">Aucun trade aujourd'hui</span>
+</div>
+<p>Ce choix est porté par le <b>Strategy Planner</b> au moment de construire le Trading Plan, et devient l'un de ses champs. Un marché en forte compression avec un calendrier macro chargé peut, par exemple, aboutir légitimement à <code>Aucun trade aujourd'hui</code> — une décision de style à part entière, pas un échec du système.</p>
+</section>
+
+<section id="plan">
+<h2>Le Trading Plan</h2>
+<div class="agent-card plan">
+<h3><span class="badge bronze">Construit avant toute décision — par le Strategy Planner</span></h3>
+<p>Avant toute prise de décision, AlphaTrade Gold doit construire automatiquement un plan de trading pour la journée. Toutes les décisions du jour doivent respecter ce plan — un scénario qui le contredit sans raison nouvelle et documentée est rejeté par le CAIO.</p>
+<div class="mission-box">
+Mission du jour<br>
+&nbsp;&nbsp;Objectif : +250 $<br>
+&nbsp;&nbsp;Perte maximale : -100 $<br>
+&nbsp;&nbsp;Contexte : Haussier<br>
+&nbsp;&nbsp;Zone recherchée : Order Block H1<br>
+&nbsp;&nbsp;Entrée privilégiée : Buy Limit<br>
+&nbsp;&nbsp;Entrée secondaire : Market si cassure M5<br>
+&nbsp;&nbsp;Conditions d'annulation : Cassure H1 baissière<br>
+&nbsp;&nbsp;Style de trading : Intraday<br>
+&nbsp;&nbsp;Objectif RR : 3:1
+</div>
+<p style="margin-top:14px;">Le Trading Plan est distinct de la mission financière du Trading Mission Manager (objectif $/perte max $, horizon jour-semaine-mois) : il en hérite les contraintes, mais y ajoute la lecture <i>tactique</i> du marché — contexte, zone, entrée privilégiée/secondaire, conditions d'annulation, style, RR visé. Il est révisé en cours de journée si une condition d'annulation se déclenche, jamais à la légère.</p>
+</div>
+</section>
+
+<section id="mission-manager">
+<h2>Trading Mission Manager</h2>
+<div class="agent-card mission">
+<h3><span class="badge orange">Gouverne la journée — au-dessus du Risk Manager</span></h3>
+<p>Le Risk Manager gère un trade. Le Trading Mission Manager gère la journée entière, ainsi que les objectifs hebdomadaires et mensuels — personne, avant cet agent, ne décide <i>pourquoi</i> on trade aujourd'hui, seulement <i>si</i> un trade individuel est raisonnable.</p>
+<div class="fiche-row"><div class="k">Mission</div><div>Définir le cadre financier de la journée (et des horizons semaine/mois) avant le premier cycle de décision, puis surveiller la trajectoire en continu et faire évoluer le <i>mode</i> courant en conséquence.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Mission définie par l'utilisateur (objectif, perte max, drawdown max, nb de trades max, RR minimum), <code>Performance</code> (trajectoire réalisée), <code>Risk</code>.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Mode courant (<code>Normal</code> / <code>Prudent</code> / <code>Défense</code> / <code>Protection</code>), contraintes actives.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>mission.target_90pct</code>, <code>mission.consecutive_losses</code>, <code>mission.target_reached</code>, <code>mission.mode_changed</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Trading Objectives</code> (mission active, mode courant, contraintes).</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Le mode se dégrade progressivement plutôt que de basculer en tout-ou-rien ; jamais de dépassement de la perte max ou du drawdown max constaté a posteriori.</div></div>
+<div class="fiche-row"><div class="k">Interaction avec le CAIO</div><div>Le CAIO lit le mode courant à chaque cycle et l'applique comme contrainte dure.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Simulation d'une journée atteignant 90%/100%/120% de l'objectif ; simulation de 3 pertes consécutives ; vérification qu'aucune position n'est ouverte une fois l'objectif atteint.</div></div>
+</div>
+</section>
+
+<section id="caio">
+<h2>Chief AI Officer (CAIO)</h2>
+<div class="agent-card caio">
+<h3><span class="badge gold">Autorité unique de décision</span></h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Arbitrer entre les rapports de tous les agents spécialistes du Gold et rendre la décision finale — exécuter, refuser, ou attendre. Ne fait <b>aucune analyse de marché lui-même</b>. Opère toujours à l'intérieur du Trading Plan et du cadre posé par le Trading Mission Manager.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Rapports complets + confiance individuelle de Market Observer, Structure Analyst, Smart Money Analyst, Risk Manager, Gold Intelligence ; classement des scénarios du Confidence Evaluator ; Trading Plan ; mode courant du Trading Mission Manager.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Une décision unique : <code>{decision: GO|NO_TRADE, scenario_id?, raison, risque_autorise}</code>.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>decision.rendered</code>, <code>decision.vetoed</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Learning History</code> (historique des décisions, dont les refus, avec raison).</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Aucune décision prise sans passer par lui ; toute décision est justifiée et traçable et cohérente avec le Trading Plan actif.</div></div>
+<div class="fiche-row"><div class="k">Interaction avec les autres</div><div>Point de convergence unique ; lui seul déclenche l'Execution Manager ; subordonné au mode du Trading Mission Manager et au Trading Plan.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Cas de désaccord total entre agents ; cas où le mode est <code>Protection</code> ; cas où aucun scénario n'atteint le seuil de qualité suffisant → vérifier <code>NO_TRADE</code>.</div></div>
+</div>
+<div class="card finding" style="border-left:3px solid var(--gold);">
+  <span class="badge gold">Pouvoir explicite du CAIO</span>
+  <p>« Aucun scénario n'est suffisamment bon → aucun trade. » Le CAIO doit pouvoir rejeter <b>l'ensemble</b> des scénarios proposés, pas seulement choisir parmi eux — le meilleur trade sur le Gold est parfois de ne rien faire.</p>
+</div>
+</section>
+
+<section id="preservation">
+<h2>Capital Preservation Mode</h2>
+<div class="agent-card preservation">
+<h3><span class="badge red">Priorité absolue — avant même de trader</span></h3>
+<p><b>L'objectif principal n'est pas de trader. L'objectif principal est de protéger durablement le capital.</b> Capital Preservation Mode s'active automatiquement dès que l'un de ces six déclencheurs est constaté :</p>
+<ul>
+<li>Plusieurs pertes consécutives (Trading Mission Manager, via <code>Performance</code>).</li>
+<li>Drawdown élevé (Risk Manager, via <code>Risk</code>).</li>
+<li>Volatilité anormale sur XAUUSD (Market Observer, via <code>Market Context</code>).</li>
+<li>Spread important (Structure Analyst, via <code>Liquidity</code>).</li>
+<li>Objectif journalier déjà atteint (Trading Mission Manager, via <code>Trading Objectives</code>).</li>
+<li>Objectif mensuel déjà atteint (Trading Mission Manager, via <code>Trading Objectives</code>).</li>
+</ul>
+<pre>Capital Preservation Mode
+        │
+Risque réduit automatiquement
+        │
+Pending Orders privilégiés
+        │
+Exigences de confiance augmentées
+        │
+Suspension temporaire possible du trading</pre>
+<p>Ce mode n'est pas un agent à part entière — c'est un <b>état partagé</b> (écrit dans <code>Trading Objectives</code>) que le Risk Manager, le Scenario Generator et le CAIO consultent tous : le Risk Manager réduit le budget autorisé, le Scenario Generator relève son seuil de génération et privilégie les ordres en attente, et le CAIO applique un seuil de confiance plus élevé avant tout <code>GO</code>.</p>
+</div>
+</section>
+
+<section id="memoire">
+<h2>Shared Market Memory</h2>
+<div class="agent-card memory">
+<h3><span class="badge blue">État partagé — communication indirecte, un compartiment par expertise</span></h3>
+<p>Chaque agent écrit dans un compartiment précis et n'écrase jamais le travail d'un autre. Quatorze compartiments désormais, dont trois nouveaux propres à la spécialisation Gold (<code>Smart Money</code>, <code>Gold Knowledge</code>, <code>Trading Plan</code>) :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Compartiment</th><th>Écrit par</th><th>Lu par</th><th>Contenu</th></tr>
+<tr><td><code>Market Context</code></td><td>Market Observer</td><td>Strategy Planner, Trading Mission Manager, Smart Money Analyst, CAIO</td><td>Tendance D1→M1, volatilité/ATR, expansion/compression, spread, sessions, heures les plus performantes, DXY, rendements obligataires US, calendrier macro (FOMC/CPI/NFP/taux/discours FED).</td></tr>
+<tr><td><code>Structures</code></td><td>Structure Analyst</td><td>Strategy Planner, Scenario Generator, Smart Money Analyst, CAIO</td><td>Zones, FVG, Order Blocks, BOS/CHOCH multi-timeframe sur XAUUSD.</td></tr>
+<tr><td><code>Smart Money</code></td><td>Smart Money Analyst</td><td>Strategy Planner, Scenario Generator, CAIO</td><td>Sweeps de liquidité, chasses aux stops, biais institutionnel, corrélation DXY/rendements comme signal de conviction.</td></tr>
+<tr><td><code>Gold Knowledge</code></td><td>Gold Intelligence</td><td>Market Observer, Structure Analyst, Smart Money Analyst, Strategy Planner, CAIO</td><td>Niveaux psychologiques, comportements historiques Londres/New York, patterns avant/après NFP-CPI, faux signaux récurrents, niveaux à réaction régulière.</td></tr>
+<tr><td><code>Indicators</code></td><td>Market Observer</td><td>Structure Analyst, Strategy Planner</td><td>Lectures brutes d'indicateurs multi-timeframe.</td></tr>
+<tr><td><code>Liquidity</code></td><td>Structure Analyst</td><td>Execution Manager, Risk Manager, Smart Money Analyst</td><td>Profondeur de marché, spread courant, qualité de liquidité.</td></tr>
+<tr><td><code>Active Scenarios</code></td><td>Scenario Generator, Confidence Evaluator</td><td>CAIO</td><td>Objets Scénario complets (voir section dédiée), avec classement.</td></tr>
+<tr><td><code>Risk</code></td><td>Risk Manager</td><td>CAIO, Scenario Generator, Trading Mission Manager</td><td>Budget de risque autorisé, exposition agrégée, niveau d'alerte.</td></tr>
+<tr><td><code>Open Positions</code></td><td>Position Manager</td><td>Risk Manager, CAIO, Trading Mission Manager</td><td>Positions en cours, direction, P&amp;L flottant, origine.</td></tr>
+<tr><td><code>Pending Orders</code></td><td>Execution Manager</td><td>Position Manager, CAIO</td><td>Ordres en attente posés, niveau, statut.</td></tr>
+<tr><td><code>Trading Objectives</code></td><td>Trading Mission Manager</td><td>Risk Manager, CAIO, Scenario Generator</td><td>Mission active (jour/semaine/mois), mode courant, contraintes actives.</td></tr>
+<tr><td><code>Trading Plan</code></td><td>Strategy Planner</td><td>Scenario Generator, CAIO, Risk Manager, Trading Mission Manager</td><td>Contexte, zone recherchée, entrée privilégiée/secondaire, conditions d'annulation, style de trading, RR objectif.</td></tr>
+<tr><td><code>Performance</code></td><td>Performance Manager</td><td>Trading Mission Manager, Trading Coach</td><td>Résultats réalisés (P&amp;L, nb de trades, RR moyen) par horizon.</td></tr>
+<tr><td><code>Learning History</code></td><td>CAIO, Trading Coach, Learning Manager</td><td>Learning Manager, CAIO</td><td>Historique des décisions, constats de performance, ajustements appliqués avec justification.</td></tr>
+</table>
+</div>
+<p><b>Contrat de lecture/écriture :</b> un agent n'écrit jamais dans un compartiment qui n'est pas le sien.</p>
+</div>
+</section>
+
+<section id="confiance">
+<h2>Confiance par agent</h2>
+<p>Chaque agent qui contribue à une décision publie son propre niveau de confiance, plutôt qu'un score global agrégé en amont :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Market Observer</th><td>95%</td></tr>
+<tr><th>Structure Analyst</th><td>88%</td></tr>
+<tr><th>Smart Money Analyst</th><td>76%</td></tr>
+<tr><th>Gold Intelligence</th><td>90%</td></tr>
+<tr><th>Risk Manager</th><td>92%</td></tr>
+<tr><th>Execution Manager</th><td>70%</td></tr>
+<tr><th>Trading Coach</th><td>98%</td></tr>
+</table>
+</div>
+<p>Le CAIO pondère ces avis au lieu de se fier à un chiffre unique.</p>
+</section>
+
+<section id="scenarios">
+<h2>Scénarios concurrents</h2>
+<p>Un scénario n'est plus une simple paire direction/confiance — c'est un <b>objet riche</b>, spécifique à XAUUSD, pour que le CAIO compare de vraies propositions argumentées :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Champ</th><th>Exemple</th></tr>
+<tr><td><code>Nom</code></td><td>« Retour sur Order Block H1 après cassure M15 »</td></tr>
+<tr><td><code>Contexte</code></td><td>Haussier, session de Londres, DXY en repli.</td></tr>
+<tr><td><code>Actif</code></td><td>XAUUSD</td></tr>
+<tr><td><code>Direction</code></td><td>BUY</td></tr>
+<tr><td><code>Justification</code></td><td>Retour attendu sur zone de demande H1 après cassure de structure M15, confirmé par une absence de sweep contraire (Smart Money Analyst).</td></tr>
+<tr><td><code>Prix d'entrée</code></td><td>2 385,40</td></tr>
+<tr><td><code>Type d'entrée</code></td><td>Buy Limit <span style="color:var(--dim)">(Market / Buy Limit / Sell Limit / Buy Stop / Sell Stop / Wait)</span></td></tr>
+<tr><td><code>Stop Loss</code></td><td>2 381,00</td></tr>
+<tr><td><code>TP1 / TP2 / TP3</code></td><td>2 389,50 / 2 393,50 / 2 399,00</td></tr>
+<tr><td><code>RR attendu</code></td><td>2.85</td></tr>
+<tr><td><code>Timeframe d'analyse</code></td><td>H4</td></tr>
+<tr><td><code>Timeframe d'entrée</code></td><td>M15</td></tr>
+<tr><td><code>Timeframe de gestion</code></td><td>M5</td></tr>
+<tr><td><code>Niveau de confiance</code></td><td>84%</td></tr>
+<tr><td><code>Arguments POUR</code></td><td>Structure H4 haussière, FVG non comblé, RR excellent, aucun sweep contraire détecté.</td></tr>
+<tr><td><code>Arguments CONTRE</code></td><td>Volume décroissant sur la dernière impulsion.</td></tr>
+<tr><td><code>Risques</code></td><td>News économique dans 3h ; zone déjà testée une fois.</td></tr>
+<tr><td><code>Agent créateur</code></td><td>Scenario Generator</td></tr>
+<tr><td><code>Version</code></td><td>1</td></tr>
+</table>
+</div>
+<p>Format condensé pour la vue d'ensemble rapide (celui utilisé par le Confidence Evaluator pour un premier tri) :</p>
+<div class="scenario-row">
+  <div class="scenario">
+    <div class="dir buy">Scénario A — BUY LIMIT</div>
+    <div class="conf">Confiance : 84%</div>
+    <div class="conf-bar"><div class="fill" style="width:84%"></div></div>
+  </div>
+  <div class="scenario">
+    <div class="dir sell">Scénario B — SELL LIMIT</div>
+    <div class="conf">Confiance : 63%</div>
+    <div class="conf-bar"><div class="fill" style="width:63%"></div></div>
+  </div>
+  <div class="scenario">
+    <div class="dir wait">Scénario C — WAIT</div>
+    <div class="conf">Confiance : 91%</div>
+    <div class="conf-bar"><div class="fill" style="width:91%"></div></div>
+  </div>
+</div>
+<p>Le scénario le plus confiant n'est pas automatiquement retenu — dans l'exemple ci-dessus, <code>WAIT</code> a la confiance la plus haute. C'est le CAIO qui tranche entre agir et attendre, jamais un simple tri par confiance.</p>
+</section>
+
+<section id="pending">
+<h2>Les Pending Orders, citoyens de première classe</h2>
+<div class="card">
+<p>Le moteur actuel privilégie systématiquement l'entrée immédiate au marché. Ce n'est plus acceptable : le cerveau doit décider librement entre les sept types d'ordre disponibles sur XAUUSD, et la <b>meilleure entrée est celle qui maximise la probabilité de succès, pas forcément la plus rapide</b> :</p>
+<div class="style-row">
+  <span>BUY MARKET</span><span>SELL MARKET</span><span>BUY LIMIT</span><span>SELL LIMIT</span><span>BUY STOP</span><span>SELL STOP</span><span class="no">WAIT</span>
+</div>
+<p style="margin-top:12px;">Ce choix appartient au <b>Scenario Generator</b>, qui fixe le <code>Type d'entrée</code> dès la construction de chaque scénario en croisant Structures, Smart Money et Gold Knowledge (ex : un sweep de liquidité récemment détecté sous une zone de demande favorise un Buy Limit posé sous le prix plutôt qu'un Buy Market immédiat). Le CAIO choisit ensuite parmi les scénarios proposés, type d'entrée inclus. L'<b>Execution Manager</b> n'a aucune discrétion sur ce choix : son rôle se limite à l'exécution mécanique fidèle du type décidé, avec un contrôle de bon sens au moment d'envoyer l'ordre (spread anormal, requote) — jamais un changement de type de sa propre initiative.</p>
+</div>
+</section>
+
+<section id="agents">
+<h2>Fiches détaillées des agents</h2>
+<p>Pour chaque agent : mission, entrées, sorties, événements émis, écriture dans la mémoire partagée, critères de réussite, interaction avec le CAIO, tests à prévoir. Tous sont désormais des spécialistes exclusifs de XAUUSD.</p>
+
+<div class="agent-card">
+<h3><span class="num-badge">1</span> Market Observer</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Devenir un véritable analyste de l'or : surveiller en permanence les tendances D1, H4, H1, M30, M15, M5, M1, ainsi que la volatilité, l'ATR, l'expansion/compression, le spread, la liquidité, les sessions et les heures historiquement les plus performantes du Gold. Intègre progressivement le contexte macro qui pilote l'or : FOMC, CPI, NFP, décisions de taux, discours FED, DXY, rendement des obligations américaines.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Flux MT5 (rates/ticks XAUUSD, tous timeframes), calendrier de sessions, calendrier économique macro (à intégrer progressivement, absent aujourd'hui), flux DXY/rendements (à intégrer, absent aujourd'hui).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Snapshot de contexte complet : régime, volatilité/ATR courants, biais par timeframe D1→M1, session active, heures performantes, contexte macro.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>context.updated</code>, <code>context.regime_changed</code>, <code>context.macro_event_upcoming</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Market Context</code>, <code>Indicators</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Fraîcheur des données sur tous les timeframes ; détection de régime cohérente a posteriori.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Indirecte, via la mémoire.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Détection de régime sur séquences historiques XAUUSD connues ; comportement en cas de flux MT5 interrompu ; comportement à l'approche d'une publication macro majeure.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">2</span> Structure Analyst</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Identifier la structure de marché sur XAUUSD — zones, FVG, Order Blocks, BOS/CHOCH, liquidité. Compétence <b>totalement absente</b> du moteur actuel.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Bougies multi-timeframe XAUUSD, profondeur de marché (module Microstructure existant).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Zones actives avec type, niveau, timeframe d'origine, statut ; qualité de liquidité courante.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>structure.zone_detected</code>, <code>structure.bos_detected</code>, <code>structure.zone_invalidated</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Structures</code>, <code>Liquidity</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Taux de réaction du prix sur les zones identifiées ; pas de zones fantômes.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Indirecte, via la mémoire.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Détection sur cas XAUUSD annotés manuellement ; cohérence entre timeframes.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">3</span> Smart Money Analyst</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Lire l'empreinte institutionnelle propre au Gold — sweeps de liquidité, chasses aux stops, manipulations avant les vrais mouvements — pour distinguer une vraie cassure d'un piège. Distinct du Structure Analyst : ce dernier détecte la structure technique, celui-ci en interprète l'intention.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Structures</code>, <code>Market Context</code> (DXY/rendements), profondeur de marché.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Alertes de sweep/piège, biais institutionnel (accumulation/distribution), corrélation DXY/rendements comme signal de conviction.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>smartmoney.sweep_detected</code>, <code>smartmoney.trap_detected</code>, <code>smartmoney.bias_updated</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Smart Money</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Taux de faux signaux évités mesurable a posteriori sur des cassures XAUUSD annotées.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Indirecte, via la mémoire — alimente fortement le choix du type d'entrée en scénario.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Détection de sweeps/pièges historiques connus sur XAUUSD ; cohérence du biais avec la corrélation DXY réelle.</div></div>
+</div>
+
+<div class="agent-card goldintel">
+<h3><span class="badge bronze">Gold Intelligence — expertise métier du marché</span></h3>
+<p>N'utilise pas simplement des indicateurs — apporte une véritable expertise métier propre à XAUUSD, accumulée dans la durée. Distinct du Trading Coach : le Coach observe les résultats <i>propres</i> d'AlphaTrade, Gold Intelligence étudie le comportement du <i>marché lui-même</i>, indépendamment des trades passés du bot.</p>
+<div class="fiche-row"><div class="k">Mission</div><div>Accumuler une connaissance experte du comportement du Gold : zones psychologiques, réactions historiques, comportement pendant Londres, comportement pendant New York, comportement avant/après NFP, comportement avant/après CPI, faux signaux récurrents, niveaux où le Gold réagit régulièrement.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Historique de prix XAUUSD long terme, <code>Structures</code>, calendrier économique, constats du Trading Coach (recoupement avec l'expérience propre du bot).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Base de connaissance structurée : niveaux psychologiques confirmés, patterns saisonniers/horaires, alertes de fenêtres à risque (ex : « historiquement erratique dans les 15 min après le NFP »).</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>goldintel.level_confirmed</code>, <code>goldintel.pattern_flagged</code>, <code>goldintel.news_window_alert</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Gold Knowledge</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Chaque niveau/pattern retenu est étayé par un échantillon historique suffisant, jamais une anecdote isolée.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Indirecte, via la mémoire — fournit du contexte de fond à Market Observer, Structure Analyst, Smart Money Analyst et Strategy Planner.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Validation d'un niveau psychologique sur historique long ; non-déclenchement d'une alerte fenêtre-à-risque sur échantillon insuffisant.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">4</span> Risk Manager</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Déterminer le risque acceptable pour <b>ce trade précis</b> sur XAUUSD, en fonction du contexte et de l'exposition déjà engagée — distinct du Trading Mission Manager, qui gère la journée entière.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Trading Objectives</code> (mode courant), <code>Open Positions</code>, <code>Performance</code>.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Budget de risque autorisé pour ce cycle, niveau d'alerte, plafond d'exposition agrégée restant.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>risk.budget_updated</code>, <code>risk.limit_reached</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Risk</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Aucun dépassement de plafond constaté a posteriori ; budget réduit de façon mesurable après une série de pertes.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div><b>Veto direct</b> — son avis peut à lui seul bloquer un trade quelle que soit la confiance des autres.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Rejeu d'une série de pertes ; scénario Renfort+Rebond simultanés → vérifier le plafond agrégé.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">5</span> Strategy Planner</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Construire et tenir à jour le <a href="#plan">Trading Plan</a> — contexte, zone recherchée, entrée privilégiée/secondaire, conditions d'annulation. Choisit lui-même la cascade de timeframes (analyse → recherche → entrée → gestion) et le style de trading du moment.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Market Context</code>, <code>Structures</code>, <code>Smart Money</code>, <code>Gold Knowledge</code>, <code>Risk</code>, <code>Trading Objectives</code>.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Trading Plan à jour : contexte, zone, entrée privilégiée/secondaire, condition d'annulation, style, RR objectif, cascade de timeframes.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>plan.drafted</code>, <code>plan.invalidated</code> (condition d'annulation déclenchée).</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Trading Plan</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Aucun plan construit sur données incomplètes ou périmées ; réévaluation rapide dès qu'une condition d'annulation apparaît.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Aucune directe — le CAIO consulte le Trading Plan via la mémoire.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Absence de plan si contexte insuffisant ; choix de style cohérent avec la volatilité/compression réelle ; détection de condition d'annulation.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">6</span> Scenario Generator</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Décliner le Trading Plan en plusieurs objets Scénario complets et concurrents (voir schéma dédié), en fixant pour chacun son type d'entrée exact parmi les sept disponibles.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Trading Plan</code>, <code>Structures</code>, <code>Smart Money</code>, <code>Trading Objectives</code> (mode — influence la sélectivité).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Liste d'objets Scénario complets, chacun avec son type d'entrée déjà tranché.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>scenarios.generated</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Active Scenarios</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Toujours au moins un scénario <code>WAIT</code> proposé ; scénarios réellement distincts ; sélectivité accrue en Capital Preservation Mode ; type d'entrée cohérent avec le signal Smart Money.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Aucune directe.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Génération systématique d'un WAIT ; réduction du nombre/agressivité des scénarios en mode Protection ; cohérence type d'entrée / contexte Smart Money.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">7</span> Confidence Evaluator</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Comparer les scénarios entre eux en croisant leur confiance propre avec celles des agents en amont, produire un classement pour le CAIO.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Active Scenarios</code>, confiance individuelle de Market Observer, Structure Analyst, Smart Money Analyst, Gold Intelligence, Risk Manager.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Classement des scénarios avec confiance finale pondérée.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>scenarios.ranked</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Active Scenarios</code> (mise à jour du classement).</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Ne favorise jamais automatiquement un scénario directionnel sur WAIT sans justification pondérée réelle.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Fournisseur direct — dernière étape avant l'arbitrage.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Cas où un agent en amont a une confiance très basse → vérifier la pénalisation du scénario correspondant.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">8</span> Execution Manager</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Exécuter fidèlement le type d'ordre déjà décidé par le scénario retenu (Market/Limit/Stop/Wait sur les sept types possibles) — aucune discrétion sur le choix du type, seulement sur les détails mécaniques d'envoi.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Décision du CAIO (type d'entrée déjà fixé), <code>Liquidity</code> (contrôle de bon sens avant envoi : spread anormal, requote).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Ordre MT5 envoyé ou posé en attente, confirmation d'exécution.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>execution.filled</code>, <code>execution.pending_placed</code>, <code>execution.rejected</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Open Positions</code>, <code>Pending Orders</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Aucun ordre sans décision <code>GO</code> explicite ; toujours un stop-loss broker posé ; type d'ordre jamais modifié de sa propre initiative.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Seul agent directement déclenché par le CAIO.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Stop-loss broker systématique ; gestion des rejets sans perdre la trace de la décision d'origine ; refus d'envoi sur spread anormal.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">9</span> Position Manager</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Piloter la position ouverte — break-even, sorties par paliers TP1/TP2/TP3, trailing. Brique déjà la plus mature du moteur actuel.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Open Positions</code>, <code>Risk</code> (pour dimensionner Renfort/Rebond selon le budget courant).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Ajustements de position selon TP1/TP2/TP3 ; toute nouvelle position (Renfort/Rebond) redemande un scénario au Strategy Planner, jamais une décision autonome.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>position.breakeven_applied</code>, <code>position.tp1_hit</code>, <code>position.tp2_hit</code>, <code>position.tp3_hit</code>, <code>position.closed</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Open Positions</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>BE sensible au risque/volatilité/distance-au-TP ; sizing ancré au budget de risque courant.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Toute nouvelle position repasse par le cycle complet, donc par le CAIO.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Rejeu de positions historiques réelles ; Renfort+Rebond simultanés → cohérence avec le plafond du Risk Manager.</div></div>
+</div>
+
+<div class="agent-card">
+<h3><span class="num-badge">10</span> Performance Manager</h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Suivre et consigner les résultats réalisés — <b>agent de constat</b>, distinct du Trading Mission Manager qui décide des conséquences comportementales.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Historique des clôtures, <code>Open Positions</code> (flottant).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>P&amp;L réalisé, nombre de trades, RR moyen — par jour/semaine/mois.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>performance.trade_closed</code>, <code>performance.horizon_updated</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Performance</code>.</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Chiffres toujours à jour à chaque clôture, aucune divergence avec l'historique MT5 réel.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Aucune directe — alimente le Trading Mission Manager, qui lui-même informe le CAIO.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Cohérence des agrégats jour/semaine/mois après une séquence de trades simulée.</div></div>
+</div>
+
+</section>
+
+<section id="coach">
+<h2>Trading Coach &amp; Learning Manager</h2>
+<p>Scission nette : <b>le Trading Coach constate, le Learning Manager décide.</b> Aucun des deux ne trade jamais. Distinct de Gold Intelligence : le Coach et le Learning Manager travaillent sur les résultats <i>propres</i> d'AlphaTrade, Gold Intelligence sur le comportement du <i>marché</i> lui-même.</p>
+
+<div class="agent-card coach">
+<h3><span class="badge purple">Trading Coach — constate</span></h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Observer les résultats sur la durée et détecter des motifs — jamais de décision. Ex : « les setups FVG sur XAUUSD fonctionnent très bien. »</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div><code>Learning History</code>, <code>Performance</code>, historique des 100 derniers trades.</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Constats factuels et mesurés, avec taille d'échantillon et significativité.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>coach.pattern_detected</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Learning History</code> (constats).</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Jamais de constat basé sur un échantillon trop petit.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Aucune directe — alimente le Learning Manager.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Détection sur jeu de données annoté ; non-déclenchement sur échantillon trop petit.</div></div>
+</div>
+
+<div class="agent-card coach">
+<h3><span class="badge purple">Learning Manager — décide</span></h3>
+<div class="fiche-row"><div class="k">Mission</div><div>Transformer les constats du Trading Coach en ajustements réels — pondérations, préférences — bornés et justifiés.</div></div>
+<div class="fiche-row"><div class="k">Entrées</div><div>Constats du Trading Coach (<code>Learning History</code>).</div></div>
+<div class="fiche-row"><div class="k">Sorties</div><div>Ajustements de pondération/préférence appliqués aux agents concernés.</div></div>
+<div class="fiche-row"><div class="k">Événements émis</div><div><code>learning.weight_adjusted</code>, <code>learning.adjustment_reverted</code>.</div></div>
+<div class="fiche-row"><div class="k">Écrit dans la mémoire</div><div><code>Learning History</code> (ajustements appliqués).</div></div>
+<div class="fiche-row"><div class="k">Critères de réussite</div><div>Ajustements suivis d'une amélioration mesurable, sinon révisés ou annulés ; jamais non bornés.</div></div>
+<div class="fiche-row"><div class="k">Interaction CAIO</div><div>Influence indirecte via les agents ajustés — jamais d'action directe sur une décision en cours.</div></div>
+<div class="fiche-row"><div class="k">Tests à prévoir</div><div>Vérification des bornes ; annulation d'un ajustement à effet négatif mesuré.</div></div>
+</div>
+</section>
+
+<section id="correspondance">
+<h2>Correspondance avec le code existant</h2>
+<p>Ce document part d'une organisation cible, pas d'une page blanche — la plupart des agents ont déjà une base concrète dans <code>alphatrade_engine.py</code>, à faire évoluer plutôt qu'à réécrire de zéro :</p>
+<div class="tbl-wrap">
+<table>
+<tr><th>Agent cible</th><th>Base existante</th></tr>
+<tr><td>Market Observer</td><td><code>symbol_analysis()</code>, <code>multi_timeframe_context()</code>, <code>timeframe_trend_context()</code>, <code>session_access()</code>. Le volet macro (FOMC/CPI/NFP/DXY/rendements) est entièrement à construire.</td></tr>
+<tr><td>Structure Analyst</td><td><b>Base directe solide</b> : <code>market_structure.py</code>/<code>kb2_market_structure()</code> (régime HH/HL/LH/LL) et <code>market_zones.py</code>/<code>kb3_market_zones()</code> (S/R, supply/demand, zones institutionnelles) — déjà codés et testés le 15/07/2026, actuellement isolés (pas branchés en continu, pas encore un agent publiant sa propre confiance).</td></tr>
+<tr><td>Smart Money Analyst</td><td><b>Base directe solide</b> : <code>market_smart_money.py</code>/<code>kb5_smart_money()</code> (FVG, Order Blocks, BOS/CHOCH, Liquidity Grabs, Equal Highs/Lows, Premium/Discount) — déjà codé et testé le 15/07/2026, isolé aujourd'hui.</td></tr>
+<tr><td>Gold Intelligence</td><td>Aucune base directe. Le plus proche existant est purement statique : <code>session_access()</code> code déjà des horaires figés, mais aucune mémoire des comportements historiques (niveaux, faux signaux, réactions post-NFP) n'existe.</td></tr>
+<tr><td>Risk Manager</td><td><code>lot_safety_state()</code>, paramètres <code>reinforcement_*</code>/<code>rebond_*</code> existants.</td></tr>
+<tr><td>Trading Mission Manager</td><td><code>protection_state()</code> (session_target/session_max_loss/giveback) — base directe la plus proche, à étendre aux horizons semaine/mois et à un mode graduel.</td></tr>
+<tr><td>Trading Plan</td><td>Aucune base directe — le plus proche existant est la configuration statique d'une stratégie (seuils fixes une fois pour toutes), à l'opposé d'un plan reconstruit chaque jour selon le contexte.</td></tr>
+<tr><td>Strategy Planner / Scenario Generator / Confidence Evaluator</td><td>Aucune base directe — <code>symbol_analysis()</code> fait tout en un seul bloc. Partie la plus neuve de cette architecture.</td></tr>
+<tr><td>Execution Manager</td><td><code>open_position()</code>, <code>send_deal()</code> — à étendre pour les six types d'ordre (dont les ordres en attente, absents aujourd'hui) et pour toujours poser un SL broker.</td></tr>
+<tr><td>Position Manager</td><td><code>fast_breakeven_step()</code>, <code>take_profit_step()</code> (déjà en paliers — base directe pour TP1/TP2/TP3), <code>should_open_rebond()</code>, <code>position_exit_reason()</code>.</td></tr>
+<tr><td>Performance Manager</td><td>Historique de trades déjà tracé (<code>sync_history()</code>).</td></tr>
+<tr><td>Trading Coach</td><td><code>learning_state.json</code>/<code>track_position_contexts()</code>.</td></tr>
+<tr><td>Learning Manager</td><td>Partie « application des ajustements » de <code>track_position_contexts()</code> — aujourd'hui fusionnée avec le constat, à séparer.</td></tr>
+<tr><td>CAIO</td><td><code>server_trade_confirmation()</code> — précédent le plus proche, mais en tout-ou-rien plutôt qu'en arbitrage pondéré avec option NO_TRADE explicite.</td></tr>
+<tr><td>Shared Market Memory</td><td><code>status_payload()</code> agrège déjà beaucoup de contexte à chaque cycle — bon point de départ structurel.</td></tr>
+</table>
+</div>
+<p>Point notable : l'intégration de Strategy Lab (<code>external_signal_entry_decision()</code>) est déjà un prototype fonctionnel du principe « un agent externe propose une direction, le moteur central l'évalue et décide ».</p>
+</section>
+
+<section id="v510">
+<h2>Découpage vers la v5.1.0</h2>
+<p>Un cerveau à 13 agents ne se construit pas en un seul saut de version. Voici le tranchage : ce qui entre dans la v5.1.0 est presque exclusivement ce qui a déjà une base de code solide (formalisation/assemblage, pas de recherche nouvelle) ou ce qui corrige un manque de sécurité déjà identifié ; ce qui est reporté est la couche de raisonnement multi-scénarios, qui n'a aujourd'hui aucune base de code et doit s'appuyer sur les fondations de 5.1.0 pour exister.</p>
+
+<div class="card" style="border-left:4px solid var(--green);">
+<span class="badge green">Dans la v5.1.0</span>
+<div class="tbl-wrap">
+<table class="cut-table">
+<tr><th>Élément</th><th>Ce qui change concrètement</th></tr>
+<tr><td>Stop-loss broker systématique</td><td>Correction de sécurité déjà identifiée par l'audit (aujourd'hui <code>sl:0.0</code> à l'ouverture) — indépendante de l'architecture agents, entre quoi qu'il arrive.</td></tr>
+<tr><td>Trading Mission Manager (v1)</td><td>Extension directe de <code>protection_state()</code> : ajout des horizons semaine/mois et du mode gradué (Normal/Prudent/Défense/Protection) à la place du tout-ou-rien actuel.</td></tr>
+<tr><td>Capital Preservation Mode</td><td>État dérivé du Mission Manager étendu ci-dessus — formalisation des effets (risque réduit, pending privilégiés, confiance relevée, suspension), pas un nouvel agent.</td></tr>
+<tr><td>Risk Manager</td><td>Déjà largement existant (<code>lot_safety_state()</code>, <code>reinforcement_*</code>, <code>rebond_*</code>) — formalisé en agent qui publie une confiance et écrit dans le compartiment <code>Risk</code>.</td></tr>
+<tr><td>Structure Analyst</td><td>Formalisation de KB2 + KB3 (déjà codés et testés, isolés aujourd'hui) — branchement en continu, publication de confiance, écriture dans <code>Structures</code>/<code>Liquidity</code>.</td></tr>
+<tr><td>Smart Money Analyst</td><td>Formalisation de KB5 (déjà codé et testé, isolé aujourd'hui) — même traitement, écrit dans <code>Smart Money</code>.</td></tr>
+<tr><td>Performance Manager</td><td>Extension simple de <code>sync_history()</code> pour des agrégats jour/semaine/mois — la donnée existe déjà, seuls les horizons manquent.</td></tr>
+<tr><td>Trading Coach + Learning Manager</td><td>Scission du <code>track_position_contexts()</code>/<code>learning_state.json</code> déjà existant et fusionné aujourd'hui, en deux responsabilités distinctes — les deux déjà largement codées.</td></tr>
+<tr><td>CAIO (v1 minimal)</td><td>Extension de <code>server_trade_confirmation()</code> : reçoit Risk Manager + mode du Mission Manager + décision du moteur actif (AlphaTrade AI ou KB1000 Gold AI), rend GO/NO_TRADE avec raison. Pas encore l'arbitrage multi-scénarios complet — ça viendra avec le Scenario Generator.</td></tr>
+<tr><td>Shared Market Memory (fondation)</td><td>Transformation de <code>status_payload()</code> en état persistant — 9 des 14 compartiments (<code>Market Context</code>, <code>Structures</code>, <code>Smart Money</code>, <code>Liquidity</code>, <code>Risk</code>, <code>Open Positions</code>, <code>Trading Objectives</code>, <code>Performance</code>, <code>Learning History</code>), ceux que les agents ci-dessus peuvent déjà alimenter.</td></tr>
+<tr><td>Position Manager — KB8</td><td><b>Correction de Louis (31/07/2026) : KB8 avait déjà été branché puis retiré, car il causait des pertes réelles en live.</b> Ce n'est donc pas un rebranchement à finaliser mais un <b>diagnostic préalable obligatoire</b> (voir la nouvelle Proposition Technique v5.1.0) avant toute réactivation, même partielle.</td></tr>
+<tr><td>Types d'ordre (complet)</td><td><b>Correction de Louis : pas seulement Buy/Sell Limit — tous les types, y compris l'entrée immédiate.</b> Le choix n'est pas une restriction de l'architecture mais piloté par le <code>strategy_mode</code> déjà existant dans l'app : chaque profil de stratégie (scalping, structuré, ...) déclare sa propre politique d'entrée. Détail dans la Proposition Technique v5.1.0.</td></tr>
+</table>
+</div>
+</div>
+
+<div class="card" style="border-left:4px solid var(--dim); margin-top:16px;">
+<span class="badge dim">Après la v5.1.0 (5.1.1 et suivantes)</span>
+<div class="tbl-wrap">
+<table class="cut-table">
+<tr><th>Élément</th><th>Pourquoi ce n'est pas dans la 5.1.0</th></tr>
+<tr><td>Strategy Planner / Scenario Generator / Confidence Evaluator</td><td>La vraie couche de raisonnement multi-scénarios — aucune base de code existante, le chantier le plus lourd de conception ET de code. A besoin que CAIO v1 + Mission Manager + Memory (5.1.0) existent déjà pour avoir un cadre où se brancher.</td></tr>
+<tr><td>Trading Plan (artefact quotidien)</td><td>Dépend directement du Strategy Planner ci-dessus — même rythme.</td></tr>
+<tr><td>Scénarios enrichis (20 champs), timeframes dynamiques, style de trading adaptatif</td><td>Suivent la construction du Scenario Generator.</td></tr>
+<tr><td>Gold Intelligence</td><td>Nécessite une infrastructure d'accumulation de connaissance dans la durée qui n'existe pas du tout aujourd'hui (aucun module KB ne couvre niveaux psychologiques/comportements de session/patterns NFP-CPI).</td></tr>
+<tr><td>Market Observer — volet macro (FOMC/CPI/NFP/DXY/rendements)</td><td>Nécessite de choisir et brancher une source de données externe — décision non tranchée (voir « Ce que ce document ne couvre pas »).</td></tr>
+<tr><td>Compartiments restants de la Shared Memory</td><td><code>Gold Knowledge</code>, <code>Trading Plan</code>, <code>Active Scenarios</code>, <code>Pending Orders</code> complet, <code>Indicators</code> séparé — arrivent avec les agents correspondants.</td></tr>
+</table>
+</div>
+</div>
+</section>
+
+<section id="hors-scope">
+<h2>Ce que ce document ne couvre pas (à dessein)</h2>
+<ul>
+<li><b>Séquencement de construction</b> — quel agent construire en premier, migration progressive sans casser le moteur actuel.</li>
+<li><b>Choix d'implémentation technique</b> — sources de données macro (FOMC/CPI/NFP/DXY/rendements), objet en mémoire partagé entre threads, modules Python séparés, threads, micro-services.</li>
+<li><b>Formats de données précis</b> pour chaque compartiment.</li>
+<li><b>Détail des algorithmes internes</b> de chaque agent.</li>
+</ul>
+</section>
+
+<section id="suite">
+<h2>Prochaine étape</h2>
+<p>Le découpage vers la v5.1.0 ci-dessus fixe le <b>quoi</b>. Le <b>comment</b> est maintenant rédigé : voir <a href="Proposition_Technique_MiseEnOeuvre_v5.1.0.html">Proposition_Technique_MiseEnOeuvre_v5.1.0.html</a> — fichiers/fonctions par élément, ordre de construction, diagnostic préalable de KB8 (retiré en production suite à des pertes réelles, corrigé dans la table de correspondance ci-dessus), types d'ordre pilotés par <code>strategy_mode</code>, plan de sécurité et de tests. Toujours sans code, en attente de validation avant de passer au code.</p>
+</section>
+
+</div>
+<footer>
+  Architecture AlphaTrade Gold AI Brain v1.0 · 30/07/2026 · Document de conception — aucun code écrit. Feuille de route v5.0.3 → v5.1.0, spécialiste exclusif XAUUSD.
+</footer>
+</body>
+</html>

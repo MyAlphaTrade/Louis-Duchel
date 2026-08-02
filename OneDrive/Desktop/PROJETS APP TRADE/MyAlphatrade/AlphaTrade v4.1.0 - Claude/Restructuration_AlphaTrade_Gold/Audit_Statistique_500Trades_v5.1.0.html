@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Audit statistique complet — AlphaTrade Gold (données réelles)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1040px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:720px; margin:0 auto;}
+  header .meta{margin-top:14px; font-size:12.5px; color:var(--dim);}
+
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.15rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1rem; margin:22px 0 8px;}
+  p{color:var(--text); line-height:1.65;}
+  .muted{color:var(--muted);}
+
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .finding .badge{display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
+  th{color:var(--green-soft); font-weight:600;}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  td.mono, th.mono, code{font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft);}
+  tr.pos td{color:var(--green-soft);}
+  tr.neg td{color:var(--red);}
+  .tblwrap{overflow-x:auto;}
+
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin:16px 0;}
+  .kpi{background:var(--card2); border:1px solid var(--border-strong); border-radius:10px; padding:14px 16px;}
+  .kpi .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .kpi .value{font-size:1.5rem; font-weight:700; color:#fff; margin-top:4px;}
+  .kpi .value.pos{color:var(--green);}
+  .kpi .value.neg{color:var(--red);}
+  .kpi .sub{font-size:11.5px; color:var(--dim); margin-top:2px;}
+
+  .bar-row{display:flex; align-items:center; gap:10px; margin:6px 0; font-size:13px;}
+  .bar-row .lbl{width:170px; flex-shrink:0; color:var(--muted);}
+  .bar-track{flex:1; height:16px; background:var(--card2); border-radius:4px; overflow:hidden; position:relative;}
+  .bar-fill{height:100%; background:var(--green-dim);}
+  .bar-row .val{width:130px; text-align:right; flex-shrink:0; font-variant-numeric:tabular-nums;}
+
+  ol.diag li{margin:10px 0; line-height:1.6;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Audit statistique — lecture seule</div>
+  <h1>AlphaTrade Gold : ce que les données réelles disent</h1>
+  <p>465 trades XAUUSD clôturés par le bot AlphaTrade AI, 16 → 31/07/2026. Aucun code modifié, aucun moteur ajouté, aucun paramètre touché — l'objectif unique est de mesurer ce qui fonctionne réellement avant toute évolution.</p>
+  <div class="meta">Source : <code>C:\Users\Louis Duchel\AlphaTrade\data\{trades.json, trade_exits.jsonl, learning_events.jsonl, alphatrade.log, params.json}</code></div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>1. Qualité des données</h2>
+  <table>
+    <tr><th>Fichier</th><th>Contenu</th><th>Rôle dans cet audit</th></tr>
+    <tr><td class="mono">trades.json</td><td>500 trades clôturés (fenêtre glissante)</td><td>Base principale — winrate, P&amp;L, durées</td></tr>
+    <tr><td class="mono">trade_exits.jsonl</td><td>371 sorties avec raison explicite (267 sur l'univers analysé)</td><td>Section 7 — gestion de position</td></tr>
+    <tr><td class="mono">learning_events.jsonl</td><td>1037 événements ENTRY XAUUSD (confiance, indicateurs au moment de l'entrée)</td><td>Section 5 — analyse des entrées</td></tr>
+    <tr><td class="mono">alphatrade.log</td><td>9,8 Mo, log texte complet</td><td>Comptage occurrences Break-Even</td></tr>
+    <tr><td class="mono">params.json</td><td>Configuration actuelle</td><td>Confirme l'état actuel (XAUUSD seul configuré)</td></tr>
+  </table>
+  <p class="muted">Écarté de cet audit : <code>oe_log.jsonl</code> (24 Mo) et <code>cycle_manager_log.jsonl</code>, logs des anciens modules Order Execution v5 / Cycle Manager, retirés du code début juillet (dernière écriture le 10-11/07) — non pertinents pour la stratégie actuelle.</p>
+
+  <h3>Répartition par symbole (500 trades)</h3>
+  <table>
+    <tr><th>Symbole</th><th class="num">Trades</th><th>Origine</th><th>Période</th><th>Verdict</th></tr>
+    <tr><td>XAUUSD</td><td class="num">469</td><td>AlphaTrade AI (467) + Manuel (2)</td><td>16/07 → 31/07 (toute la fenêtre)</td><td><span class="badge ok">Attendu</span></td></tr>
+    <tr><td>Boom 1000 Index</td><td class="num">29</td><td><b>IA/EA externe</b> (tag <code>origin_type=EXTERNAL_AI</code>)</td><td>17/07 14h29 → 16h29 — fenêtre de <b>2h</b>, un seul jour</td><td><span class="badge ok">Résolu</span></td></tr>
+    <tr><td>EURUSD</td><td class="num">2</td><td><b>Manuel</b> (tag <code>origin_type=MANUAL</code>)</td><td>27/07 01h07 → 01h11</td><td><span class="badge ok">Résolu</span></td></tr>
+  </table>
+  <div class="card finding ok">
+    <span class="badge ok">Pas une contamination</span>
+    <p><b>Verdict sur l'anomalie :</b> les 29 trades Boom 1000 et les 2 EURUSD ne sont ni des résidus d'ancien code ni une contamination active. Le système d'identification d'origine (retiré du hardcode "AVA" le 15/07, tâche #15) les a correctement étiquetés comme provenant d'un <b>autre robot</b> tournant sur le même compte MT5 pendant une fenêtre de 2h le 17/07, et de <b>deux ordres passés manuellement</b> par vous le 27/07. Preuve : <code>params.json</code> actuel ne configure plus que <code>XAUUSD</code> — le moteur ne peut plus, aujourd'hui, générer un ordre sur un autre symbole. <b>Univers retenu pour la suite de cet audit : les 465 trades XAUUSD tagués AlphaTrade AI / INTERNAL_BOT</b> — la seule mesure honnête de la performance du bot lui-même.</p>
+  </div>
+</section>
+
+<section>
+  <h2>2. Performance globale (465 trades XAUUSD, AlphaTrade AI)</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="label">Trades</div><div class="value">465</div><div class="sub">351 gagnants / 102 perdants / 12 neutres</div></div>
+    <div class="kpi"><div class="label">Winrate</div><div class="value pos">75,5%</div></div>
+    <div class="kpi"><div class="label">Profit net</div><div class="value pos">+184,23 $</div><div class="sub">sur 15 jours</div></div>
+    <div class="kpi"><div class="label">Profit factor</div><div class="value">1,20</div><div class="sub">à peine au-dessus de 1,0</div></div>
+    <div class="kpi"><div class="label">Gain moyen</div><div class="value pos">+3,12 $</div></div>
+    <div class="kpi"><div class="label">Perte moyenne</div><div class="value neg">-8,94 $</div><div class="sub">ratio gain/perte : 0,35</div></div>
+    <div class="kpi"><div class="label">Drawdown max</div><div class="value neg">-626,99 $</div><div class="sub">3,4× le profit net final</div></div>
+    <div class="kpi"><div class="label">Séries</div><div class="value">42 / 5</div><div class="sub">plus longue série gains / pertes</div></div>
+  </div>
+
+  <div class="card finding bug">
+    <span class="badge bug">Signal d'alarme</span>
+    <p>Le winrate (75,5%) a l'air excellent, mais le <b>profit factor n'est que de 1,20</b> et le <b>drawdown maximum (627 $) dépasse de 3,4× le profit net final (184 $)</b>. Autrement dit : à un moment de la fenêtre, le compte a rendu 627 $ de gains cumulés avant de repartir vers le résultat actuel. Le ratio gain moyen / perte moyenne (0,35) confirme le schéma classique <b>"beaucoup de petits gains, quelques grosses pertes"</b> — un winrate élevé qui masque une fragilité réelle. Détail complet en section 9.</p>
+  </div>
+</section>
+
+<section>
+  <h2>3. Analyse temporelle</h2>
+  <p class="muted">Heure locale de l'application déduite empiriquement (267/267 tickets recoupés entre <code>trades.json</code> et <code>trade_exits.jsonl</code> donnent un écart constant) : <b>UTC-4</b>. Sessions calculées en UTC (Londres 07-16h, New York 12-21h, overlap 12-16h, Asie 00-08h).</p>
+
+  <h3>Par session</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Session</th><th class="num">Trades</th><th class="num">Winrate</th><th class="num">Profit</th></tr>
+    <tr><td>Overlap Londres/NY</td><td class="num">231</td><td class="num">77,9%</td><td class="num pos">+250,52 $</td></tr>
+    <tr><td>Asie</td><td class="num">153</td><td class="num">78,4%</td><td class="num pos">+109,51 $</td></tr>
+    <tr><td>Londres (hors overlap)</td><td class="num">43</td><td class="num">53,5%</td><td class="num pos">+135,02 $</td></tr>
+    <tr><td>New York (hors overlap)</td><td class="num">20</td><td class="num">75,0%</td><td class="num neg">-290,38 $</td></tr>
+    <tr><td>Hors session</td><td class="num">18</td><td class="num">72,2%</td><td class="num neg">-20,44 $</td></tr>
+  </table></div>
+  <div class="card finding warn">
+    <span class="badge warn">À surveiller</span>
+    <p><b>New York (hors overlap)</b> : winrate correct (75%) mais résultat très négatif (-290$) sur seulement 20 trades — quelques pertes de grande taille, pas un problème de fréquence. <b>Londres (hors overlap)</b> : le seul segment sous 60% de winrate (53,5%) — l'edge y est nettement plus faible qu'ailleurs. L'essentiel du volume (231/465, 50%) se fait sur l'overlap Londres/NY, la session la plus liquide — cohérent avec un profil "Scalping rapide".</p>
+  </div>
+
+  <h3>Par jour de la semaine</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Jour</th><th class="num">Trades</th><th class="num">Winrate</th><th class="num">Profit</th></tr>
+    <tr><td>Vendredi</td><td class="num">82</td><td class="num">89,0%</td><td class="num pos">+246,78 $</td></tr>
+    <tr><td>Jeudi</td><td class="num">206</td><td class="num">74,3%</td><td class="num pos">+152,43 $</td></tr>
+    <tr><td>Lundi</td><td class="num">72</td><td class="num">70,8%</td><td class="num pos">+97,03 $</td></tr>
+    <tr><td>Dimanche</td><td class="num">20</td><td class="num">70,0%</td><td class="num pos">+106,91 $</td></tr>
+    <tr class="neg"><td>Mercredi</td><td class="num">85</td><td class="num">70,6%</td><td class="num neg">-418,92 $</td></tr>
+  </table></div>
+  <p class="muted">Aucun trade détecté le mardi ni le samedi dans cette fenêtre (jours sans activité, pas une anomalie de données).</p>
+</section>
+
+<section>
+  <h2>4. Type de trading réel</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="label">Jours actifs</div><div class="value">10 / 15</div></div>
+    <div class="kpi"><div class="label">Trades / jour actif</div><div class="value">46,5</div><div class="sub">jusqu'à 123 en une journée (23/07)</div></div>
+    <div class="kpi"><div class="label">Durée médiane</div><div class="value">44 s</div><div class="sub">moyenne 59,6 min — écrasée par quelques positions longues</div></div>
+    <div class="kpi"><div class="label">Durée max observée</div><div class="value">127 h</div><div class="sub">≈ 5,3 jours — voir section 7</div></div>
+  </div>
+  <h3>Classement réel par durée</h3>
+  <div class="bar-row"><div class="lbl">Ultra-scalping (&lt;1min)</div><div class="bar-track"><div class="bar-fill" style="width:57%"></div></div><div class="val">267 (57,4%)</div></div>
+  <div class="bar-row"><div class="lbl">Scalping (1-5min)</div><div class="bar-track"><div class="bar-fill" style="width:24%"></div></div><div class="val">113 (24,3%)</div></div>
+  <div class="bar-row"><div class="lbl">Intraday court (5-60min)</div><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div><div class="val">62 (13,3%)</div></div>
+  <div class="bar-row"><div class="lbl">Intraday (1-4h)</div><div class="bar-track"><div class="bar-fill" style="width:2%"></div></div><div class="val">11 (2,4%)</div></div>
+  <div class="bar-row"><div class="lbl">Swing (&gt;4h)</div><div class="bar-track"><div class="bar-fill" style="width:3%"></div></div><div class="val">12 (2,6%)</div></div>
+  <div class="card finding ok">
+    <span class="badge ok">Confirmé par les données</span>
+    <p>Le nom du profil actif ("Scalping rapide") correspond au comportement réel : <b>81,7% des trades durent moins de 5 minutes</b>, médiane à 44 secondes. Ce n'est pas un habillage marketing — c'est vraiment ce qui se passe. Les 12 trades "Swing" (&gt;4h) sont l'exception, pas la règle, et incluent les deux positions bloquées de la section 7.</p>
+  </div>
+</section>
+
+<section>
+  <h2>5. Analyse des entrées</h2>
+  <p>93,8% des trades (436/465) ont pu être recoupés avec leur analyse d'entrée exacte (<code>learning_events.jsonl</code>, tolérance ±8s, confiance/tendance/composantes au moment précis de l'ordre). Les 6,2% restants n'ont pas d'événement <code>ENTRY</code> correspondant à proximité (probablement des renforts ou reprises hors du log standard).</p>
+
+  <h3>Confiance à l'entrée vs résultat</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Confiance</th><th class="num">Trades</th><th class="num">Winrate</th><th class="num">Profit</th></tr>
+    <tr><td>75-85%</td><td class="num">12</td><td class="num">75,0%</td><td class="num neg">-9,89 $</td></tr>
+    <tr class="neg"><td>85-95%</td><td class="num">55</td><td class="num">47,3%</td><td class="num pos">+91,59 $</td></tr>
+    <tr><td>95-100%</td><td class="num">369</td><td class="num">79,1%</td><td class="num pos">+144,98 $</td></tr>
+  </table></div>
+  <div class="card finding warn">
+    <span class="badge warn">Contre-intuitif</span>
+    <p>La tranche 85-95% de confiance a un winrate <b>bien plus bas</b> (47,3%) que la tranche 95-100% (79,1%) — l'inverse de ce qu'on attendrait d'un score de confiance qui fonctionne linéairement. 369/436 trades matchés (85%) sont à 95-100% de confiance : le seuil actuel (<code>confidence_min</code>) filtre déjà la quasi-totalité du volume vers la zone la plus fiable, ce qui est plutôt bon signe, mais laisse peu de trades pour juger si la confiance "moyenne" (85-95%) a un vrai sens prédictif.</p>
+  </div>
+
+  <h3>Composantes du signal (présentes = 1, absentes = 0)</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Composante</th><th class="num">Présente (n)</th><th class="num">Winrate si présente</th><th class="num">Absente (n)</th><th class="num">Winrate si absente</th></tr>
+    <tr><td>MACD</td><td class="num">383</td><td class="num pos">78,3%</td><td class="num">53</td><td class="num neg">50,9%</td></tr>
+    <tr><td>RSI</td><td class="num">373</td><td class="num">75,9%</td><td class="num">63</td><td class="num">69,8%</td></tr>
+    <tr><td>Tendance (EMA)</td><td class="num">436</td><td class="num">75,0%</td><td class="num">0</td><td class="num">—</td></tr>
+    <tr><td>Zone (edge)</td><td class="num">436</td><td class="num">75,0%</td><td class="num">0</td><td class="num">—</td></tr>
+    <tr><td>Momentum</td><td class="num">435</td><td class="num">74,9%</td><td class="num">1</td><td class="num">100%</td></tr>
+  </table></div>
+  <div class="card finding ok">
+    <span class="badge ok">Signal exploitable</span>
+    <p><b>MACD est le seul indicateur qui discrimine clairement</b> : winrate 78,3% quand il confirme la direction vs 50,9% quand il ne confirme pas — 27 points d'écart sur 436 trades, un échantillon large. Tendance et Zone sont présentes sur 100% des trades analysés (elles sont structurellement obligatoires dans le calcul du score actuel, donc pas testables en isolation avec ces données). RSI a peu d'impact discriminant ici.</p>
+  </div>
+
+  <h3>Tendance (EMA) au moment de l'entrée vs résultat</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Tendance détectée</th><th class="num">Trades</th><th class="num">Winrate</th><th class="num">Profit</th></tr>
+    <tr><td>BEARISH</td><td class="num">207</td><td class="num">75,8%</td><td class="num pos">+344,62 $</td></tr>
+    <tr class="neg"><td>BULLISH</td><td class="num">219</td><td class="num">74,9%</td><td class="num neg">-169,87 $</td></tr>
+    <tr><td>RANGE</td><td class="num">10</td><td class="num">60,0%</td><td class="num pos">+51,93 $</td></tr>
+  </table></div>
+  <div class="card finding warn">
+    <span class="badge warn">Asymétrie directionnelle</span>
+    <p>Winrate quasi identique (75,8% vs 74,9%) mais résultat en dollars radicalement différent entre BEARISH (+345$) et BULLISH (-170$) — sur un volume comparable (207 vs 219 trades). Le nombre de gagnants est similaire, mais les pertes côté BULLISH sont visiblement plus lourdes. Cohérent avec le marché de l'or globalement haussier sur juillet 2026 : les entrées BUY à contre-courant d'un pullback ont pu être plus exposées. À creuser avant d'en tirer une règle définitive (échantillon d'une seule fenêtre de 15 jours).</p>
+  </div>
+
+  <p class="muted">Pas de données disponibles pour : Order Block, FVG, BOS, CHOCH, Fibonacci, Multi-Timeframe aligné, entrée LIMIT/STOP — ces éléments ne sont ni calculés ni journalisés par le pipeline classique sur cette période (voir section 6, ce sont les briques de Gold Brain, indisponibles avant le 01/08).</p>
+</section>
+
+<section>
+  <h2>6. Analyse Gold Brain</h2>
+  <div class="card finding warn">
+    <span class="badge warn">Comparaison impossible — attendu</span>
+    <p>Gold Brain (CAIO, Structure Analyst, Smart Money Analyst) a été construit le <b>01/08/2026</b> — après la fin de cette fenêtre de données (16-31/07). <b>0 des 465 trades</b> analysés ne porte de tag Gold Brain, et pour cause : le système n'existait pas encore. Aucune décision CAIO réelle n'a été enregistrée dans <code>learning_history</code> à ce jour (marché fermé depuis l'activation). Il n'y a donc pas de "avant vs après" possible pour l'instant — seulement un "avant" et un "pas encore d'après". Cette section pourra être refaite dès qu'un nombre significatif de vraies décisions GO auront eu lieu.</p>
+  </div>
+</section>
+
+<section>
+  <h2>7. Gestion des positions</h2>
+  <p>267/465 trades (57%) ont une sortie tracée avec raison explicite dans <code>trade_exits.jsonl</code> (couverture partielle — les fermetures manuelles ou via validation serveur n'y apparaissent pas forcément). Complété par un comptage direct dans <code>alphatrade.log</code> pour le Break-Even.</p>
+  <div class="tblwrap"><table>
+    <tr><th>Mécanisme</th><th class="num">Occurrences</th><th class="num">Profit cumulé</th></tr>
+    <tr><td>Trailing (profit_trailing_giveback)</td><td class="num">252</td><td class="num pos">+502,33 $</td></tr>
+    <tr class="neg"><td>Protection (floating/position/catastrophique)</td><td class="num">13</td><td class="num neg">-813,34 $</td></tr>
+    <tr><td>Momentum exit</td><td class="num">2</td><td class="num">—</td></tr>
+    <tr><td>Break-Even rapide (log)</td><td class="num">322</td><td class="num">—</td></tr>
+    <tr><td>Break-Even TP1 (log)</td><td class="num">68</td><td class="num">—</td></tr>
+  </table></div>
+
+  <div class="card finding bug">
+    <span class="badge bug">Cause principale du drawdown identifiée</span>
+    <p><b>13 sorties "protection" (2,8% des trades) ont coûté -813,34 $ — soit 4,4× plus que les 502 $ gagnés par les 252 sorties trailing.</b> Deux d'entre elles concentrent à elles seules -515,88 $ : deux positions restées ouvertes <b>127 heures (5,3 jours)</b> avant d'être stoppées le 27/07 à 23h12 UTC (<code>MAX_FLOATING_LOSS</code> -176,04$, <code>CATASTROPHIC_PROTECTION</code> -339,84$) — sur un profil dont la durée médiane est de 44 <i>secondes</i>. C'est très probablement l'explication principale du drawdown de 627$ mesuré en section 2.</p>
+  </div>
+  <p class="muted">Pourquoi une position de scalping reste-t-elle ouverte 5 jours ? Hypothèses à vérifier (pas d'élément dans ces logs pour trancher) : redémarrage/déconnexion ayant empêché la gestion normale de tourner, ou position devenue orpheline suite à un incident applicatif sur cette période. Le 27/07 23h12-23h24 est aussi la fenêtre où l'audit AlphaTrade Global du 29/07 avait identifié une contamination croisée entre les deux bots sur le même compte — les deux incidents sont proches dans le temps mais techniquement distincts (mécanismes de fermeture différents) ; vaut la peine d'être recoupé si vous voulez confirmer un lien.</p>
+
+  <div class="card finding ok">
+    <span class="badge ok">Le trailing fonctionne</span>
+    <p>Sur les 252 sorties trailing, 233 (92,5%) se terminent en profit, capturant en moyenne 43,9% du pic de profit atteint avant de redonner. Le Break-Even (322 activations rapides + 68 via TP1) protège une large majorité des trades gagnants — cohérent avec le fait que 351/465 trades (75,5%) sont gagnants pour un gain moyen faible (3,12$), typique d'un système qui sécurise tôt.</p>
+  </div>
+</section>
+
+<section>
+  <h2>8. Microstructure Gold</h2>
+  <div class="card finding warn">
+    <span class="badge warn">Confirmé : dashboard uniquement</span>
+    <p><code>alphatrade_engine.py:4440</code> — <code>payload["microstructure"] = microstructure.snapshot()</code> n'est lu par aucune fonction de décision (<code>symbol_analysis()</code>, <code>auto_trade_step()</code>, agents Gold Brain). Recherche exhaustive du champ dans le fichier : uniquement consommé par <code>status_payload()</code> pour l'onglet Microstructure du dashboard. OBI et Kyle λ sont calculés sur de vraies données MT5 (DOM réel, fix du 33ᵉ tâche) mais n'influencent aucun trade.</p>
+  </div>
+  <p><b>Recommandation (à discuter, rien codé) :</b></p>
+  <table>
+    <tr><th>Option</th><th>Description</th><th>Avis</th></tr>
+    <tr><td><b>A — Supprimer du dashboard</b></td><td>Retirer l'onglet, arrêter le calcul</td><td>Pas recommandé : perd un socle déjà construit et testé (OBI/Kyle λ réels) sans bénéfice — le calcul ne coûte pas cher (intervalle configurable, déjà 2s par défaut).</td></tr>
+    <tr><td><b>B — Gold Microstructure Engine</b></td><td>Transformer en agent Gold Brain (5ᵉ agent) basé sur tick imbalance, vitesse des ticks, spread, accélération de prix, ATR court terme — pas d'order book crypto nécessaire</td><td>Viable : les données tick MT5 sont déjà captées (<code>observe_mt5_tick</code>) ; il manque uniquement le calcul de ces métriques spécifiques et un <code>AgentReport</code> pour les exposer au CAIO. Travail neuf, pas un portage.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>9. Diagnostic final</h2>
+  <ol class="diag">
+    <li><b>Est-ce qu'AlphaTrade Gold fonctionne réellement ?</b> Oui, dans le sens où le pipeline calcule de vrais indicateurs sur de vraies données MT5, exécute réellement des ordres, gère réellement le Break-Even/trailing, et termine cette fenêtre de 15 jours <b>en profit net (+184$)</b>. Mais "fonctionne" ne veut pas dire "robuste" — voir point 2.</li>
+    <li><b>Le winrate actuel (75,5%) est-il robuste ou accidentel ?</b> <b>Fragile, pas accidentel au sens de "chance pure", mais pas robuste non plus.</b> Le winrate élevé est un effet mécanique du trailing/Break-Even qui sécurise systématiquement de petits gains (moyenne 3,12$) — pas une preuve de justesse directionnelle. La vraie mesure de robustesse, le profit factor, n'est qu'à 1,20, et un tout petit nombre d'événements (13 sorties protection sur 465, soit 2,8%) a coûté 4,4× plus que tout ce que le trailing a rapporté. Un système où 2,8% des trades peuvent effacer la quasi-totalité du gain net n'est pas encore robuste pour du capital réel.</li>
+    <li><b>Quels moteurs/mécanismes créent de la valeur ?</b> Le trailing adaptatif (+502$, 92,5% de sorties positives) et le Break-Even (390 activations) sont les deux mécanismes qui font le plus concrètement gagner de l'argent aujourd'hui. MACD est le seul filtre d'entrée qui montre un vrai pouvoir discriminant (78,3% vs 50,9% de winrate selon sa présence).</li>
+    <li><b>Quels moteurs sont du bruit ?</b> Microstructure (0% de participation à la décision, confirmé par le code). RSI montre peu de pouvoir discriminant sur cet échantillon. Le score de confiance affiché n'est pas linéairement fiable (85-95% performe pire que 95-100%).</li>
+    <li><b>Quelle est la première amélioration qui aurait le plus d'impact ?</b> <b>Comprendre et corriger pourquoi des positions peuvent rester ouvertes plusieurs jours sur un profil de scalping</b> (le cas du 27/07, -516$ à lui seul). Ce n'est pas un problème de moteur de signal — c'est un problème opérationnel/robustesse qui a coûté plus cher en 2 trades que tout le trailing n'a rapporté en 252. Avant d'ajouter une seule couche d'intelligence, ça vaut la peine de vérifier que le système ne peut plus se retrouver dans cet état.</li>
+    <li><b>Faut-il ajouter quelque chose ou optimiser l'existant ?</b> <b>Optimiser l'existant d'abord.</b> Gold Brain (Structure/Smart Money/CAIO) est déjà construit et attend d'être validé avec de vraies décisions — pas besoin d'ajouter un 6ᵉ moteur avant de savoir si les 5 premiers apportent une vraie valeur nette. La priorité concrète, dans l'ordre : (1) élucider le cas des positions bloquées 5 jours, (2) laisser Gold Brain accumuler assez de vraies décisions GO pour être auditable à son tour, (3) seulement ensuite envisager le Gold Microstructure Engine (option B, section 8) comme enrichissement, pas comme urgence.</li>
+  </ol>
+</section>
+
+</div>
+<footer>Audit lecture seule — aucune ligne de code modifiée. Données réelles du compte connecté, fenêtre du 16/07/2026 au 31/07/2026. Généré le 02/08/2026.</footer>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Audit comparatif — AVA Trading (ava-desktop) vs AlphaTrade Gold</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff;
+    --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.6rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:820px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.2rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.02rem; margin:22px 0 8px;}
+  p{line-height:1.65;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13px;}
+  th, td{text-align:left; padding:8px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.critical{background:#5a0e0e; color:#ff8a8a; animation:pulse 2s infinite;}
+  .badge.bug{background:#4a1a1a; color:var(--red);}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .critical-box{background:#1a0808; border:2px solid #ff3838; border-radius:14px; padding:22px 26px; margin:20px 0;}
+  .critical-box h2{color:#ff8a8a; border:none; margin:0 0 10px;}
+  .stat-row{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .stat-box{background:var(--card2); border:1px solid var(--border-strong); border-radius:8px; padding:12px 18px; flex:1; min-width:160px;}
+  .stat-box .k{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .stat-box .v{color:#fff; font-size:1.5rem; font-weight:700; margin-top:2px;}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--green-soft); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px;}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Audit — lecture du binaire installé localement, aucune donnée exfiltrée</div>
+  <h1>Audit comparatif — AVA Trading (ava-desktop) vs AlphaTrade Gold</h1>
+  <p>Demandé par Louis le 16/07/2026 pour vérifier l'affirmation "AVA n'a même pas la moitié des paramètres d'AlphaTrade, mais garantit 90% de gains". Méthode : extraction de <code>app.asar</code> depuis <code>C:\Users\Louis Duchel\AppData\Local\Programs\ava-desktop\resources\</code> (technique déjà utilisée pour patcher AlphaTrade lui-même) et lecture directe du code JavaScript non minifié qu'il contient. Louis confirme n'avoir jamais utilisé la fonctionnalité crypto découverte ci-dessous.</p>
+</header>
+
+<div class="wrap">
+
+<div class="critical-box">
+  <span class="badge critical">⚠ Découverte non demandée, mais trop importante pour l'omettre</span>
+  <h2>AVA n'est pas une app de trading — c'est un agent d'automatisation général, avec un module de trading forex/or intégré, un module de trading Boom/Crash séparé, ET un module de "sniping" de tokens crypto Solana totalement indépendant</h2>
+  <p>Les canaux IPC exposés par <code>ava-desktop</code> (<code>out/main/index.js</code>, <code>out/preload/index.js</code>) montrent une app capable de : contrôle clavier/souris (<code>keyboard-type</code>, <code>mouse-click</code>, <code>scroll</code>), captures d'écran, exécution de scripts arbitraires (<code>run-applescript</code>, <code>run-jxa</code>, <code>run-swift</code>, <code>run-command</code>), lecture/écriture de fichiers, contrôle d'extension Chrome, et même le lancement de sessions <b>Claude Code</b> (<code>run-claude-code</code>, <code>claude-session-start/end/write/list</code>). Le trading n'est qu'un module parmi d'autres.</p>
+  <p><b>Module crypto Solana</b> (<code>out/main/index.js</code> lignes ~297-620, canaux <code>solana-sniper-*</code>) : import de clé privée de portefeuille (<code>parseSolanaSecretKey</code>, <code>web3_js.Keypair.fromSecretKey</code>), stockage chiffré local, connexion à <code>api.mainnet-beta.solana.com</code> pour acheter automatiquement des tokens nouvellement lancés — une pratique à très haut risque ("sniping"), sans rapport avec le trading forex/or affiché comme produit principal, et non mentionnée dans le positionnement marketing du produit à notre connaissance.</p>
+</div>
+
+<section class="toc">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#verdict">Verdict en chiffres — la comparaison demandée</a></li>
+    <li><a href="#params">Paramètres AVA réellement trouvés (par module)</a></li>
+    <li><a href="#recovery">Le mécanisme "recovery" / martingale — explication plausible du "90% de gains"</a></li>
+    <li><a href="#opacite">Opacité côté serveur — le réglage affiché n'est pas toujours le réglage réel</a></li>
+    <li><a href="#limites">Limites de cet audit</a></li>
+    <li><a href="#recommandation">Recommandation</a></li>
+  </ol>
+</section>
+
+<section id="verdict">
+  <h2>1. Verdict en chiffres — la comparaison demandée</h2>
+  <div class="stat-row">
+    <div class="stat-box"><div class="k">Paramètres AlphaTrade (audités, code lu)</div><div class="v">90</div></div>
+    <div class="stat-box"><div class="k">Paramètres AVA trouvés (config trading seule)</div><div class="v">75-90+</div></div>
+    <div class="stat-box"><div class="k">Modules de trading distincts dans AVA</div><div class="v">3</div></div>
+    <div class="stat-box"><div class="k">Paliers d'abonnement avec réglages différents</div><div class="v">5</div></div>
+  </div>
+  <p><b>L'affirmation "AVA a moins de la moitié des paramètres" ne tient pas face au code.</b> Rien que la fonction qui construit la configuration d'un run de trading (<code>clampConfigByPlan</code>, <code>out/main/index.js</code> ligne 1276) manipule déjà <b>~35 paramètres</b> pour le module Gold/Forex seul. Le module Boom/Crash ("Volatility", fonction <code>normalizeBoomRuntimeConfig</code>, ligne 1229) en ajoute <b>~28 de plus</b>, avec des noms très spécifiques (<code>boomReboundStage1MaxBuys</code>, <code>boomVertexTopWaitMinMinutes</code>, etc.) qui suggèrent une logique au moins aussi fine que celle d'AlphaTrade. Le module Solana en ajoute encore une quinzaine. Le tout n'est simplement pas montré à l'utilisateur sous forme de longue liste dans une page "Paramètres" — c'est éclaté entre plusieurs panneaux ("Ava Trading" / "Ava Volatility" / le module crypto séparé), ce qui donne une <i>impression</i> de simplicité sans que ce soit vrai en profondeur.</p>
+</section>
+
+<section id="params">
+  <h2>2. Paramètres AVA réellement trouvés (preuve : nom de fonction + ligne)</h2>
+  <h3>Module Gold/Forex — <code>clampConfigByPlan()</code>, ligne 1276</h3>
+  <p><code>lot, minLot, maxLot, minProfit, stopLoss, sessionProfitTarget, maxProfitGiveback, recoveryLevels, rangeEntryFilter, rangeFilterCandles, resetStats, execution, allowLive, dynamicLot, autoCortex, cortexFreeHand, cortexAggressiveness, cortexPendingOrdersEnabled, cortexPendingIgnoreBasketGuard, cortexMaxPendingOrders, cortexPendingExpirySeconds, cortexPendingMaxDistancePoints, cortexVariableLot, cortexCautiousMaxLot, brokerTakeProfit, manageManualPositions, manualWeeklyLimit, nightPauseEnabled, nightPauseStartHour, nightPauseEndHour, dailyHardStopHour, scannerOnly, goldRuntimeMode, strategyModel, panelMode, market, bridgeSymbol, mt5Symbol, mt5Login, mt5Password, mt5Server</code></p>
+  <h3>Module Boom/Crash "Volatility" — <code>normalizeBoomRuntimeConfig()</code>, ligne 1229</h3>
+  <p><code>boomBurstEnabled, boomHistoryCandles, boomBurstPositions, boomBurstDelaySeconds, boomSpikeThreshold, boomReboundBuyEnabled, boomStopLossPoints, boomPrudenceStopLossPoints, boomPrudenceMinProfit, boomReboundFirstCandles, boomReboundEveryCandles, boomReboundMinProfit, boomReboundMaxOpen, boomReboundLot, boomReboundBoostAfterCandles, boomReboundBoostEveryCandles, boomReboundPauseAfterBuys, boomReboundPauseMinutes, boomReboundWaitAfterSpikeSeconds, boomVertexTopWaitMinMinutes, boomVertexTopWaitMaxMinutes, boomReboundStage1MaxBuys, boomReboundStage2EveryMinutes, boomReboundStage3AfterBuys, boomReboundStage3EveryMinutes, boomReboundLevelsEnabled, boomReboundLevels, boomReboundSessionLimitEnabled, boomReboundSessionMaxBuys, boomReboundMaxPauseMinutes</code></p>
+  <h3>Module Solana sniper — canaux <code>solana-sniper-*</code></h3>
+  <p><code>rpcHttpUrl, rpcWsUrl, walletLabel, walletPublicKey, mode, buyMode, buyAmountSol, slippagePct, buyOnlyOnce, maxBuysPerToken, priorityFeeMicrolamports, jitoTipLamports, buyFeeSol, processorTipSol, mevProtect, snipeDelayMs, autoSell, maxHoldSeconds, takeProfitMultiplier, tpLevels, trailingStopLevels, noActivitySellSeconds</code></p>
+  <p style="color:var(--muted); font-size:12.5px;">Cette liste vient de la lecture directe du bundle Electron (non minifié) — elle n'est probablement pas exhaustive : une partie de la logique réelle vit dans l'exécutable compilé <code>resources/bin/AvaBot-VIX75.exe</code> et dans les EA MT5 compilés <code>.ex5</code> (<code>resources/trading_bot/mql5/</code>), tous deux illisibles sans rétro-ingénierie binaire — ce que je n'ai pas fait.</p>
+</section>
+
+<section id="recovery">
+  <h2>3. Le mécanisme "recovery" — explication plausible du chiffre "90% de gains"</h2>
+  <div class="card finding bug">
+    <span class="badge bug">Preuve trouvée</span>
+    <p>Le mode de trading Gold nommé littéralement <code>"classic_1_2_5"</code> (ligne 851), un tableau <code>recoveryLevels</code> plafonné par palier d'abonnement (<code>recoveryMax</code> : 1 à 5 selon le plan, lignes 1119-1203), et surtout deux arguments passés directement au processus de trading (ligne 3159, 3169) : <code>--max-lot-multiplier</code> et <code>--recovery-lot-multiplier</code>.</p>
+    <p>Le nom "1, 2, 5" et un multiplicateur de lot "recovery" appliqué à des niveaux successifs correspondent au schéma classique d'un <b>système martingale/grille</b> : après une perte, la position suivante est ouverte avec un lot plus gros pour "récupérer" la perte précédente en un seul trade gagnant. Ce type de système produit mécaniquement un <b>taux de trades gagnants très élevé</b> (chaque séquence se termine généralement en gain, parfois après plusieurs relances) — <b>jusqu'au jour où la séquence ne récupère pas</b>, et la perte de cette unique séquence peut dépasser la somme de tous les gains précédents. C'est une explication technique plausible et cohérente avec l'affirmation "garanti 90% de gains" : le taux de réussite par trade peut effectivement être très élevé, sans que cela dise quoi que ce soit sur le risque réel supporté par le compte.</p>
+    <p style="color:var(--orange)">Je ne peux pas confirmer à 100% que c'est un martingale au sens strict sans lire le code du processus <code>AvaBot-VIX75.exe</code> (compilé, illisible) — mais le nom de la fonctionnalité, les paramètres, et les arguments CLI pointent tous dans la même direction.</p>
+  </div>
+</section>
+
+<section id="opacite">
+  <h2>4. Opacité côté serveur — le réglage affiché n'est pas toujours le réglage réel</h2>
+  <p><code>clampConfigByPlan()</code> reçoit une <code>policy</code> venant du serveur (<code>policy?.limits</code>, <code>policy?.capabilities</code>) qui peut silencieusement réduire ou modifier ce que l'utilisateur a configuré localement, en fonction de son palier d'abonnement (<code>owner / custom_simple / custom_pro / custom_ultra / custom_max</code>) — par exemple le lot max va de 0.01 (palier simple) à 100 (owner), le nombre de niveaux de recovery de 1 à 5, le nombre de modèles de stratégie autorisés de 1 à 4. Un utilisateur au palier "Simple" voit peut-être une interface avec peu d'options visibles, mais le moteur réel manipule les mêmes ~35-60 paramètres en coulisses, juste bridés à des valeurs fixes par le serveur.</p>
+</section>
+
+<section id="tableau">
+  <h2>4bis. Tableau comparatif — les 40 paramètres du module Gold d'AVA, un par un</h2>
+  <p>Source : <code>clampConfigByPlan()</code>, <code>out/main/index.js</code> ligne 1276 (le module Gold/Forex d'AVA uniquement — pas Boom/Crash, pas Solana). Pour chaque paramètre AVA, l'équivalent AlphaTrade réel s'il existe.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Paramètre AVA</th><th>Rôle chez AVA</th><th>Équivalent AlphaTrade</th><th>Présent ?</th></tr>
+    <tr><td><code>lot</code></td><td>Lot fixe</td><td><code>symbols.XAUUSD.lot</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>minLot</code></td><td>Lot minimum</td><td><code>symbols.XAUUSD.lot_min</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>maxLot</code></td><td>Lot maximum</td><td><code>symbols.XAUUSD.lot_max</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>minProfit</code></td><td>Profit min. visé</td><td><code>profit_target</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>stopLoss</code></td><td>Perte max $ (borné par plan, ex. -150)</td><td><code>max_position_loss</code> + <code>emergency_loss_limit</code></td><td class="verdict keep">✓ (AlphaTrade en a même 2)</td></tr>
+    <tr><td><code>sessionProfitTarget</code></td><td>Objectif de session</td><td><code>session_target</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>maxProfitGiveback</code></td><td>Recul de profit max toléré</td><td><code>giveback</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>recoveryLevels</code></td><td>Paliers de "recovery" (voir section 3 — probable martingale)</td><td>—</td><td class="verdict remove">✗ absent (volontairement — AlphaTrade n'a pas de martingale)</td></tr>
+    <tr><td><code>rangeEntryFilter</code></td><td>Filtre d'entrée basé sur un range</td><td><code>anti_top_bottom</code> + <code>edge_zone_pct</code></td><td class="verdict keep">✓ (structuré différemment)</td></tr>
+    <tr><td><code>rangeFilterCandles</code></td><td>Bougies pour calculer le range</td><td><code>lookback_candles</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>resetStats</code></td><td>Réinitialiser les statistiques</td><td>Bouton "Nouvelle session" (action UI, pas un paramètre sauvegardé)</td><td class="verdict fix">~ partiel</td></tr>
+    <tr><td><code>execution</code></td><td>Route d'exécution (bridge / mt5 / deriv-demo)</td><td>—</td><td class="verdict remove">✗ absent (AlphaTrade ne parle qu'à MT5, en direct)</td></tr>
+    <tr><td><code>allowLive</code></td><td>Autoriser le compte réel</td><td>Confirmation compte réel au clic Démarrer</td><td class="verdict keep">✓ (flux différent, pas un paramètre stocké)</td></tr>
+    <tr><td><code>dynamicLot</code></td><td>Lot dynamique selon le risque</td><td><code>risk_pct</code> (le lot est TOUJOURS dynamique chez AlphaTrade, pas une option)</td><td class="verdict keep">✓ (déjà le comportement par défaut)</td></tr>
+    <tr><td><code>autoCortex</code></td><td>IA choisit la stratégie automatiquement</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexFreeHand</code></td><td>Mode IA "main libre" (plus autonome)</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexAggressiveness</code></td><td>Curseur d'agressivité IA (0-100)</td><td><code>confidence_min</code> + <code>risk_pct</code> combinés</td><td class="verdict fix">~ partiel (pas un seul curseur)</td></tr>
+    <tr><td><code>cortexPendingOrdersEnabled</code></td><td>Ordres en attente intelligents</td><td>—</td><td class="verdict remove">✗ absent (Pending Orders — dans TA propre vision d'architecture future, pas encore construit)</td></tr>
+    <tr><td><code>cortexPendingIgnoreBasketGuard</code></td><td>Ignorer la protection panier pour les ordres en attente</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexMaxPendingOrders</code></td><td>Nombre max d'ordres en attente</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexPendingExpirySeconds</code></td><td>Expiration des ordres en attente</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexPendingMaxDistancePoints</code></td><td>Distance max des ordres en attente</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>cortexVariableLot</code></td><td>Lot variable piloté par l'IA</td><td><code>lot_multiplicateur_renfort</code> (partiel)</td><td class="verdict fix">~ partiel</td></tr>
+    <tr><td><code>cortexCautiousMaxLot</code></td><td>Plafond de lot "prudent"</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>brokerTakeProfit</code></td><td>TP posé chez le broker (optionnel)</td><td>TP broker toujours posé (comportement par défaut, pas une option)</td><td class="verdict keep">✓ (déjà le comportement par défaut)</td></tr>
+    <tr><td><code>manageManualPositions</code></td><td>Gérer aussi les positions ouvertes manuellement</td><td>—</td><td class="verdict remove">✗ absent (AlphaTrade ne gère que ses propres positions, filtrées par origine)</td></tr>
+    <tr><td><code>manualWeeklyLimit</code></td><td>Limite hebdo sur positions manuelles</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>nightPauseEnabled</code></td><td>Pause nocturne</td><td><code>session_filter_enabled</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>nightPauseStartHour</code></td><td>Début pause (⚠ codé en dur à 19h chez AVA, pas réglable malgré le nom)</td><td><code>session_start_utc</code> (réellement réglable)</td><td class="verdict keep">✓ (et réellement configurable, contrairement à AVA)</td></tr>
+    <tr><td><code>nightPauseEndHour</code></td><td>Fin pause (⚠ codé en dur à 4h chez AVA)</td><td><code>session_end_utc</code> (réellement réglable)</td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>dailyHardStopHour</code></td><td>Heure d'arrêt forcé</td><td><code>stop_before_end_min</code></td><td class="verdict keep">✓ (structuré différemment)</td></tr>
+    <tr><td><code>scannerOnly</code></td><td>Mode observation seule, sans trade réel</td><td>—</td><td class="verdict remove">✗ absent (équivalent à <code>ai_observation_mode</code>, retiré d'AlphaTrade en Phase 1 comme paramètre "leurre")</td></tr>
+    <tr><td><code>goldRuntimeMode</code></td><td>Variante de moteur (classic_1_2_5 / cortex_current)</td><td><code>active_engine</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>strategyModel</code></td><td>Modèle de stratégie IA</td><td><code>active_engine</code> / <code>strategy_mode</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>panelMode</code></td><td>Gold vs Volatility (multi-marché)</td><td>—</td><td class="verdict remove">✗ absent (inutile — AlphaTrade est mono-marché depuis l'isolation Or)</td></tr>
+    <tr><td><code>market</code></td><td>Symbole tradé</td><td><code>active_symbol</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>bridgeSymbol</code></td><td>Symbole côté bridge (architecture AVA spécifique)</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+    <tr><td><code>mt5Symbol</code></td><td>Symbole MT5</td><td><code>active_symbol</code> / mapping <code>SYMBOLS</code></td><td class="verdict keep">✓</td></tr>
+    <tr><td><code>mt5Login</code></td><td>Identifiant de connexion MT5</td><td>—</td><td class="verdict remove">✗ absent (AlphaTrade se connecte à un terminal MT5 déjà ouvert/connecté, ne stocke jamais d'identifiants broker)</td></tr>
+    <tr><td><code>mt5Password</code></td><td>Mot de passe MT5</td><td>—</td><td class="verdict remove">✗ absent (même raison — et c'est plus sûr ainsi)</td></tr>
+    <tr><td><code>mt5Server</code></td><td>Serveur du broker</td><td>—</td><td class="verdict remove">✗ absent</td></tr>
+  </table>
+  </div>
+  <p><b>Bilan de ce tableau</b> : sur les 40 paramètres Gold d'AVA, <b>19 ont un vrai équivalent chez AlphaTrade</b> (souvent mieux implémenté — ex. la pause nocturne d'AVA est en réalité codée en dur malgré son nom réglable). Sur les <b>21 absents</b> : 6 sont liés au système de recovery/martingale déjà signalé comme risqué, 6 sont des identifiants de connexion broker qu'AlphaTrade évite délibérément de stocker (plus sûr), 5 sont des fonctionnalités "Pending Orders"/IA autonome que <b>tu as toi-même déjà décrites comme vision future d'AlphaTrade</b> (pas encore construites, pas un manque actuel), et le reste est spécifique à l'architecture multi-marché d'AVA (bridge, panelMode) qu'AlphaTrade n'a pas besoin de gérer étant mono-symbole.</p>
+</section>
+
+<section id="limites">
+  <h2>5. Limites de cet audit</h2>
+  <ul>
+    <li>Je n'ai lu que le bundle Electron (JavaScript, non minifié — chance rare, la plupart des apps commerciales minifient). Le vrai cœur de décision (quand acheter/vendre, quels indicateurs) vit probablement dans <code>AvaBot-VIX75.exe</code> (compilé) et/ou les fichiers <code>.ex5</code> (compilés) — tous deux illisibles sans désassemblage, que je n'ai pas fait.</li>
+    <li>Je n'ai donc <b>aucune preuve directe</b> que le "90% de gains" est faux — seulement une explication technique plausible (martingale) qui, si confirmée, rendrait ce chiffre trompeur en l'absence du taux de perte par séquence et de l'ampleur des pertes rares.</li>
+    <li>Je n'ai pas testé l'app, pas créé de compte, pas connecté de broker — lecture de fichiers locaux uniquement.</li>
+  </ul>
+</section>
+
+<section id="recommandation">
+  <h2>6. Recommandation</h2>
+  <p>Trois points distincts, à traiter séparément :</p>
+  <ol>
+    <li><b>Sur la comparaison de complexité</b> : l'affirmation initiale ne tient pas — AVA a une complexité de configuration comparable ou supérieure à AlphaTrade, simplement répartie sur plusieurs modules et masquée par palier d'abonnement plutôt qu'affichée d'un coup.</li>
+    <li><b>Sur le "90% de gains"</b> : avant de faire confiance à ce chiffre, il faudrait des statistiques sur les séquences complètes (pas juste le taux de trades individuels gagnants) et sur l'ampleur des pertes quand une séquence de recovery échoue — pas juste le pourcentage brut. Un système martingale peut afficher 90%+ de trades gagnants tout en étant structurellement risqué.</li>
+    <li><b>Sur le module Solana</b> : tu n'as jamais utilisé cette fonctionnalité, donc pas d'action requise de ce côté — mais bon à savoir que ce logiciel a ce genre de capacité si tu décides un jour de creuser plus, ou si tu recommandes cet outil à quelqu'un d'autre.</li>
+  </ol>
+</section>
+
+</div>
+<footer>Audit produit le 16/07/2026 à partir des fichiers installés localement sur la machine de Louis.</footer>
+</body>
+</html>

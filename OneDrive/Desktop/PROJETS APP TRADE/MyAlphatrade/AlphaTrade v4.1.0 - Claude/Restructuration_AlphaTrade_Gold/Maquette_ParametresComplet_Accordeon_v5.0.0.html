@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Page Paramètres complète en accordéon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --cyan:#5cc8ff; --green:#39ff88; --green-dim:#1c6e3f; --red:#ff5c6c; --orange:#ffb454;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px; color:var(--green); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:960px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong,#2a4433); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:960px;}
+  .intro .note b{color:var(--orange);}
+
+  .titlebar{display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--line); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:var(--green-dim);}
+  .titlebar .spacer{flex:1;}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted); text-align:center;}
+  .tabs{display:flex; gap:2px; padding:0 16px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs .tab{padding:10px 14px; font-size:12.5px; color:var(--muted); white-space:nowrap; cursor:default;}
+  .tabs .tab.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+
+  .page{max-width:1100px; margin:0 auto; padding:20px 24px 90px;}
+
+  .toolbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:10px; flex-wrap:wrap;}
+  .toolbar-btn{background:var(--panel2); border:1px solid var(--line); color:var(--muted); font-size:11.5px; font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer;}
+  .toolbar-btn:hover{color:var(--green); border-color:var(--green-dim);}
+
+  details.acc{border:1px solid var(--line); border-radius:12px; background:var(--panel); margin-bottom:10px; overflow:hidden;}
+  details.acc[open]{border-color:var(--green-dim);}
+  details.acc.is-new[open]{border-color:var(--green); box-shadow:0 0 0 1px rgba(57,255,136,.15);}
+  details.acc summary{list-style:none; cursor:pointer; padding:13px 18px; display:flex; align-items:center; gap:10px; color:var(--green); font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:.5px; user-select:none;}
+  details.acc summary::-webkit-details-marker{display:none;}
+  details.acc summary .chev{margin-left:auto; font-size:11px; color:var(--muted); transition:transform .15s;}
+  details.acc[open] summary .chev{transform:rotate(90deg); color:var(--green);}
+  details.acc summary .field-count{font-size:10px; color:var(--muted); font-weight:600; text-transform:none; letter-spacing:0; background:var(--panel2); padding:2px 8px; border-radius:10px;}
+  details.acc summary .new-badge{font-size:9px; font-weight:800; background:var(--green-dim); color:#8fd8ab; padding:2px 8px; border-radius:10px; text-transform:uppercase;}
+  .acc-body{padding:6px 18px 16px;}
+  .mini-help{color:var(--muted); font-size:11.5px; margin:4px 0 12px; line-height:1.5;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px 16px;}
+  label{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--muted); font-weight:600;}
+  label.check{flex-direction:row; align-items:center; font-weight:600; grid-column:1/-1;}
+  input, select{background:#050805; border:1px solid var(--line); border-radius:6px; color:var(--text); padding:7px 9px; font-size:13px;}
+  .info-dot{color:var(--cyan); font-size:10px; cursor:help; margin-left:3px;}
+
+  .tp-row{display:grid; grid-template-columns:32px 1fr 1fr 32px; gap:10px; align-items:end; margin-bottom:8px; padding:8px; background:var(--panel2); border-radius:8px; border:1px solid var(--line);}
+  .tp-row .tp-num{color:var(--green); font-weight:800; font-size:13px; align-self:center; text-align:center;}
+  .tp-remove{background:transparent; border:1px solid var(--line); color:var(--red); border-radius:6px; cursor:pointer; font-size:14px; align-self:center; height:32px;}
+  #addTpBtn{background:var(--panel2); border:1px dashed var(--green-dim); color:var(--green); border-radius:8px; padding:9px 14px; font-size:12.5px; font-weight:700; cursor:pointer; margin-top:4px;}
+
+  .origins-table{width:100%; border-collapse:collapse; font-size:11.5px;}
+  .origins-table th{text-align:left; color:var(--muted); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--line);}
+  .origins-table td{padding:6px 8px; border-bottom:1px solid #16241b; color:var(--text);}
+
+  .flag{background:var(--panel2); border-left:3px solid var(--orange); border-radius:6px; padding:8px 12px; margin:10px 0; font-size:12px; color:var(--muted);}
+  .flag b{color:var(--orange);}
+  .flag.remove{border-left-color:var(--red);}
+  .flag.remove b{color:var(--red);}
+
+  footer{padding:36px 22px; text-align:center; color:#4d6357; font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette v3 — page Paramètres complète, aucun code touché</div>
+  <h1>Toute la section Paramètres avec accordéon</h1>
+  <p>Les 2 nouvelles cartes validées ("Take Profit / BE" et "Cible profit &amp; Protection") sont replacées dans <b>toute</b> la page Paramètres, avec les 9 autres cartes réelles. Chaque carte est maintenant un accordéon repliable (clic sur le titre) pour éviter l'effet "mur de champs" — seules les 2 nouvelles cartes sont ouvertes par défaut, les autres sont repliées.</p>
+  <div class="note">⚠️ <b>2 points à trancher avant que je code</b> — voir les encadrés orange/rouge dans la page : (1) où doit vivre le bouton "Break-Even rapide (broker)", (2) les champs Palier 1/Palier 2 (renommés Profit Trail) avaient disparu de la carte 2 dans la maquette précédente — je les ai réintégrés ici, à confirmer.</div>
+</div>
+
+<div class="titlebar">
+  <div class="brand">🥇 AlphaTrade <span class="badge">v5.0.0</span></div>
+  <span class="badge demo">DEMO</span>
+  <span class="badge">RÉEL</span>
+  <span class="badge">#201660817 Deriv-Demo</span>
+  <div class="spacer"></div>
+  <div class="clock">GMT<br>15:40:22</div>
+  <span class="badge">Session Londres</span>
+</div>
+<div class="tabs">
+  <div class="tab">Tableau de bord</div>
+  <div class="tab">Trades</div>
+  <div class="tab">Sessions IA</div>
+  <div class="tab">Microstructure</div>
+  <div class="tab">Sessions marché</div>
+  <div class="tab">Calendrier</div>
+  <div class="tab active">Paramètres</div>
+  <div class="tab">Journal</div>
+  <div class="tab">Assistant IA</div>
+</div>
+
+<div class="page">
+  <div class="toolbar">
+    <span class="mini-help" style="margin:0;">10 cartes — 2 ouvertes par défaut (les nouvelles), 8 repliées</span>
+    <div style="display:flex; gap:8px;">
+      <button class="toolbar-btn" id="expandAll">Tout déplier</button>
+      <button class="toolbar-btn" id="collapseAll">Tout replier</button>
+    </div>
+  </div>
+
+  <!-- 1. Connexion & IA -->
+  <details class="acc">
+    <summary>🟦 Connexion &amp; IA <span class="field-count">12 champs</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Terminal MT5<input value="C:\Program Files\MetaTrader 5\terminal64.exe"></label>
+        <label>Actif principal<select><option>XAU/USD — Or</option></select></label>
+        <label class="check"><input type="checkbox"> Activer le serveur d'apprentissage</label>
+        <label>Adresse du serveur<input value="127.0.0.1:8765"></label>
+        <label>Clé privée du serveur<input type="password" value="••••••••"></label>
+        <label>Synchronisation (s)<input value="30"></label>
+        <label>Réentraînement (min)<input value="120"></label>
+        <label class="check"><input type="checkbox"> Valider les entrées avec AlphaTrade IA serveur</label>
+        <label>Clé API Anthropic<input type="password" placeholder="sk-ant-..."></label>
+        <label>Clé API OpenAI<input type="password" placeholder="sk-..."></label>
+        <label class="check"><input type="checkbox"> Activer l'observation microstructure</label>
+        <label>Intervalle microstructure (s)<input value="5"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 2. Origine des trades -->
+  <details class="acc">
+    <summary>🟦 Origine des trades <span class="field-count">table</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <table class="origins-table">
+        <thead><tr><th>Nom</th><th>Type</th><th>Magic number(s)</th><th>Mots-clés</th><th>Actif</th></tr></thead>
+        <tbody>
+          <tr><td>AlphaTrade AI</td><td>BOT interne</td><td>900001</td><td>alphatrade</td><td>✅</td></tr>
+          <tr><td>KB1000 Gold AI</td><td>BOT interne</td><td>900002</td><td>kb1000, gold-ai</td><td>✅</td></tr>
+        </tbody>
+      </table>
+      <button id="addOriginBtn" type="button" class="toolbar-btn" style="margin-top:10px;">+ Ajouter une origine</button>
+    </div>
+  </details>
+
+  <!-- 3. Risque & Compte -->
+  <details class="acc">
+    <summary>🟦 Risque &amp; Compte <span class="field-count">8 champs</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Risque / trade %<input value="0.30"></label>
+        <label>Lot max compte réel<input value="0.10"></label>
+        <label>Lot max compte démo<input value="0.50"></label>
+        <label>Lot minimum<input value="0.01"></label>
+        <label>Positions auto max<input value="3"></label>
+        <label>Positions max (symbole)<input value="2"></label>
+        <label>Cadence d'analyse (s)<input value="15"></label>
+        <label>Max trades / heure<input value="20"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 4. Session & Protection compte -->
+  <details class="acc">
+    <summary>🟦 Session &amp; Protection compte <span class="field-count">13 champs</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Perte max session $<input value="-50"></label>
+        <label>Objectif session $<input value="100"></label>
+        <label>Objectif journalier $<input value="150"></label>
+        <label>Giveback $<input value="30"></label>
+        <label class="check"><input type="checkbox" data-sym="XAUUSD"> Trader uniquement pendant une plage horaire</label>
+        <label>Ouverture UTC<input value="7"></label>
+        <label>Fermeture UTC<input value="20"></label>
+        <label>Stop avant fin (min)<input value="15"></label>
+        <label class="check"><input type="checkbox" checked> Protection du profit active</label>
+        <label>Recul depuis pic %<input value="25"></label>
+        <label>Zone avertissement %<input value="0.60"></label>
+        <label>Perte max / position $<input value="200"></label>
+        <label>Flottant max portefeuille $<input value="300"></label>
+      </div>
+      <div class="flag remove">
+        <b>Champ déplacé</b> — "Break-Even rapide (broker)" (fast_be_enabled) vivait ici dans le vrai code actuel. Je l'ai déplacé dans la nouvelle carte "Take Profit / BE" plus bas, car c'est un réglage de BE comme l'autre. Confirme que ce déplacement te va — sinon je le laisse ici.
+      </div>
+    </div>
+  </details>
+
+  <!-- 5. Renfort & Rebond -->
+  <details class="acc">
+    <summary>🟦 Renfort &amp; Rebond <span class="field-count">13 champs</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p class="mini-help">Renfort</p>
+      <div class="grid">
+        <label class="check"><input type="checkbox"> Activer le Renfort de position</label>
+        <label>Écart confiance renfort %<input value="8"></label>
+        <label>Écart score renfort<input value="18"></label>
+        <label>Pause entre renforts (s)<input value="60"></label>
+        <label>Pause après perte (s)<input value="120"></label>
+      </div>
+      <p class="mini-help" style="margin-top:14px;">Rebond</p>
+      <div class="grid">
+        <label class="check"><input type="checkbox" checked> Activer la stratégie Rebond</label>
+        <label>Seuil signal contraire min %<input value="55"></label>
+        <label>Perte déclenchement $<input value="2.0"></label>
+        <label>Cible capture rapide (pts)<input value="1.50"></label>
+        <label>Distance stop rebond (pips)<input value="2.0"></label>
+        <label>Durée max maintien (s)<input value="90"></label>
+        <label>Cooldown rebond (s)<input value="120"></label>
+        <label>Multiplicateur lot rebond<input value="2.0"></label>
+        <label>Rebonds actifs max<input value="3"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 6. Stratégie Or -->
+  <details class="acc">
+    <summary>🟦 Stratégie Or <span class="field-count">7 champs · AlphaTrade AI</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Seuil de confiance min %<input value="60"></label>
+        <label>Timeframe d'analyse<select><option>M1</option><option selected>M5</option><option>M15</option></select></label>
+        <label class="check"><input type="checkbox" checked> Éviter achat au sommet / vente au creux</label>
+        <label>Bougies analysées<input value="100"></label>
+        <label>Zone de bord %<input value="20"></label>
+        <label>Écart BUY/SELL minimum<input value="15"></label>
+        <label>Marge retournement signal<input value="99"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 7. Lot & Renfort -->
+  <details class="acc">
+    <summary>🟦 Lot &amp; Renfort <span class="field-count">2 champs</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Lot fixe<input value="0.01"></label>
+        <label>Multiplicateur lot renfort<input value="1.0"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 8. KB1000 Gold AI -->
+  <details class="acc">
+    <summary>🟦 KB1000 Gold AI — Réglages <span class="field-count">4 champs · KB1000 uniquement</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <div class="grid">
+        <label>Bougies analysées / niveau (KB1)<input value="160"></label>
+        <label>Seuil de cohérence min % (KB1)<input value="60"></label>
+        <label>Confirmations min. requises (KB6)<input value="3"></label>
+        <label>Score d'entrée min % (KB7)<input value="70"></label>
+      </div>
+    </div>
+  </details>
+
+  <!-- 9. NOUVEAU : Take Profit / BE -->
+  <details class="acc is-new" open>
+    <summary>🟦 Take Profit / BE <span class="new-badge">Recréée</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p class="mini-help">Carte recréée le 17/07/2026 — remplace l'ancien "Palier" (ce n'étaient pas des TP). Chaque Take Profit ferme le % indiqué du volume initial une fois son seuil atteint.</p>
+      <label class="check"><input type="checkbox" id="tpToggle"> <b>Activer la clôture par Take Profit</b></label>
+      <div id="tpRows" style="margin-top:10px;"></div>
+      <button id="addTpBtn" type="button">+ Ajouter un Take Profit</button>
+      <hr style="border:none; border-top:1px solid var(--line); margin:16px 0;">
+      <label class="check"><input type="checkbox" checked> Break-Even rapide (broker) <span class="info-dot" title="Déplacé depuis Session & Protection compte, à confirmer">ⓘ</span></label>
+      <label class="check"><input type="checkbox" checked> Passer à Break-Even après le 1er Take Profit</label>
+    </div>
+  </details>
+
+  <!-- 10. NOUVEAU : Cible profit & Protection -->
+  <details class="acc is-new" open>
+    <summary>🟦 Cible profit &amp; Protection <span class="new-badge">Recréée</span><span class="chev">▶</span></summary>
+    <div class="acc-body">
+      <p class="mini-help">Ne prend le relais que lorsque "Take Profit / BE" ci-dessus est désactivé. Les protections universelles (Max hold, Protection catastrophe, etc.) restent actives dans tous les cas, TP activé ou non.</p>
+      <div class="grid">
+        <label>Cible profit $ <span class="info-dot" title="Cible broker SI Take Profit désactivé — sinon c'est le dernier niveau TP qui fait foi.">ⓘ</span><input value="15"></label>
+        <label>Max hold (s) <span class="info-dot" title="Toujours actif">ⓘ</span><input value="120"></label>
+        <label>Délai de réanalyse (s) <span class="info-dot" title="Toujours actif">ⓘ</span><input value="120"></label>
+        <label>Protection catastrophe $ <span class="info-dot" title="Toujours actif">ⓘ</span><input value="200"></label>
+        <label>Profit min. sortie $ <span class="info-dot" title="Toujours actif">ⓘ</span><input value="2"></label>
+        <label>Score momentum sortie <span class="info-dot" title="Toujours actif">ⓘ</span><input value="55"></label>
+      </div>
+      <div class="flag">
+        <b>Réintégré — à confirmer</b> — la maquette précédente (carte seule, déjà validée) avait fait disparaître les champs Profit Trail (ex-"Palier 1/2" : seuil $ + recul, qui protègent une position gagnante par un recul depuis son pic). Ce mécanisme existe réellement dans le moteur (PROFIT_TRAIL) et n'a jamais été demandé à supprimer — seulement à sortir de la carte Take Profit. Je les ai donc remis ci-dessous, renommés "Profit Trail" (fini le mot Palier). Dis-moi si tu les veux vraiment ici, ou si tu voulais qu'ils disparaissent complètement.
+      </div>
+      <p class="mini-help" style="margin-top:14px;">Profit Trail (protège une position gagnante par recul depuis son pic — actif seulement si Take Profit est désactivé)</p>
+      <div class="grid">
+        <label>Profit Trail 1 — seuil $<input value="15"></label>
+        <label>Profit Trail 1 — recul<input value="0.5"></label>
+        <label>Profit Trail 2 — seuil $<input value="25"></label>
+        <label>Profit Trail 2 — recul<input value="0.5"></label>
+      </div>
+    </div>
+  </details>
+
+</div>
+
+<footer>Maquette v3 produite le 17/07/2026 — en attente de validation avant tout code.</footer>
+
+<script>
+  let tps = [
+    { seuil: 3.75, pct: 25 },
+    { seuil: 7.50, pct: 25 },
+    { seuil: 11.25, pct: 25 },
+  ];
+  const MAX_TP = 6;
+
+  function renderTps() {
+    const wrap = document.getElementById('tpRows');
+    wrap.innerHTML = tps.map((tp, i) => `
+      <div class="tp-row">
+        <div class="tp-num">TP${i+1}</div>
+        <label>Seuil $<input type="number" step="0.05" value="${tp.seuil}" data-i="${i}" data-f="seuil"></label>
+        <label>% fermé<input type="number" step="5" value="${tp.pct}" data-i="${i}" data-f="pct"></label>
+        <button class="tp-remove" type="button" data-remove="${i}" ${tps.length <= 1 ? 'disabled' : ''}>✕</button>
+      </div>
+    `).join('');
+    document.getElementById('addTpBtn').disabled = tps.length >= MAX_TP;
+    document.getElementById('addTpBtn').textContent = tps.length >= MAX_TP
+      ? `Maximum ${MAX_TP} Take Profit atteint`
+      : '+ Ajouter un Take Profit';
+    wrap.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => { tps.splice(Number(btn.dataset.remove), 1); renderTps(); });
+    });
+    wrap.querySelectorAll('input[data-i]').forEach(inp => {
+      inp.addEventListener('input', () => { tps[Number(inp.dataset.i)][inp.dataset.f] = parseFloat(inp.value) || 0; });
+    });
+  }
+  document.getElementById('addTpBtn').addEventListener('click', () => {
+    if (tps.length >= MAX_TP) return;
+    const last = tps[tps.length - 1] || { seuil: 0, pct: 20 };
+    tps.push({ seuil: Math.round((last.seuil + 3.75) * 100) / 100, pct: 20 });
+    renderTps();
+  });
+  renderTps();
+
+  document.getElementById('expandAll').addEventListener('click', () => {
+    document.querySelectorAll('details.acc').forEach(d => d.open = true);
+  });
+  document.getElementById('collapseAll').addEventListener('click', () => {
+    document.querySelectorAll('details.acc').forEach(d => d.open = false);
+  });
+</script>
+
+</body>
+</html>

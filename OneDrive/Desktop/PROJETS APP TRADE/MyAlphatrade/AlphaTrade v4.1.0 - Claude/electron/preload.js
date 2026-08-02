@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('alpha', {
   onUpdateDownloaded: (cb)  => ipcRenderer.on('update-downloaded', (_, d) => cb(d)),
   downloadUpdate: () => ipcRenderer.send('update-download'),
   installUpdate:  () => ipcRenderer.send('update-install'),
+  sendSessionToken: (token) => ipcRenderer.send('session-token', token),
 });

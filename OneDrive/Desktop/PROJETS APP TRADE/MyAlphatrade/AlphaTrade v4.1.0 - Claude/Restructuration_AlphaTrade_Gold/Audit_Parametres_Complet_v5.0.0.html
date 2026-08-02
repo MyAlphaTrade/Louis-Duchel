@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Audit complet des paramètres — AlphaTrade Gold (90 clés)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff;
+    --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(57,255,136,0.06), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid var(--green-dim); border-radius:20px;
+    color:var(--green); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:14px;}
+  header h1{font-size:1.7rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:820px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--green); font-size:1.2rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.02rem; margin:22px 0 8px;}
+  p{line-height:1.65;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13px;}
+  th, td{text-align:left; padding:8px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .finding{border-left:3px solid var(--orange);}
+  .finding.bug{border-left-color:var(--red);}
+  .finding.ok{border-left-color:var(--green);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.dead{background:#4a1a1a; color:var(--red);}
+  .badge.bug{background:#5a0e0e; color:#ff8a8a;}
+  .badge.warn{background:#4a3417; color:var(--orange);}
+  .badge.ok{background:var(--green-dim); color:var(--green-soft);}
+  .stat-row{display:flex; gap:14px; flex-wrap:wrap; margin:12px 0;}
+  .stat-box{background:var(--card2); border:1px solid var(--border-strong); border-radius:8px; padding:12px 18px; flex:1; min-width:150px;}
+  .stat-box .k{color:var(--dim); font-size:10px; text-transform:uppercase;}
+  .stat-box .v{color:#fff; font-size:1.6rem; font-weight:700; margin-top:2px;}
+  .stat-box.dead .v{color:var(--red);}
+  .stat-box.bug .v{color:var(--orange);}
+  .stat-box.ok .v{color:var(--green);}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--green-soft); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px;}
+  .verdict{font-weight:700;}
+  .verdict.remove{color:var(--red);}
+  .verdict.fix{color:var(--orange);}
+  .verdict.keep{color:var(--green-soft);}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Audit — lecture seule, aucun code modifié</div>
+  <h1>Audit complet des paramètres — AlphaTrade Gold</h1>
+  <p>Demandé par Louis le 16/07/2026, suite à la frustration : "plus de 70 paramètres, malgré ça on fait des pertes, à quoi bon". Méthode : chaque paramètre des <code>DEFAULT_PARAMS</code> de <code>python/alphatrade_engine.py</code> a été recherché dans l'ensemble du code (tous les modules <code>market_*.py</code>, <code>alphatrade_ai_server.py</code>) pour vérifier s'il est réellement lu, ce qu'il contrôle précisément, et s'il est exposé dans <code>electron/index.html</code>. Aucune supposition — seulement ce que le code fait réellement.</p>
+</header>
+
+<div class="wrap">
+
+<section class="toc">
+  <b>Sommaire</b>
+  <ol>
+    <li><a href="#verdict">Verdict en chiffres</a></li>
+    <li><a href="#morts">Paramètres morts / doublons — à retirer</a></li>
+    <li><a href="#bugs">Bugs trouvés (comportement réel ≠ attendu)</a></li>
+    <li><a href="#placement">Paramètres mal placés dans l'UI</a></li>
+    <li><a href="#utiles">Le reste — confirmé réellement utile</a></li>
+    <li><a href="#recommandation">Recommandation</a></li>
+  </ol>
+</section>
+
+<section id="verdict">
+  <h2>1. Verdict en chiffres</h2>
+  <div class="stat-row">
+    <div class="stat-box"><div class="k">Paramètres audités</div><div class="v">90</div></div>
+    <div class="stat-box dead"><div class="k">Morts / doublons inertes</div><div class="v">8</div></div>
+    <div class="stat-box bug"><div class="k">Bugs de comportement trouvés</div><div class="v">3</div></div>
+    <div class="stat-box ok"><div class="k">Réellement utilisés</div><div class="v">82</div></div>
+  </div>
+  <p>La réponse honnête à "à quoi bon 70+ paramètres" : <b>91% d'entre eux font réellement quelque chose</b>, vérifié ligne par ligne. Ce n'est donc pas la complexité en elle-même qui a causé les pertes récentes — je l'avais déjà dit pour les deux trades à -$200, et l'audit le confirme plus largement. Ceci dit, il y a bien 8 paramètres qui ne servent à rien (candidats sûrs au retrait) et 3 vrais bugs de comportement qui, eux, méritent un correctif — un est même directement lié à la question posée plus tôt ce soir sur le Renfort/Rebond inter-moteurs.</p>
+</section>
+
+<section id="morts">
+  <h2>2. Paramètres morts / doublons — à retirer (8)</h2>
+  <p>Retirer ces 8 clés de <code>DEFAULT_PARAMS</code> ne changera <b>rien</b> au comportement du moteur — c'est déjà le cas aujourd'hui, elles ne sont jamais lues.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Paramètre</th><th>Preuve</th><th>Verdict</th></tr>
+    <tr><td><code>mode</code></td><td>Jamais lu via <code>params.get("mode")</code> nulle part. Les "mode" utilisés ailleurs (DEMO/REAL, SIMULATION...) sont calculés indépendamment.</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>demo_only</code></td><td>Jamais lu, nulle part dans le moteur.</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>trading_enabled</code></td><td>Uniquement transmis en lecture seule au contexte de l'Assistant IA (<code>alphatrade_ai_server.py</code>). Ne bloque <b>aucun</b> ordre — le vrai contrôle start/stop est le processus Electron lui-même.</td><td class="verdict remove">RETIRER (ou clarifier son rôle informatif seulement)</td></tr>
+    <tr><td><code>max_trades_hour</code> (global)</td><td>Jamais lu — seul <code>symbols.XAUUSD.max_trades_hour</code> compte. Le champ visible dans "Risque &amp; Compte" écrit déjà uniquement dans la version symbole (<code>data-sym="XAUUSD"</code>).</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>cadence_sec</code> (global)</td><td>Jamais lu — seul <code>symbols.XAUUSD.cadence_sec</code> compte. Même situation.</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>max_hold_sec</code> (global)</td><td>Jamais lu — seul <code>symbols.XAUUSD.max_hold_sec</code> compte.</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>position_review_sec</code> (global)</td><td>Jamais lu — seul <code>symbols.XAUUSD.position_review_sec</code> compte.</td><td class="verdict remove">RETIRER</td></tr>
+    <tr><td><code>confidence_min</code> (global)</td><td>Techniquement lu comme repli, mais <code>symbol_analysis()</code> fusionne toujours <code>{**params, **symbols.XAUUSD}</code> — et <code>symbols.XAUUSD</code> définit systématiquement son propre <code>confidence_min</code>. Le global est donc <b>toujours masqué</b> en pratique.</td><td class="verdict remove">RETIRER</td></tr>
+  </table>
+  </div>
+  <p class="mini-help" style="color:var(--muted); font-size:12.5px;">Ce ne sont pas des paramètres inutiles au sens fonctionnel — ce sont des restes d'une époque où ces réglages étaient peut-être partagés entre plusieurs symboles/actifs (BOOM1000, CRASH1000...). Depuis l'isolation Or, tout est scopé par symbole, et ces doublons globaux ne sont plus jamais consultés.</p>
+</section>
+
+<section id="bugs">
+  <h2>3. Bugs trouvés (comportement réel ≠ attendu) — 3</h2>
+
+  <div class="card finding bug">
+    <span class="badge bug">Bug confirmé</span>
+    <h3><code>rebond_enabled</code> lu depuis le mauvais dictionnaire dans <code>position_exit_reason()</code></h3>
+    <p>Le code lit <code>pos_params.get("rebond_enabled", False)</code> — mais <code>rebond_enabled</code> est un paramètre <b>global</b>, jamais présent dans <code>pos_params</code> (le dictionnaire scopé au symbole). Résultat : cette lecture retourne <b>toujours False</b> à cet endroit précis, peu importe la vraie valeur du réglage "Activer la stratégie Rebond". Conséquence concrète : le bloc censé <i>désactiver</i> la fermeture générique sur signal inversé quand le module Rebond est actif ne se déclenche jamais correctement — les deux logiques (générique + Rebond) peuvent se marcher dessus même quand Rebond est bien coché dans l'UI.</p>
+    <p style="color:var(--orange)">Correctif suggéré (pas encore appliqué) : lire <code>params.get("rebond_enabled", False)</code> (le dict global) au lieu de <code>pos_params.get(...)</code>.</p>
+  </div>
+
+  <div class="card finding warn">
+    <span class="badge warn">Incohérence mineure</span>
+    <h3><code>reinforcement_min_score_gap</code> — défaut différent entre <code>DEFAULT_PARAMS</code> (8) et le repli du code (15)</h3>
+    <p><code>DEFAULT_PARAMS</code> fixe la valeur par défaut à 8, mais si jamais le paramètre venait à manquer du fichier de configuration, le code utiliserait 15 comme repli (<code>params.get("reinforcement_min_score_gap", 15)</code>). Sans conséquence tant que le paramètre est bien sauvegardé (le cas normal), mais source de confusion si jamais on doit déboguer ce champ.</p>
+  </div>
+
+  <div class="card finding warn">
+    <span class="badge warn">Documentation trompeuse</span>
+    <h3>Tooltip de <code>session_target</code> dans l'UI dit "purement informatif" — c'est faux</h3>
+    <p>Le champ "Objectif session $" est présenté avec l'info-bulle "Gain visé pour la session en cours — affiché dans le tableau de bord, purement informatif." En réalité, <code>protection_state()</code> utilise cette valeur pour déclencher l'état <code>TARGET_REACHED</code>, qui <b>bloque bel et bien les nouvelles entrées</b> une fois l'objectif atteint. C'est exactement le genre de décalage entre ce qu'on croit qu'un paramètre fait et ce qu'il fait vraiment que tu craignais.</p>
+    <p style="color:var(--orange)">Correctif suggéré : corriger le texte de l'info-bulle pour refléter le vrai comportement (bloque les entrées, pas juste informatif).</p>
+  </div>
+
+  <p class="mini-help" style="color:var(--muted); font-size:12.5px;">Rappel : la fuite inter-moteurs du Renfort (porte "position perdante" qui lit toujours la confiance d'AlphaTrade AI même quand KB1000 est actif) reste ouverte — déjà documentée dans l'audit Phase 11 et confirmée encore présente après la simplification KB1000 de ce soir. Pas re-comptée ici comme un "nouveau" bug, juste rappelée pour mémoire.</p>
+</section>
+
+<section id="placement">
+  <h2>4. Paramètres mal placés dans l'UI (pas des bugs, mais source de confusion)</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Paramètre</th><th>Placé sous</th><th>Devrait plutôt être sous</th></tr>
+    <tr><td><code>microstructure_enabled</code>, <code>microstructure_interval_sec</code></td><td>🟦 Connexion &amp; IA</td><td>Aucun panneau "Microstructure" dédié n'existe dans Paramètres — à créer ou reclasser</td></tr>
+    <tr><td><code>signal_reversal_margin</code></td><td>🟦 Stratégie Or (génération de signal)</td><td>Pilote en réalité une condition de <i>sortie</i> (retournement fort) — devrait être dans 🟦 Trailing &amp; Protection profit</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="utiles">
+  <h2>5. Le reste — confirmé réellement utile (82 paramètres)</h2>
+  <p>Tous les autres paramètres (Risque &amp; Compte, Session &amp; Protection, Renfort &amp; Rebond au complet sauf le bug ci-dessus, Stratégie Or, Trailing &amp; Protection profit, KB1000 Gold AI, Connexion &amp; IA) ont été vérifiés un par un : chacun est lu à un endroit précis du moteur et influence réellement une décision (taille de lot, seuil d'entrée, condition de sortie, protection de compte). Détail complet disponible sur demande — non reproduit ici pour ne pas alourdir le document, la liste brute fait 90 lignes.</p>
+</section>
+
+<section id="recommandation">
+  <h2>6. Recommandation</h2>
+  <p>Trois actions possibles, indépendantes les unes des autres :</p>
+  <ol>
+    <li><b>Retirer les 8 paramètres morts</b> (section 2) — zéro risque, zéro changement de comportement, juste moins de bruit dans <code>DEFAULT_PARAMS</code>.</li>
+    <li><b>Corriger le bug <code>rebond_enabled</code></b> (section 3) — change potentiellement le comportement des sorties quand Rebond est actif, à tester après correction.</li>
+    <li><b>Corriger le tooltip trompeur de <code>session_target</code></b> — zéro risque, juste de l'honnêteté envers toi-même sur ce que fait vraiment ce champ.</li>
+  </ol>
+  <p style="color:var(--muted)">Aucune de ces trois actions n'est codée — en attente de ta validation, comme d'habitude.</p>
+</section>
+
+</div>
+<footer>Audit produit le 16/07/2026, en tâche de fond pendant que Louis se reposait.</footer>
+</body>
+</html>
