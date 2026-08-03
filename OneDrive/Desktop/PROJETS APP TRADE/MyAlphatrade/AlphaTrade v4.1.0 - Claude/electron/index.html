@@ -740,6 +740,22 @@
           <label>Blocage avant publication (h) <span class="info-dot" data-tip="Fenêtre, en heures avant une publication à fort impact, pendant laquelle le CAIO refuse toute nouvelle entrée quelle que soit la confiance des autres agents.">ⓘ</span><input name="economic_calendar_block_hours" type="number" min="0.25" max="12" step="0.25"></label>
         </article>
 
+        <!-- 🟦 Notifications Slack (v5.1.0) -->
+        <article class="panel settings-full-width advanced-setting origins-panel">
+          <div class="panel-title collapsible">🟦 Notifications Slack
+            <span class="info-dot" data-tip="Webhooks entrants Slack — créez-en un dans les réglages de votre espace Slack (Apps → Incoming Webhooks), collez l'URL ici. Chaque canal choisit quels types d'événement il reçoit.">ⓘ</span>
+            <span class="acc-chevron">▶</span>
+          </div>
+          <div class="origins-table-wrap">
+            <table class="origins-table">
+              <thead><tr><th>Nom</th><th>Événements</th><th>Actif</th><th></th></tr></thead>
+              <tbody id="slackWebhooksBody"></tbody>
+            </table>
+          </div>
+          <button id="addSlackWebhookBtn" type="button" class="add-origin-btn">+ Ajouter un canal Slack</button>
+          <p class="mini-help">Aucun canal configuré = aucune notification envoyée, comportement inchangé.</p>
+        </article>
+
         <!-- 🟦 Stratégie Or — génération du signal (AlphaTrade AI uniquement) -->
         <article class="panel settings-full-width risk-session-panel ata-engine-only" id="strategieOrPanel">
           <div class="panel-title collapsible">🟦 Stratégie Or<span class="acc-chevron">▶</span></div>
@@ -847,6 +863,24 @@
         <div class="origin-modal-actions">
           <button type="button" id="originCancelBtn" class="ghost-btn">Annuler</button>
           <button type="button" id="originSaveBtn" class="save-btn">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="slackModal" class="params-doc-modal">
+      <div class="params-doc-card origin-modal-card">
+        <span class="params-doc-close" id="slackModalClose">×</span>
+        <h3 id="slackModalTitle">Ajouter un canal Slack <span class="info-dot" data-tip="Créez un Webhook entrant dans Slack (Apps → Incoming Webhooks) pour le canal voulu, puis collez son URL ici.">ⓘ</span></h3>
+        <p class="mini-help" id="slackModalSub"></p>
+        <label class="origin-field">Nom (libre, pour vous repérer)<input id="slackFieldName" type="text" placeholder="Ex: #trading-alertes"></label>
+        <label class="origin-field">URL du Webhook Slack<input id="slackFieldUrl" type="text" placeholder="https://hooks.slack.com/services/..."></label>
+        <label class="origin-field-row"><span>Décision CAIO GO</span><input id="slackEventGo" type="checkbox"></label>
+        <label class="origin-field-row"><span>Objectif jour/semaine/mois atteint</span><input id="slackEventMission" type="checkbox"></label>
+        <label class="origin-field-row"><span>Démarrage / arrêt du trading</span><input id="slackEventToggle" type="checkbox"></label>
+        <label class="origin-field-row"><span>Activer ce canal</span><input id="slackFieldEnabled" type="checkbox" checked></label>
+        <div class="origin-modal-actions">
+          <button type="button" id="slackCancelBtn" class="ghost-btn">Annuler</button>
+          <button type="button" id="slackSaveBtn" class="save-btn">Enregistrer</button>
         </div>
       </div>
     </div>

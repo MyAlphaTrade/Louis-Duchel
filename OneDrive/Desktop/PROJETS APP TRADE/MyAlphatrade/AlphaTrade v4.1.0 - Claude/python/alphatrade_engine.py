@@ -23,6 +23,7 @@ import calendar_tracker
 from agent_report import AgentReport, make_agent_report, sort_by_priority, PRIORITY_ORDER
 from economic_calendar import economic_calendar_report
 from shared_memory import SHARED_MEMORY
+from slack_notifier import notify_slack, blocks_caio_go, blocks_mission_target, blocks_trading_toggle, SLACK_GREEN, SLACK_RED
 # v5.1.0 -- modules purs recuperes depuis l'historique git (commit f5f6403,
 # 15/07/2026, "KB1-KB8"), non touches par le retrait de KB1000 comme moteur
 # separe (Phase 13, 16/07/2026 -- seule l'execution dupliquee/KB8 posait
@@ -108,6 +109,10 @@ DEFAULT_PARAMS = {
     # (NFP/CPI/Fed) est imminente sur la devise du symbole actif.
     "economic_calendar_enabled": True,
     "economic_calendar_block_hours": 2.0,
+    # v5.1.0 -- Slack : liste de webhooks entrants, chacun choisissant ses
+    # types d'evenement (caio_go / mission_target / trading_toggle). Vide par
+    # defaut -- aucune notification tant qu'aucun webhook n'est configure.
+    "slack_webhooks": [],
     # v5.1.0 -- CAIO v1 : seuil de qualite minimum sous lequel aucun scenario
     # n'est retenu, meme le mieux classe (voir caio_decide()).
     "caio_min_confidence": 60.0,
@@ -3443,6 +3448,29 @@ def auto_rebond_step(
 # ── Fin module Capture Rebond ──────────────────────────────────────────────────
 
 
+def check_mission_target_slack(params: dict, mission: dict, state: dict) -> None:
+    """Notifie Slack une seule fois par periode (jour/semaine/mois) quand le
+    Trading Mission Manager atteint son objectif -- deduplique via
+    state['slack_mission_notified'][periode] = cle_de_periode, persiste dans
+    trading_state.json comme le reste de `state`."""
+    if not mission:
+        return
+    now = datetime.now(timezone.utc)
+    notified = state.setdefault("slack_mission_notified", {})
+    periods = {
+        "day": (now.strftime("%Y-%m-%d"), mission.get("daily_profit"), mission.get("daily_target"), "journalier"),
+        "week": (now.strftime("%G-W%V"), mission.get("weekly_profit"), mission.get("weekly_target"), "hebdomadaire"),
+        "month": (now.strftime("%Y-%m"), mission.get("monthly_profit"), mission.get("monthly_target"), "mensuel"),
+    }
+    for key, (period_key, profit, target, label) in periods.items():
+        if profit is None or target is None or float(target) <= 0 or float(profit) < float(target):
+            continue
+        if notified.get(key) == period_key:
+            continue
+        notified[key] = period_key
+        notify_slack(params, "mission_target", SLACK_GREEN, *blocks_mission_target(label, float(profit), float(target)))
+
+
 def gold_brain_snapshot(
     params: dict,
     account,
@@ -3569,6 +3597,7 @@ def auto_trade_step(
                 payload.get("simulated_decision", {}),
                 payload, positions, trades, record=False,
             )
+            check_mission_target_slack(params, state["gold_brain"].get("mission"), state)
         except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
             log(f"Gold Brain (observation): {exc}", "ERROR")
 
@@ -3828,6 +3857,11 @@ def auto_trade_step(
             active, symbol, snapshot["order_type"], params, lot_info, analysis,
             allow_real_entry, price_hint=snapshot.get("price"), position_type=entry_position_type,
         )
+        if ok:
+            notify_slack(
+                params, "caio_go", SLACK_GREEN if str(snapshot["order_type"]).startswith("BUY") else SLACK_RED,
+                *blocks_caio_go(active, snapshot["order_type"], snapshot.get("price"), snapshot.get("source_agent"), snapshot.get("raison")),
+            )
     log(message, "SUCCESS" if ok else "ERROR")
     state["last_action"] = message
     state["reason"] = message
@@ -4349,13 +4383,20 @@ def main() -> int:
                 trading_state["last_error"] = trading_state["reason"]
                 log(trading_state["reason"], "WARNING")
             save_trading_state(trading_state)
+            if trading_state["enabled"]:
+                account_mode = "REEL" if trading_state.get("real_confirmed") else "DEMO"
+                notify_slack(params, "trading_toggle", SLACK_GREEN, *blocks_trading_toggle(True, account_mode))
         if cmd.get("command") == "DISABLE_TRADING" and is_new_command:
             trading_state = load_trading_state()
+            was_enabled = bool(trading_state.get("enabled"))
+            account_mode = "REEL" if trading_state.get("real_confirmed") else "DEMO"
             trading_state["enabled"] = False
             trading_state["real_confirmed"] = False
             trading_state["reason"] = "IA arretee: nouvelles prises de position bloquees."
             save_trading_state(trading_state)
             log("IA arretee: nouvelles prises de position bloquees.")
+            if was_enabled:
+                notify_slack(params, "trading_toggle", SLACK_RED, *blocks_trading_toggle(False, account_mode))
         if cmd.get("command") == "RESET_LEARNING" and is_new_command:
             save_learning_state(default_learning_state())
             save_position_contexts({})

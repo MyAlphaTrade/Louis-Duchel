@@ -51,6 +51,7 @@ const defaults = {
   mission_consecutive_loss_defense: 3,
   economic_calendar_enabled: true,
   economic_calendar_block_hours: 2.0,
+  slack_webhooks: [],
   fast_be_enabled: true,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
@@ -715,6 +716,8 @@ const WN_ICONS = {
   cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
 };
 const WN_CHECK = '<polyline points="20 6 9 17 4 12"/>';
 const WN_CROSS = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
@@ -754,6 +757,28 @@ const WHATS_NEW_LOG = [
             <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Ce filet de sécurité s'ajoute à ceux déjà existants (perte max par position, flottant max, protection catastrophe) — il ne les remplace pas.</li>
           </ul>`,
         howto: 'Réglable dans Paramètres → "Cible profit &amp; Protection" → "Max hold (s)". Valeur par défaut : 2700 secondes (45 minutes) pour le profil Scalping rapide.',
+      },
+      {
+        icon: 'calendar', tag: 'new', title: 'Economic Calendar',
+        body: `
+          <p>Un 5ᵉ agent Gold Brain surveille les publications économiques à fort impact (NFP, CPI, décisions de la Fed...) sur le dollar — la devise qui influence le plus fortement l'or. Source publique gratuite, mise à jour toutes les 15 minutes.</p>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Ne propose jamais de direction (BUY/SELL) — seulement un niveau de risque.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Bloque toute nouvelle entrée dans la fenêtre configurée avant une publication à fort impact, quelle que soit la confiance des autres agents.</li>
+          </ul>`,
+        howto: 'Activable dans Paramètres → "Gold AI Brain" → "Activer l\'agent Economic Calendar". Fenêtre de blocage réglable ("Blocage avant publication").',
+      },
+      {
+        icon: 'bell', tag: 'new', title: 'Notifications Slack',
+        body: `
+          <p>AlphaTrade peut désormais notifier un ou plusieurs canaux Slack — décisions CAIO GO, objectifs jour/semaine/mois atteints, démarrage/arrêt du trading. Chaque canal choisit lui-même quels événements il reçoit.</p>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Via un Webhook entrant Slack — aucune app à publier, aucun jeton à gérer.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Aucun canal configuré = aucune notification envoyée, comportement inchangé.</li>
+          </ul>`,
+        howto: 'Paramètres → "Notifications Slack" → "+ Ajouter un canal Slack" → collez l\'URL de votre Webhook entrant Slack et cochez les événements voulus.',
       },
     ],
   },
@@ -1861,6 +1886,7 @@ function fillSettings(values) {
   updateAssetCards();
   selectEngine(params.active_engine || 'alphatrade_ai');
   renderOriginsTable();
+  renderSlackWebhooksTable();
   renderTakeProfitLevels();
   applyParamLocksToUI();
   syncGoldBrainToggle();
@@ -1943,6 +1969,88 @@ document.getElementById('tradeOriginsBody')?.addEventListener('click', event => 
     const o = params.trade_origins[Number(toggleIdx)];
     o.enabled = !o.enabled;
     renderOriginsTable();
+  }
+});
+
+// ── Notifications Slack (v5.1.0) — table dynamique, meme pattern que les origines de trades ──
+const SLACK_EVENT_LABELS = {
+  caio_go: 'Décision CAIO GO',
+  mission_target: 'Objectif atteint',
+  trading_toggle: 'Démarrage/arrêt',
+};
+
+function renderSlackWebhooksTable() {
+  const body = $('slackWebhooksBody');
+  if (!body || !params) return;
+  const webhooks = params.slack_webhooks || [];
+  body.innerHTML = webhooks.length ? webhooks.map((w, i) => `
+    <tr>
+      <td><span class="origin-name-cell">${w.name || '—'}</span></td>
+      <td>${(w.events || []).map(e => SLACK_EVENT_LABELS[e] || e).join(', ') || '—'}</td>
+      <td><span class="origin-switch ${w.enabled ? 'on' : ''}" data-toggle-slack="${i}"></span></td>
+      <td>
+        <span class="origin-icon-btn" data-edit-slack="${i}" title="Modifier">✏</span>
+        <span class="origin-icon-btn danger" data-delete-slack="${i}" title="Supprimer">🗑</span>
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="4" class="empty">Aucun canal Slack configuré</td></tr>';
+}
+
+let slackModalEditIndex = null;
+
+function openSlackModal(index) {
+  slackModalEditIndex = index;
+  const w = index === null ? null : (params.slack_webhooks || [])[index];
+  $('slackModalTitle').firstChild.textContent = w ? 'Modifier un canal Slack ' : 'Ajouter un canal Slack ';
+  $('slackModalSub').textContent = w ? w.name : '';
+  $('slackFieldName').value = w ? w.name : '';
+  $('slackFieldUrl').value = w ? w.webhook_url : '';
+  const events = w ? (w.events || []) : [];
+  $('slackEventGo').checked = events.includes('caio_go');
+  $('slackEventMission').checked = events.includes('mission_target');
+  $('slackEventToggle').checked = events.includes('trading_toggle');
+  $('slackFieldEnabled').checked = w ? Boolean(w.enabled) : true;
+  $('slackModal').classList.add('open');
+}
+
+function closeSlackModal() {
+  $('slackModal').classList.remove('open');
+  slackModalEditIndex = null;
+}
+
+$('addSlackWebhookBtn')?.addEventListener('click', () => openSlackModal(null));
+$('slackModalClose')?.addEventListener('click', closeSlackModal);
+$('slackCancelBtn')?.addEventListener('click', closeSlackModal);
+$('slackModal')?.addEventListener('click', event => { if (event.target.id === 'slackModal') closeSlackModal(); });
+
+$('slackSaveBtn')?.addEventListener('click', () => {
+  const name = $('slackFieldName').value.trim();
+  const webhookUrl = $('slackFieldUrl').value.trim();
+  if (!name || !webhookUrl) return;
+  const events = [];
+  if ($('slackEventGo').checked) events.push('caio_go');
+  if ($('slackEventMission').checked) events.push('mission_target');
+  if ($('slackEventToggle').checked) events.push('trading_toggle');
+  const entry = { name, webhook_url: webhookUrl, events, enabled: $('slackFieldEnabled').checked };
+  if (!params.slack_webhooks) params.slack_webhooks = [];
+  if (slackModalEditIndex === null) params.slack_webhooks.push(entry);
+  else params.slack_webhooks[slackModalEditIndex] = entry;
+  renderSlackWebhooksTable();
+  closeSlackModal();
+});
+
+document.getElementById('slackWebhooksBody')?.addEventListener('click', event => {
+  const editIdx = event.target.dataset.editSlack;
+  const delIdx = event.target.dataset.deleteSlack;
+  const toggleIdx = event.target.dataset.toggleSlack;
+  if (editIdx !== undefined) openSlackModal(Number(editIdx));
+  else if (delIdx !== undefined) {
+    params.slack_webhooks.splice(Number(delIdx), 1);
+    renderSlackWebhooksTable();
+  } else if (toggleIdx !== undefined) {
+    const w = params.slack_webhooks[Number(toggleIdx)];
+    w.enabled = !w.enabled;
+    renderSlackWebhooksTable();
   }
 });
 
