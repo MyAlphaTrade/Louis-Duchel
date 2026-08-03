@@ -778,7 +778,7 @@ const WHATS_NEW_LOG = [
             <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Via un Webhook entrant Slack — aucune app à publier, aucun jeton à gérer.</li>
             <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Aucun canal configuré = aucune notification envoyée, comportement inchangé.</li>
           </ul>`,
-        howto: 'Paramètres → "Notifications Slack" → "+ Ajouter un canal Slack" → collez l\'URL de votre Webhook entrant Slack et cochez les événements voulus.',
+        howto: 'Mon compte → "Notifications Slack" → "+ Ajouter un canal Slack" → collez l\'URL de votre Webhook entrant Slack et cochez les événements voulus.',
       },
     ],
   },

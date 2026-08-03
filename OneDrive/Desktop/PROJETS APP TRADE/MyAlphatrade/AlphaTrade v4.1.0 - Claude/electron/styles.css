@@ -646,6 +646,7 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 }
 .account-info-row b { color: #e2e8f0; font-weight: 600; }
 .account-referral-panel { grid-column: 1 / -1; }
+.account-slack-panel { grid-column: 1 / -1; }
 .account-referral-grid { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
 .account-referral-grid > div:first-child { flex: 1; min-width: 220px; }
 .referral-code-box {
