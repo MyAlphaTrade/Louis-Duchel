@@ -52,6 +52,7 @@ const defaults = {
   economic_calendar_enabled: true,
   economic_calendar_block_hours: 2.0,
   slack_webhooks: [],
+  slack_min_confidence: 70,
   fast_be_enabled: true,
   profit_protection_enabled: true,
   profit_drawdown_pct: 30,
@@ -776,6 +777,7 @@ const WHATS_NEW_LOG = [
           <div class="wn-sublabel">Ce que ça change concrètement</div>
           <ul class="wn-mech">
             <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Via un Webhook entrant Slack — aucune app à publier, aucun jeton à gérer.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Un seuil de confiance minimum filtre les décisions CAIO notifiées — évite d'être submergé si plusieurs dizaines de trades ont lieu dans la journée.</li>
             <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Aucun canal configuré = aucune notification envoyée, comportement inchangé.</li>
           </ul>`,
         howto: 'Mon compte → "Notifications Slack" → "+ Ajouter un canal Slack" → collez l\'URL de votre Webhook entrant Slack et cochez les événements voulus.',
@@ -1979,9 +1981,27 @@ const SLACK_EVENT_LABELS = {
   trading_toggle: 'Démarrage/arrêt',
 };
 
+// Ce panneau vit sur la page Mon compte, hors du formulaire Paramètres (dont
+// la sauvegarde se fait via un bouton global) -- chaque modification doit
+// donc se sauvegarder elle-même immédiatement, comme le fait déjà le
+// bouton Gold Brain sur le tableau de bord.
+async function persistSlackParams() {
+  if (!params) return;
+  try {
+    await alpha.saveParams(params);
+  } catch (error) {
+    addLogs([`[ERROR] Sauvegarde Slack impossible: ${error?.message || error}`]);
+  }
+}
+
 function renderSlackWebhooksTable() {
   const body = $('slackWebhooksBody');
   if (!body || !params) return;
+  const slider = $('slackMinConfidence');
+  if (slider) {
+    slider.value = params.slack_min_confidence ?? 70;
+    if ($('slackMinConfVal')) $('slackMinConfVal').textContent = `${slider.value}%`;
+  }
   const webhooks = params.slack_webhooks || [];
   body.innerHTML = webhooks.length ? webhooks.map((w, i) => `
     <tr>
@@ -2037,6 +2057,7 @@ $('slackSaveBtn')?.addEventListener('click', () => {
   else params.slack_webhooks[slackModalEditIndex] = entry;
   renderSlackWebhooksTable();
   closeSlackModal();
+  persistSlackParams();
 });
 
 document.getElementById('slackWebhooksBody')?.addEventListener('click', event => {
@@ -2047,11 +2068,22 @@ document.getElementById('slackWebhooksBody')?.addEventListener('click', event =>
   else if (delIdx !== undefined) {
     params.slack_webhooks.splice(Number(delIdx), 1);
     renderSlackWebhooksTable();
+    persistSlackParams();
   } else if (toggleIdx !== undefined) {
     const w = params.slack_webhooks[Number(toggleIdx)];
     w.enabled = !w.enabled;
     renderSlackWebhooksTable();
+    persistSlackParams();
   }
+});
+
+$('slackMinConfidence')?.addEventListener('input', event => {
+  if ($('slackMinConfVal')) $('slackMinConfVal').textContent = `${event.currentTarget.value}%`;
+});
+$('slackMinConfidence')?.addEventListener('change', event => {
+  if (!params) return;
+  params.slack_min_confidence = Number(event.currentTarget.value);
+  persistSlackParams();
 });
 
 let PLAN_MAX_TP_LEVELS = 6; // plafonné par forfait via applyPlanParamsToEngine() (17/07/2026)

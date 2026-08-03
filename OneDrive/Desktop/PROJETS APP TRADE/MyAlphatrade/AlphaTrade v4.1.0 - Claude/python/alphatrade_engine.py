@@ -113,6 +113,11 @@ DEFAULT_PARAMS = {
     # types d'evenement (caio_go / mission_target / trading_toggle). Vide par
     # defaut -- aucune notification tant qu'aucun webhook n'est configure.
     "slack_webhooks": [],
+    # v5.1.0 -- meme logique que slack_min_confidence dans AlphaTrade Global :
+    # sans ce filtre, une journee a 100+ trades genererait 100+ notifications
+    # "Decision CAIO GO". Seul cet evenement est filtre -- objectifs atteints
+    # et demarrage/arret restent rares par nature, pas besoin de seuil.
+    "slack_min_confidence": 70,
     # v5.1.0 -- CAIO v1 : seuil de qualite minimum sous lequel aucun scenario
     # n'est retenu, meme le mieux classe (voir caio_decide()).
     "caio_min_confidence": 60.0,
@@ -3858,10 +3863,14 @@ def auto_trade_step(
             allow_real_entry, price_hint=snapshot.get("price"), position_type=entry_position_type,
         )
         if ok:
-            notify_slack(
-                params, "caio_go", SLACK_GREEN if str(snapshot["order_type"]).startswith("BUY") else SLACK_RED,
-                *blocks_caio_go(active, snapshot["order_type"], snapshot.get("price"), snapshot.get("source_agent"), snapshot.get("raison")),
+            winner_confidence = float(
+                (snapshot.get("reports", {}).get(snapshot.get("source_agent"), {}) or {}).get("confidence", 0) or 0
             )
+            if winner_confidence >= float(params.get("slack_min_confidence", 70)):
+                notify_slack(
+                    params, "caio_go", SLACK_GREEN if str(snapshot["order_type"]).startswith("BUY") else SLACK_RED,
+                    *blocks_caio_go(active, snapshot["order_type"], snapshot.get("price"), snapshot.get("source_agent"), snapshot.get("raison")),
+                )
     log(message, "SUCCESS" if ok else "ERROR")
     state["last_action"] = message
     state["reason"] = message

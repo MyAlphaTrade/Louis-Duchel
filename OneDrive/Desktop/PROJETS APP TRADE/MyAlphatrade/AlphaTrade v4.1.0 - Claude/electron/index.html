@@ -991,12 +991,24 @@
           </div>
         </article>
 
-        <article class="panel account-slack-panel origins-panel">
-          <div class="panel-title">Notifications Slack
-            <span class="info-dot" data-tip="Webhooks entrants Slack — créez-en un dans les réglages de votre espace Slack (Apps → Incoming Webhooks), collez l'URL ici. Chaque canal choisit quels types d'événement il reçoit.">ⓘ</span>
+        <article class="panel account-slack-panel origins-panel slack-integration-card">
+          <div class="slack-card-head">
+            <div class="slack-icon-badge">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div class="slack-card-titles">
+              <div class="panel-title" style="margin:0">Notifications Slack
+                <span class="info-dot" data-tip="Webhooks entrants Slack — créez-en un dans les réglages de votre espace Slack (Apps → Incoming Webhooks), collez l'URL ici. Chaque canal choisit quels types d'événement il reçoit.">ⓘ</span>
+              </div>
+              <p class="mini-help" style="margin:2px 0 0">Décisions de trading, objectifs atteints, démarrage/arrêt — indépendant des paramètres de stratégie.</p>
+            </div>
           </div>
-          <p class="mini-help" style="margin:-4px 0 12px">Recevez une notification Slack sur les décisions de trading, vos objectifs atteints ou le démarrage/arrêt d'AlphaTrade — indépendant des paramètres de stratégie.</p>
-          <div class="origins-table-wrap">
+
+          <label class="ac-label" style="margin-top:16px">Confiance minimum pour les décisions CAIO <span id="slackMinConfVal">70%</span></label>
+          <input id="slackMinConfidence" type="range" min="50" max="95" step="5" class="slack-range">
+          <p class="mini-help">Seules les décisions CAIO GO avec une confiance égale ou supérieure à ce seuil déclenchent une notification "Décision CAIO GO" — évite d'être submergé si plusieurs dizaines de trades ont lieu dans la journée.</p>
+
+          <div class="origins-table-wrap" style="margin-top:14px">
             <table class="origins-table">
               <thead><tr><th>Nom</th><th>Événements</th><th>Actif</th><th></th></tr></thead>
               <tbody id="slackWebhooksBody"></tbody>

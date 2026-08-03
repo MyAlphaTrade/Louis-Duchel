@@ -647,6 +647,20 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 .account-info-row b { color: #e2e8f0; font-weight: 600; }
 .account-referral-panel { grid-column: 1 / -1; }
 .account-slack-panel { grid-column: 1 / -1; }
+
+/* Notifications Slack -- carte "intégration" avec identité visuelle propre
+   (violet, comme la section équivalente d'AlphaTrade Global), distincte du
+   style générique gris/vert des autres panneaux. */
+.slack-integration-card { border-color: rgba(167,139,250,.25); }
+.slack-card-head { display: flex; align-items: center; gap: 12px; }
+.slack-icon-badge {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  background: rgba(167,139,250,.12); color: #a78bfa;
+  display: flex; align-items: center; justify-content: center;
+}
+.slack-card-titles { flex: 1; min-width: 0; }
+.slack-range { width: 100%; accent-color: #a78bfa; margin: 6px 0; }
+#slackMinConfVal { color: #a78bfa; font-weight: 700; }
 .account-referral-grid { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
 .account-referral-grid > div:first-child { flex: 1; min-width: 220px; }
 .referral-code-box {
