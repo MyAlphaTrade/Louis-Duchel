@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformation 3 couches — plan par moteur</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 960px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.2rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 720px; }
+  h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; color: #fff; margin: 52px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.05rem; font-weight: 600; color: #fff; margin: 30px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 6px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.blue { background: var(--blue-dim); border-color: rgba(107,184,242,0.25); } .callout.blue .label { color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.83rem; }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 9.5px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  .tbl-wrap { overflow-x: auto; }
+  .layer-section { border-radius: 12px; padding: 4px 0; margin: 28px 0 8px; }
+  .layer-badge { display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px; margin-bottom: 12px; }
+  .layer-badge.l1 { background: rgba(107,184,242,0.15); color: var(--blue); }
+  .layer-badge.l2 { background: var(--accent-dim); color: var(--accent); }
+  .layer-badge.l3 { background: var(--amber-dim); color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Plan de transformation, moteur par moteur — sans code</div>
+    <h1>Du score unique aux 3 couches : le plan concret</h1>
+    <p class="subtitle">Pour chacun des 11 moteurs pondérés actuels : nouvelle couche, formule proposée, poids, et impact réel sur les décisions — en préservant la compatibilité avec Entry Planner, Smart Money, Market Structure et l'Autonomous Trading Engine.</p>
+  </div>
+
+  <h2><span class="num">00</span>Principe de compatibilité — comment rien ne casse en aval</h2>
+  <p class="lede">Toute la chaîne d'exécution en aval (<code>AnalysisSessionStore.jsx</code>, le seuil <code>min_confidence</code> des Paramètres, l'Autonomous Trading Engine, les notifications Slack) ne connaît qu'<strong>un seul champ</strong> : <code>decision.confidence</code>. Casser ce contrat obligerait à réécrire tout ce qui le consomme.</p>
+  <div class="callout blue">
+    <span class="label">Solution de compatibilité proposée</span>
+    Les 3 couches deviennent le calcul <em>interne</em>. Un seul champ <code>decision.confidence</code> continue d'exister, mais il est désormais <strong>dérivé</strong> des 3 scores plutôt que d'un vote unique :
+    <pre>decision.confidence = Direction_Score × (Setup_Quality_Score / 100)^0.5 × (Market_Risk_Score / 100)^0.3</pre>
+    Les exposants (0.5 pour le setup, 0.3 pour le risque) font que ces deux scores <em>atténuent</em> la confiance sans jamais pouvoir la faire remonter au-dessus de la Direction elle-même — la Direction reste le plafond. Rien en aval ne change : <code>min_confidence</code>, l'Autonomous Trading Engine, le plancher de décision continuent de comparer ce même nombre à un seuil, exactement comme aujourd'hui. Les 3 scores bruts sont en plus exposés séparément pour l'affichage (Entry Planner et l'UI en ont besoin, voir §7).
+  </div>
+
+  <h2><span class="num">01</span>Direction Score — nouveau périmètre</h2>
+  <div class="layer-section"><span class="layer-badge l1">COUCHE 1 — DIRECTION</span></div>
+  <table>
+    <tr><th>Moteur</th><th>Poids dans la couche</th><th>Formule proposée</th><th>Impact vs aujourd'hui</th></tr>
+    <tr><td><strong>Multi-Timeframe</strong></td><td>37</td><td>Inchangée — % d'alignement sur le biais dominant parmi les 5 timeframes</td><td>Aucun — reste le pilier de la direction</td></tr>
+    <tr><td><strong>Market Structure</strong></td><td>37</td><td>Inchangée — BOS=75, CHOCH=55, aucune cassure=20</td><td>Aucun sur le calcul ; sa lecture de régime (tendance/range) est en plus réutilisée en Couche 3, voir §3</td></tr>
+    <tr><td><strong>Indicator Fusion</strong></td><td>26</td><td>Inchangée — accord EMA50/200, RSI, MACD</td><td>Aucun</td></tr>
+  </table>
+  <div class="callout gap">
+    <span class="label">Changement de fond</span>
+    Smart Money, Fibonacci, Liquidity, Pattern Recognition et Entry Planner <strong>sortent complètement</strong> du vote de Direction — ils ne votent plus jamais bullish/bearish ici. C'est le changement le plus structurant : la Direction ne répond plus qu'à "où va le marché", jamais "y a-t-il une belle zone".
+  </div>
+
+  <h2><span class="num">02</span>Setup Quality Score — nouveau périmètre</h2>
+  <div class="layer-section"><span class="layer-badge l2">COUCHE 2 — QUALITÉ D'ENTRÉE</span></div>
+  <table>
+    <tr><th>Moteur</th><th>Poids</th><th>Formule proposée</th><th>Impact vs aujourd'hui</th></tr>
+    <tr><td><strong>Smart Money</strong></td><td>30</td><td><code>100 − (distance_zone_ATR × 60)</code>, plafonné [0,100] — reprend directement la distance déjà calculée par la fonction existante, sans inventer un nouveau calcul</td><td>Sa confiance actuelle (0-100, mélangeant direction et proximité) devient une note de propreté de zone, sans référence à un camp</td></tr>
+    <tr><td><strong>Fibonacci</strong></td><td>20</td><td>100 si golden pocket + bougie de confirmation, 50 si dans la zone sans confirmation, 15 sinon</td><td>Ne vote plus bearish/bullish — signale seulement "prix à un niveau de retracement exploitable ou non"</td></tr>
+    <tr><td><strong>Liquidity</strong></td><td>20</td><td>100 si sweep confirmé récent, 20 sinon</td><td>Devient un signal de timing pur, plus un vote directionnel</td></tr>
+    <tr><td><strong>Pattern Recognition</strong></td><td>15</td><td><code>force du pattern</code> (déjà calculée), indépendamment du sens du pattern</td><td>Un pattern haussier fort et un pattern baissier fort contribuent désormais également à "il y a un pattern net", au lieu de s'annuler potentiellement dans un vote directionnel commun</td></tr>
+    <tr><td><strong>Entry Planner</strong></td><td>15</td><td><code>_find_pending_entry_zone()</code> existant — <code>100 − (distance_atr × 40)</code></td><td>Rôle inchangé dans les faits — c'est déjà exactement ce que fait la fonction actuelle ; elle est juste formellement intégrée comme un score au lieu d'être un aparté qui ne sert qu'à choisir MARKET/LIMIT/STOP</td></tr>
+  </table>
+  <div class="callout state">
+    <span class="label">Compatibilité Entry Planner — préservée explicitement</span>
+    <code>_find_pending_entry_zone()</code> et les seuils 0,15/1,5 ATR (immédiat/pending/skip) restent <strong>exactement</strong> ce qu'ils sont aujourd'hui — cette architecture ne les remplace pas, elle les <em>réutilise</em> comme entrée du Setup Quality Score au lieu de les laisser isolés. Le choix MARKET/LIMIT/STOP continue de se décider de la même façon qu'aujourd'hui, en aval du Setup Quality Score.
+  </div>
+
+  <h2><span class="num">03</span>Market Risk Score — nouveau périmètre</h2>
+  <div class="layer-section"><span class="layer-badge l3">COUCHE 3 — RISQUE</span></div>
+  <table>
+    <tr><th>Moteur</th><th>Poids</th><th>Formule proposée</th><th>Impact vs aujourd'hui</th></tr>
+    <tr><td><strong>Volatility</strong></td><td>40</td><td>Inchangée dans l'esprit — 80 si expansion (ATR&gt;1.3× moyenne), 40 si normal, 15 si compression</td><td>Ne vote plus "neutre" dans un vote directionnel qui n'a plus de sens pour lui — devient enfin ce qu'il a toujours été de fait : une mesure de fiabilité, pas de direction</td></tr>
+    <tr><td><strong>Volume</strong></td><td>35</td><td><code>min(100, ratio_vs_moyenne_20 × 50)</code></td><td>Sort du vote directionnel (où son biais bullish/bearish était en réalité secondaire à sa vraie fonction de validation)</td></tr>
+    <tr><td><strong>Session</strong></td><td>25</td><td>Inchangée dans l'esprit — 90 si overlap Londres/NY, 60 si kill zone, 35 si session active, 10 sinon</td><td>Même sortie du vote directionnel sans objet pour lui</td></tr>
+  </table>
+  <div class="callout gap">
+    <span class="label">Extension recommandée, au-delà des 11 moteurs actuels</span>
+    Pour que le Risk Score mesure vraiment "le risque de CE trade maintenant", il manque deux entrées qui existent déjà ailleurs dans le code mais pas comme moteurs "analysis" : le <strong>budget de perte journalier restant</strong> (déjà calculé par <code>score_risk_management</code>) et la <strong>lecture de régime de Market Structure</strong> (tendance nette = risque de faux signal plus bas ; range = risque plus élevé). Optionnel pour une première version, mais sans ça le Risk Score ignore le risque le plus concret : combien de budget il reste avant la coupure du Daily Goal Engine.
+  </div>
+
+  <h2><span class="num">04</span>Compatibilité avec les 4 moteurs cités explicitement</h2>
+  <table>
+    <tr><th>Moteur</th><th>Ce qui est préservé</th></tr>
+    <tr><td><strong>Entry Planner</strong></td><td>Fonction et seuils ATR inchangés (§2) — juste formellement rattaché au Setup Quality Score au lieu d'être une décision isolée</td></tr>
+    <tr><td><strong>Smart Money</strong></td><td>Sa détection de zones (order blocks/FVG, non mitigées) reste le même calcul — seule sa <em>sortie</em> change de nature (qualité de zone plutôt que vote directionnel)</td></tr>
+    <tr><td><strong>Market Structure</strong></td><td>Reste le pilier n°1 de la Direction (poids relatif préservé, 37/100 dans sa couche comme 14/38 aujourd'hui) ; gagne un second rôle optionnel en Couche 3</td></tr>
+    <tr><td><strong>Autonomous Trading Engine</strong></td><td>Continue de lire <code>decision.confidence</code> et <code>autonomous_execution_enabled</code> exactement comme aujourd'hui (§0) — aucune modification de son code ou de son contrat nécessaire</td></tr>
+  </table>
+
+  <h2><span class="num">05</span>Impact global sur les décisions actuelles</h2>
+  <table>
+    <tr><th>Situation</th><th>Système actuel</th><th>Système à 3 couches</th></tr>
+    <tr><td>Direction forte, aucune zone propre</td><td>Score élevé — entrée immédiate même sans bonne configuration</td><td>Direction élevée mais Setup Quality faible → confidence finale atténuée (exposant 0.5) → probable retour sous le seuil d'exécution, ou entrée MARKET forcée reconnue comme "moins bonne" via un Setup Quality visible à l'écran</td></tr>
+    <tr><td>Direction faible, excellente zone Smart Money+Fibonacci (le cas audité, 18%)</td><td>WAIT — l'information de zone est perdue dans le score global</td><td>Direction toujours faible → toujours WAIT sur ce cycle, mais Setup Quality élevé reste visible et enregistré → si la Direction se confirme au cycle suivant, le système "sait" déjà qu'une zone est prête, au lieu de repartir de zéro</td></tr>
+    <tr><td>Direction et Setup bons, mais volatilité comprimée + faible volume</td><td>Score élevé, ignore le risque d'exécution</td><td>Risk Score bas → confidence finale réduite (exposant 0.3, effet plus doux que le Setup) → trade encore possible mais à confiance revue à la baisse, cohérent avec "mouvements moins fiables en compression"</td></tr>
+  </table>
+
+  <div class="callout state">
+    <span class="label">Verdict</span>
+    Cette version répond directement à l'objectif énoncé : la confiance finale mesure maintenant la qualité d'une opportunité (direction × propreté de la zone × conditions d'exécution), pas seulement un consensus de vote. La compatibilité en aval est préservée par construction (§0) — aucun code consommateur de <code>decision.confidence</code> n'a besoin d'être modifié. Le vrai travail de code, s'il est validé, porte sur <code>engine_scoring.py</code> (rediriger 5 moteurs vers un nouveau contrat de sortie) et <code>market_brain.py</code> (nouvelle fonction de combinaison remplaçant <code>fuse_direction_and_confidence</code>) — toujours pas fait, cette page reste une proposition.
+  </div>
+
+</div>
+</body>
+</html>

@@ -609,7 +609,8 @@ def trade_manager_sync_daily(body):
 
     params = _get_params()
     capital = params.get("capital") or 1000
-    goal_amount = capital * (params.get("daily_goal_percent") or 2) / 100
+    fixed_goal = params.get("daily_goal_amount")
+    goal_amount = fixed_goal if fixed_goal is not None else capital * (params.get("daily_goal_percent") or 2) / 100
 
     existing = list_entities("DailyPerformance", query={"date": date}, sort="-created_date", limit=1)
     payload = {
@@ -859,6 +860,16 @@ def _get_params():
     return params_list[0] if params_list else {}
 
 
+def is_simulation_mode():
+    """Single source of truth for whether a real MT5 order may be sent.
+    Checked in the bridge itself (alphatg_bridge.py /send_order and
+    /send_pending_order), not just the frontend — execution_mode was
+    previously a display-only label with no actual enforcement anywhere in
+    the order-sending path, meaning "Mode Simulation" did not stop a real
+    order from reaching MT5 if the account happened to be connected."""
+    return (_get_params().get("execution_mode") or "simulation") == "simulation"
+
+
 def _today_closed_trades():
     today = _local_today()
     trades = list_entities("Trade", query={"status": "closed"}, sort="-closed_at", limit=500)
@@ -916,14 +927,21 @@ def score_execution_engine():
 def daily_goal_status(params):
     """Shared by the engine score AND the frontend's pre-trade gate (see
     dispatcher action dailyGoalStatus) — one source of truth for whether
-    autonomous execution should keep trading today."""
+    autonomous execution should keep trading today.
+
+    daily_goal_amount/max_daily_loss_amount (fixed $, settable in Settings)
+    take precedence when set — most users think in dollars, not in percent
+    of a capital figure they may never have configured. Falls back to the
+    original percent-of-capital calculation for backward compatibility."""
     capital = params.get("capital") or 1000
-    goal_pct = params.get("daily_goal_percent") or 2
-    loss_pct = params.get("max_daily_loss_percent") or 2
     today_trades = _today_closed_trades()
     pnl = sum(t.get("pnl") or 0 for t in today_trades)
-    goal_amount = capital * goal_pct / 100
-    loss_limit = capital * loss_pct / 100
+
+    fixed_goal = params.get("daily_goal_amount")
+    goal_amount = fixed_goal if fixed_goal is not None else capital * (params.get("daily_goal_percent") or 2) / 100
+
+    fixed_loss = params.get("max_daily_loss_amount")
+    loss_limit = fixed_loss if fixed_loss is not None else capital * (params.get("max_daily_loss_percent") or 2) / 100
     goal_reached = goal_amount > 0 and pnl >= goal_amount
     protection_triggered = loss_limit > 0 and pnl <= -loss_limit
     progress_pct = round(min(100, max(0, pnl / goal_amount * 100))) if goal_amount > 0 else 0

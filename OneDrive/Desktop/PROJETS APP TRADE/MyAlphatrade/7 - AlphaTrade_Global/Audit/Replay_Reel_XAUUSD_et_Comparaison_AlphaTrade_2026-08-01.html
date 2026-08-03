@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replay réel XAUUSD + comparaison AlphaTrade</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 980px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 740px; }
+  h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; color: #fff; margin: 48px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 7px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-wrap { overflow-x: auto; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 18px 0; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--bg-card); }
+  .stat .n { font-family: var(--mono); font-size: 1.7rem; color: #fff; }
+  .stat .l { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Étapes 1 &amp; 3 demandées — replay réel + comparaison AlphaTrade</div>
+    <h1>90 jours de vrai XAUUSD H1 : Global n'a jamais déclenché un seul trade</h1>
+    <p class="subtitle">Le replay de la production actuelle (confidence v1) sur 1207 points de décision réels, pendant que l'or chutait de 4547 à 4100, confirme et aggrave le constat de la Phase A : ce n'est pas seulement les 3 moteurs directionnels qui sont trop prudents — c'est la formule de fusion elle-même, structurellement punitive, comparée à ce que fait AlphaTrade (v4.1.0) avec de meilleurs résultats réels.</p>
+  </div>
+
+  <h2><span class="num">00</span>Résultat principal — replay réel, pas une approximation</h2>
+  <p class="lede">Contrairement à la simulation précédente (qui approximait à partir de <code>engine_results</code> déjà stockés), ce replay appelle le vrai <code>market_brain.analyze()</code> à chaque étape, sur une fenêtre de bougies réellement glissante — 1207 points de décision, bougies H1 XAUUSD réelles du 03/05/2026 au 31/07/2026 (90 jours, prix passé de 4547 à 4100, soit une tendance baissière nette et exploitable).</p>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">0 / 1207</div><div class="l">BUY ou SELL déclenchés (confidence v1)</div></div>
+    <div class="stat"><div class="n">84.5%</div><div class="l">des WAIT jugés injustifiés (mouvement réel &gt;1.5 ATR manqué)</div></div>
+    <div class="stat"><div class="n">26.5</div><div class="l">confiance v1 moyenne — jamais une seule fois &ge; 60</div></div>
+  </div>
+
+  <div class="callout critical">
+    <span class="label">Constat brut</span>
+    Sur 1207 analyses réelles, la confiance v1 (production) n'a <strong>jamais</strong> atteint 60 — maximum observé : <strong>52</strong>. Résultat : zéro trade sur 90 jours, alors même que le prix a fait un mouvement directionnel net et important pendant cette période. Ce n'est pas un cas particulier de marché plat — c'est le comportement du système sur une vraie tendance.
+  </div>
+
+  <h3>Distribution complète des scores sur les 1207 points</h3>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Score</th><th class="num">Moyenne</th><th class="num">Médiane</th><th class="num">Min</th><th class="num">Max</th><th class="num">% &ge; 60</th></tr>
+    <tr><td><strong>confidence_v1 (production)</strong></td><td class="num">26.5</td><td class="num">26</td><td class="num">13</td><td class="num">52</td><td class="num">0.0%</td></tr>
+    <tr><td>confidence_v2 (3 couches, hypothétique)</td><td class="num">21.2</td><td class="num">18</td><td class="num">7</td><td class="num">60</td><td class="num">0.08% (1/1207)</td></tr>
+    <tr><td>direction_score</td><td class="num">39.4</td><td class="num">28</td><td class="num">28</td><td class="num">79</td><td class="num">21.5%</td></tr>
+    <tr><td>setup_quality_score</td><td class="num">51.7</td><td class="num">52</td><td class="num">12</td><td class="num">97</td><td class="num">33.6%</td></tr>
+    <tr><td>market_condition_score</td><td class="num">42.9</td><td class="num">42</td><td class="num">28</td><td class="num">76</td><td class="num">3.6%</td></tr>
+  </table>
+  </div>
+
+  <div class="callout gap">
+    <span class="label">Limite méthodologique déclarée</span>
+    Ce replay ne dispose pas d'historique multi-timeframe aligné sur 90 jours (seul du H1 est disponible) — <code>multi_timeframe</code> (poids 14/94 en v1, 37/100 en Direction Score v2) est donc absent des deux calculs, pas seulement de l'un. La comparaison v1/v2 reste donc valide <em>entre elles deux</em>, mais aucune des deux n'est le chiffre exact que produirait l'app connectée en direct (qui, elle, alimente <code>multi_timeframe</code>). Cela dit, retirer un moteur ne peut par construction que réduire l'exigence de consensus — si même sans lui la confiance v1 ne dépasse jamais 52, la conclusion "le système ne s'est jamais autorisé un trade sur 90 jours de tendance" est un plancher, pas un artefact de la limite.
+  </div>
+
+  <h2><span class="num">01</span>La v2 (3 couches) ne corrige pas le problème seule</h2>
+  <p>La confiance v2 fait à peine mieux (1 SELL déclenché sur 1207, qui s'est avéré être un bon trade — mais un échantillon de 1 ne prouve rien statistiquement). La raison : v2 utilise toujours <code>direction_score × (setup/100)^0.5 × (condition/100)^0.3</code>, une multiplication d'atténuations sur un Direction Score qui, lui, reste construit sur le même principe de vote-par-consensus que v1 (voir §2). Séparer les 3 couches aide à ne plus <em>confondre</em> direction/qualité/risque dans un seul chiffre, mais ne change rien au fait que le Direction Score parte de zéro et ait besoin d'un accord fort entre 2-3 moteurs pour dépasser 60.</p>
+
+  <h2><span class="num">02</span>Pourquoi AlphaTrade (v4.1.0, scalping) obtient de meilleurs résultats réels</h2>
+  <p class="lede">Audit lecture-seule du code de l'autre projet (aucune modification), pour comparer les deux mécaniques de calcul de confiance à la source.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <tr><th></th><th>AlphaTrade Global (ce projet)</th><th>AlphaTrade v4.1.0 (scalping)</th></tr>
+    <tr><td><strong>Point de départ du score</strong></td><td><code>weighted_votes = {bullish:0, bearish:0, neutral:0}</code> — part de zéro, doit être <em>gagné</em> par consensus (<code>engine_scoring.py:280</code>)</td><td><code>buy = 25.0 ; sell = 25.0</code> — part d'une base haute, chaque confirmation <em>ajoute</em> des points (<code>alphatrade_engine.py:1009-1010</code>)</td></tr>
+    <tr><td><strong>Formule finale</strong></td><td><code>confidence = poids_camp_gagnant / poids_total × 100</code> — un <strong>ratio</strong>, mathématiquement tiré vers le bas par tout désaccord (<code>engine_scoring.py:298</code>)</td><td><code>confidence = max(buy, sell)</code> — une <strong>somme plafonnée</strong>, jamais divisée par le désaccord (<code>alphatrade_engine.py:1058</code>)</td></tr>
+    <tr><td><strong>Garde-fou qualitatif</strong></td><td>Aucun — tout est arithmétique</td><td>Un vrai LLM (<strong>GPT-4.1-mini + Claude Haiku 4.5</strong>) vote en gate final avant chaque ouverture ; désaccord entre les deux IA → WAIT forcé (<code>alphatrade_ai_server.py:494-536</code>)</td></tr>
+    <tr><td><strong>Apprentissage</strong></td><td>Aucun — poids et seuils fixes en code</td><td>Recalibrage en ligne après chaque trade fermé : poids des 5 composants ajustés ±0.025×reward, seuil de confiance +0.45 après une perte / -0.12 après un gain (<code>alphatrade_engine.py:2296-2323</code>)</td></tr>
+    <tr><td><strong>Mode scalping dédié</strong></td><td>N/A</td><td><code>scalping_fast</code> : cadence 10s, <code>confidence_min</code> le plus permissif du système (55) (<code>alphatrade_engine.py:214-251</code>)</td></tr>
+  </table>
+  </div>
+
+  <div class="callout state">
+    <span class="label">Ce que ça implique concrètement</span>
+    Ce n'est pas qu'AlphaTrade "triche" — c'est que sa formule mesure une question différente. Global demande "quelle proportion du poids total des moteurs est-elle d'accord ?" (un ratio, sévère par nature). AlphaTrade demande "combien de confirmations indépendantes ai-je accumulées ?" (une somme, généreuse par nature), puis laisse un vrai LLM et un historique de trades réels corriger les excès de permissivité a posteriori. Le levier le plus important n'est donc pas seulement "les moteurs sont trop prudents" (Phase A), c'est <strong>le principe même de la formule de fusion</strong> (ratio de consensus vs somme de confirmations).
+  </div>
+
+  <h2><span class="num">03</span>Ce que ça change pour la Phase B</h2>
+  <p>Avant de me lancer dans la réécriture de <code>multi_timeframe</code>/<code>market_structure</code>/<code>indicator_fusion</code> eux-mêmes (ce qui était le plan initial de Phase B), ce replay montre que le problème le plus lourd est en amont : la mécanique de fusion punit le désaccord par construction, quel que soit le talent individuel des 3 moteurs. Améliorer les moteurs sans revoir cette mécanique risque de ne rien changer au résultat final, exactement comme v2 le montre déjà (couches séparées, même problème de fond).</p>
+
+  <p>Deux voies possibles pour la suite, à trancher avant que je code quoi que ce soit sur des moteurs qui pilotent de vrais ordres :</p>
+  <ol>
+    <li><strong>Revoir la formule de fusion elle-même</strong> (base haute + addition au lieu d'un ratio de consensus pur), en gardant l'esprit déterministe de Global (pas de LLM) — le changement le plus direct, mais qui touche au cœur de <code>fuse_direction_and_confidence</code>/<code>calculate_direction_score</code>.</li>
+    <li><strong>Améliorer d'abord les 3 moteurs directionnels</strong> (plan Phase B initial) pour voir s'ils deviennent capables de produire des lectures plus tranchées/moins figées, puis rejouer ce même replay pour mesurer l'effet réel avant de toucher à la formule.</li>
+  </ol>
+
+</div>
+</body>
+</html>

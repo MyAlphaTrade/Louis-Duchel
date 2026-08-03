@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit complémentaire — cohérence architecturale</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 920px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.3rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 700px; }
+  .meta-row { display: flex; gap: 24px; margin-top: 20px; font-size: 12px; color: var(--text-faint); font-family: var(--mono); flex-wrap: wrap; }
+  h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 500; color: #fff; margin: 56px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; }
+  p.lede { color: var(--text-dim); font-size: 0.96rem; margin-bottom: 20px; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 22px; } li { margin: 5px 0; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  .callout.fixed { background: var(--blue-dim); border-color: rgba(107,184,242,0.25); } .callout.fixed .label { color: var(--blue); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  .tbl-wrap { overflow-x: auto; }
+  .real { color: var(--accent); font-weight: 700; } .fake { color: var(--red); font-weight: 700; } .partial { color: var(--amber); font-weight: 700; }
+  .toc { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin: 28px 0; }
+  .toc .label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 12px; }
+  .toc ol { columns: 2; column-gap: 32px; padding-left: 18px; }
+  .toc li { font-size: 0.87rem; margin: 4px 0; break-inside: avoid; color: var(--text-dim); }
+  .toc a { color: var(--text-dim); text-decoration: none; } .toc a:hover { color: var(--accent); }
+  .flow { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin: 18px 0; font-family: var(--mono); font-size: 0.82rem; }
+  .flow-step { padding: 8px 0; color: var(--text-dim); }
+  .flow-step .title { color: #fff; font-weight: 600; }
+  .flow-step .metric { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Audit complémentaire — avant validation démo</div>
+    <h1>Cohérence architecturale : où en est réellement le cerveau</h1>
+    <p class="subtitle">Ce document répond point par point à la demande d'audit complémentaire, sur le code réel de <code>7 - AlphaTrade_Global/EA_Bridge</code> — le projet sur lequel toute cette session a porté.</p>
+    <div class="meta-row">
+      <span>1er août 2026</span>
+      <span>Portée : EA_Bridge (marketBrain/engine_scoring), pas AlphaTrade v4.1.0 - Claude</span>
+    </div>
+  </div>
+
+  <div class="callout gap">
+    <span class="label">Clarification nécessaire avant tout le reste</span>
+    Les termes de la demande — <strong>Market Observer, Shared Market Memory, Structure Analyst, Mission Manager, CAIO, <code>psychological_state</code>, <code>aggressiveness_level</code>, <code>capital_preservation_mode</code></strong> — correspondent exactement à l'architecture documentée dans <code>AlphaTrade v4.1.0 - Claude/Restructuration_AlphaTrade_Gold/Architecture_AlphaTrade_AI_Brain_v1.0.html</code> et codée dans <code>AlphaTrade v4.1.0 - Claude/python/alphatrade_engine.py</code> (<code>caio_decide()</code>, <code>mission_state()</code>, <code>agent_report.py</code>, <code>shared_memory.py</code>) — un <strong>projet distinct</strong>. Confirmé avec toi : cet audit porte sur <strong>EA_Bridge</strong>, qui n'utilise aucun de ces noms. Chaque section ci-dessous fait donc la correspondance entre ce que tu demandes et ce qui existe réellement ici, plutôt que de prétendre que ces composants existent sous ces noms.
+  </div>
+
+  <div class="toc">
+    <div class="label">Sommaire</div>
+    <ol>
+      <li><a href="#s1">Cycle de décision complet, avec temps réels</a></li>
+      <li><a href="#s2">Un seul chemin vers MT5 ?</a></li>
+      <li><a href="#s3">Ancienne logique parasite</a></li>
+      <li><a href="#s4">Rôle réel de chaque moteur (tableau complet)</a></li>
+      <li><a href="#s5">Qualité de la mémoire partagée</a></li>
+      <li><a href="#s6">Performances mesurées</a></li>
+      <li><a href="#s7">Équivalent du Mission Manager</a></li>
+      <li><a href="#s8">Gestion des timeframes</a></li>
+      <li><a href="#s9">Mode Scalping — ce qu'il change vraiment</a></li>
+      <li><a href="#s10">Choix Pending Orders</a></li>
+      <li><a href="#s11">Cohérence des objectifs</a></li>
+      <li><a href="#s12">Bug du calendrier</a></li>
+      <li><a href="#s13">Verdict et priorités avant démo</a></li>
+    </ol>
+  </div>
+
+  <h2 id="s1"><span class="num">01</span>Le cycle de décision complet, avec temps réels mesurés</h2>
+  <p class="lede">Il n'y a pas de "Market Observer" ni de "Shared Market Memory" séparés dans EA_Bridge — les données MT5 sont lues directement à chaque cycle, pas mises en cache dans une mémoire intermédiaire. Voici le trajet réel, mesuré aujourd'hui sur XAUUSD réel.</p>
+
+  <div class="flow">
+    <div class="flow-step"><span class="title">1. Réception MT5</span> — <code>mt5.copy_rates_from_pos()</code> pour 5 timeframes (D1/H4/H1/M15/M5) × 300 bougies. <span class="metric">Mesuré : 6,6ms</span> pour les 5 timeframes.</div>
+    <div class="flow-step"><span class="title">2. Contexte (build_context)</span> — EMA20/50/200, RSI14, MACD, ATR14, Bollinger, swings, structure — calculé une fois, partagé par tous les moteurs du timeframe primaire.</div>
+    <div class="flow-step"><span class="title">3. 11 moteurs pondérés</span> — chacun lit le contexte, vote biais + confiance. Aucune donnée n'est écrite dans une mémoire intermédiaire entre les moteurs — ils lisent tous la même structure en mémoire locale à la fonction, jamais les uns les autres.</div>
+    <div class="flow-step"><span class="title">4. Fusion pondérée</span> — <code>fuse_direction_and_confidence()</code>, vote par camp (§ voir doc précédent pour le détail du calcul).</div>
+    <div class="flow-step"><span class="title">5. Seuil plancher (60%)</span> — bloque si en dessous.</div>
+    <div class="flow-step"><span class="title">6. Entry Planner (nouveau)</span> — <code>_find_pending_entry_zone()</code>, décide MARKET/LIMIT-STOP/SKIP selon distance ATR.</div>
+    <div class="flow-step"><span class="title">7. Construction du plan</span> — SL/TP1/TP2/break-even.</div>
+    <div class="flow-step"><span class="title">8. Persistance (AIDecision)</span> — écrite en base SQLite.</div>
+    <div class="flow-step"><span class="title">Total (étapes 2-7, analyze() complet)</span> — <span class="metric">mesuré sur 20 exécutions réelles : min 170ms, médiane 174ms, max 184ms</span> sur cette machine.</div>
+  </div>
+
+  <div class="callout state">
+    <span class="label">Conditions de blocage à chaque étape</span>
+    <ul>
+      <li><strong>Étape 1</strong> : MT5 non connecté → <code>{"error": "MT5 not connected"}</code>, aucune analyse possible.</li>
+      <li><strong>Étape 5</strong> : confiance fusionnée &lt; 60% → décision forcée à WAIT.</li>
+      <li><strong>Étape 6</strong> : zone la plus proche &gt; 1,5 ATR → aucun ordre envoyé (entry_type=wait_confirmation), direction conservée pour mémoire.</li>
+      <li><strong>Étape 8 (côté frontend)</strong> : confiance &lt; seuil configuré (<code>min_confidence</code>, 70-80% selon profil) → décision enregistrée mais jamais exécutée.</li>
+      <li><strong>Avant tout ordre réel</strong> : <code>daily_goal_status()</code> — objectif atteint ou perte max atteinte → aucun nouvel ordre, quel que soit le résultat ci-dessus.</li>
+    </ul>
+  </div>
+
+  <h2 id="s2"><span class="num">02</span>Un seul chemin vers MT5 ?</h2>
+  <p class="lede">Vérification exhaustive : recherche de tous les appels <code>mt5.order_send()</code> dans <code>alphatg_bridge.py</code>.</p>
+  <table>
+    <tr><th>Ligne</th><th>Fonction</th><th>Opération</th><th>Ouvre une nouvelle exposition ?</th></tr>
+    <tr><td>943</td><td><code>send_order</code></td><td>Ordre au marché</td><td class="real">Oui</td></tr>
+    <tr><td>1103</td><td><code>send_pending_order</code></td><td>Ordre en attente (LIMIT/STOP)</td><td class="real">Oui</td></tr>
+    <tr><td>1199</td><td><code>cancel_order</code></td><td>Annulation d'un ordre en attente</td><td>Non</td></tr>
+    <tr><td>1391</td><td><code>close_position</code></td><td>Fermeture d'une position</td><td>Non</td></tr>
+    <tr><td>1430</td><td><code>modify_position_direct</code></td><td>Modification SL/TP seule</td><td>Non</td></tr>
+  </table>
+  <p>Seuls <strong>2 des 5 appels</strong> peuvent ouvrir une nouvelle exposition. Tous les deux sont exclusivement atteignables via <code>/send_order</code> et <code>/send_pending_order</code>, qui ne sont eux-mêmes appelés que par du code qui dérive <code>direction</code>/<code>entry_price</code>/<code>stop_loss</code> d'une <code>AIDecision</code> déjà produite par <code>market_brain.analyze()</code>.</p>
+
+  <div class="callout critical">
+    <span class="label">Faille trouvée et corrigée pendant cet audit</span>
+    Deux boutons d'exécution manuelle — <code>QuickExecute.jsx</code> (bouton "Exécuter maintenant" sur une décision) et <code>AlphaTradeActions.jsx</code> (bouton d'exécution sur un Signal) — appelaient <strong>toujours</strong> <code>/send_order</code> (marché), <strong>quel que soit</strong> le <code>entry_type</code> de la décision. Si l'Entry Planner décidait <code>pending_order</code> (attendre une zone), cliquer sur ces boutons envoyait quand même un ordre au marché immédiatement, à un prix potentiellement bien moins bon que celui que le moteur avait identifié — la décision de type d'ordre était silencieusement ignorée pour toute exécution manuelle. Corrigé dans les deux fichiers : ils vérifient maintenant <code>entry_type === 'pending_order'</code> et appellent <code>/send_pending_order</code> le cas échéant, exactement comme le fait déjà <code>AnalysisSessionStore.jsx</code> pour l'exécution autonome.
+  </div>
+
+  <p><strong>Conclusion §2</strong> : après correction, il existe bien un chemin de décision unique pour toute nouvelle position — automatique ou manuelle, les deux respectent maintenant le même <code>entry_type</code> produit par le même <code>analyze()</code>.</p>
+
+  <h2 id="s3"><span class="num">03</span>Ancienne logique parasite — recherche exhaustive</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Motif recherché</th><th>Trouvé ?</th><th>Détail</th></tr>
+    <tr><td><code>if confidence &gt; 70 → BUY</code></td><td>Non trouvé comme déclencheur</td><td>Seul usage réel : <code>decision.confidence &gt;= minConfidence</code> dans <code>AnalysisSessionStore.jsx</code> — c'est le seuil d'exécution documenté (§7 doc précédent), pas une règle parallèle.</td></tr>
+    <tr><td><code>if EMA50 &gt; EMA200 → BUY</code></td><td>Trouvé, mais légitime</td><td>Dans <code>score_indicator_fusion()</code> — un des 11 votes pondérés, jamais un déclencheur seul. Les 4 stratégies backtestées (<code>backtest_engine.py</code>) utilisent des règles simples similaires (EMA, retracement) mais ne servent que de <strong>second avis</strong> (confirme +5% ou veto→WAIT), jamais de déclencheur autonome — vérifié dans <code>market_brain.py</code>.</td></tr>
+    <tr><td><code>entry_type = "immediate"</code> codé en dur</td><td>Trouvé — 1 cas inoffensif</td><td><code>SlackNotifierSection.jsx</code> — payload de test pour vérifier le format de la notification Slack ("Test notification"), jamais utilisé pour une vraie décision.</td></tr>
+    <tr><td>Fonctions Base44 TypeScript (<code>Dist/base44/functions/*.ts</code>)</td><td>Présentes sur disque, mortes</td><td>Vérifié : aucun import depuis <code>Dist/src/</code>. Seules des références en commentaire ("Faithful port of...") dans les fichiers Python. Zéro risque d'exécution, mais source de confusion possible pour un futur développeur — à archiver ou supprimer si vous êtes d'accord.</td></tr>
+  </table></div>
+  <p><strong>Conclusion §3</strong> : aucune ancienne logique de décision parallèle active. Le seul vrai problème trouvé est le contournement d'<code>entry_type</code> par les boutons manuels (§2), déjà corrigé.</p>
+
+  <h2 id="s4"><span class="num">04</span>Rôle réel de chaque moteur</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Moteur</th><th>Type</th><th>Source de données</th><th>LLM ?</th></tr>
+    <tr><td>Multi-Timeframe</td><td class="real">Analyse réelle</td><td>5 timeframes MT5 réels</td><td>Non</td></tr>
+    <tr><td>Market Structure</td><td class="real">Analyse réelle</td><td>Swings + BOS/CHOCH sur bougies réelles</td><td>Non</td></tr>
+    <tr><td>Smart Money</td><td class="real">Analyse réelle</td><td>Order blocks + FVG réels</td><td>Non</td></tr>
+    <tr><td>Fibonacci</td><td class="real">Analyse réelle</td><td>Swings réels</td><td>Non</td></tr>
+    <tr><td>Indicator Fusion</td><td class="real">Analyse réelle</td><td>EMA/RSI/MACD réels</td><td>Non</td></tr>
+    <tr><td>Volume</td><td class="real">Analyse réelle</td><td>Tick volume réel MT5</td><td>Non</td></tr>
+    <tr><td>Liquidité</td><td class="real">Analyse réelle</td><td>Zones de liquidité sur swings réels</td><td>Non</td></tr>
+    <tr><td>Volatilité</td><td class="real">Analyse réelle</td><td>ATR14 réel</td><td>Non</td></tr>
+    <tr><td>Session</td><td class="real">Calcul réel</td><td>Horloge système (kill zones)</td><td>Non</td></tr>
+    <tr><td>Pattern Recognition</td><td class="real">Analyse réelle</td><td>Chandeliers réels</td><td>Non</td></tr>
+    <tr><td>Entry Planner</td><td class="real">Analyse réelle</td><td>Réutilise Smart Money/Fibonacci</td><td>Non</td></tr>
+    <tr><td>Economic Intelligence</td><td class="fake">Neutralisé (poids 0)</td><td>Aucune — pas de calendrier économique branché</td><td>Non (stub honnête, retourne 0%, n'invente rien)</td></tr>
+    <tr><td>Position Management</td><td class="real">Action réelle</td><td>Positions ouvertes MT5 réelles</td><td>Non</td></tr>
+    <tr><td>Risk Management</td><td class="real">Calcul réel</td><td>Trades clôturés réels + Paramètres</td><td>Non</td></tr>
+    <tr><td>Daily Goal Engine</td><td class="real">Calcul réel</td><td>PnL réel du jour</td><td>Non</td></tr>
+    <tr><td>Execution Engine</td><td class="real">Mesure réelle</td><td>Latence de connexion réelle</td><td>Non</td></tr>
+    <tr><td>AI Learning Engine</td><td class="partial">Réel mais limité</td><td>Taux de réussite réel historique — mais n'ajuste encore aucun poids en retour (lecture seule)</td><td>Non</td></tr>
+    <tr><td>Autonomous Trading</td><td class="real">État réel</td><td>Paramètre <code>autonomous_execution_enabled</code></td><td>Non</td></tr>
+  </table></div>
+  <div class="callout state">
+    <span class="label">Verdict §4</span>
+    <strong>Aucun moteur n'utilise de LLM.</strong> Vérifié par recherche exhaustive du mot "LLM" dans tout le code source (voir aussi les deux corrections de badges trompeurs plus tôt dans cette session). Un seul moteur (Economic Intelligence) est un score artificiel — mais il l'assume honnêtement (toujours 0%, poids 0, jamais compté dans la fusion) plutôt que d'inventer un chiffre. AI Learning Engine est le seul "à mi-chemin" : il observe et rapporte la réalité, mais ne referme pas encore la boucle en ajustant les poids des 11 moteurs en fonction des résultats passés — c'est un vrai chantier futur, pas encore fait.
+  </div>
+
+  <h2 id="s5"><span class="num">05</span>Qualité de la "mémoire partagée"</h2>
+  <p class="lede">Il n'existe pas de compartimentage nommé façon <code>shared_memory.py</code> ici. Vérifié directement dans <code>local_store.py</code>, fonction <code>create_entity()</code> :</p>
+  <table>
+    <tr><th>Champ demandé</th><th>Présent ?</th><th>Détail</th></tr>
+    <tr><td>Source</td><td class="fake">Absent</td><td>Aucune trace de quel agent/moteur a écrit une donnée</td></tr>
+    <tr><td>Timestamp</td><td class="real">Présent</td><td><code>created_date</code>/<code>updated_date</code>, ISO UTC, sur chaque enregistrement</td></tr>
+    <tr><td>Expiration</td><td class="fake">Absent</td><td>Rien n'empêche de lire une <code>TradingAccount</code> vieille de plusieurs heures comme si elle était fraîche</td></tr>
+    <tr><td>Niveau de confiance</td><td class="partial">Partiel</td><td>Présent quand la donnée elle-même en a un (ex: <code>AIDecision.confidence</code>), mais ce n'est pas une propriété générique du stockage — une <code>TradingAccount</code> ou un <code>Trade</code> n'en a pas</td></tr>
+    <tr><td>Version</td><td class="fake">Absent</td><td>Aucun compteur de version sur les enregistrements</td></tr>
+  </table>
+  <div class="callout gap">
+    <span class="label">Proposition</span>
+    Ce n'est pas urgent tant que tout tourne dans un seul processus synchrone (pas de risque réel de lire une donnée obsolète produite par un autre agent, puisqu'il n'y a pas d'autres agents asynchrones aujourd'hui) — mais si le système évolue vers plusieurs processus/agents qui lisent/écrivent en parallèle (rapprochant l'architecture de ce que <code>shared_memory.py</code> fait dans l'autre projet), ce sera nécessaire. Proposition concrète et peu coûteuse : ajouter une enveloppe optionnelle <code>{source, confidence, valid_until}</code> uniquement sur les entités qui alimentent une vraie décision (<code>TradingAccount</code>, <code>AIDecision</code>), pas sur tout (inutile sur <code>AppLog</code> par exemple).
+  </div>
+
+  <h2 id="s6"><span class="num">06</span>Performances mesurées</h2>
+  <table>
+    <tr><th>Mesure</th><th>Valeur réelle mesurée</th></tr>
+    <tr><td>Temps <code>analyze()</code> (min / médiane / max, 20 exécutions)</td><td><strong>170ms / 174ms / 184ms</strong></td></tr>
+    <tr><td>Récupération 5 timeframes × 300 bougies depuis MT5</td><td><strong>6,6ms</strong></td></tr>
+    <tr><td>Mémoire Python allouée pendant <code>analyze()</code></td><td><strong>233,5 Ko</strong> (négligeable)</td></tr>
+    <tr><td>Fréquence de cycle configurée (Scalping)</td><td>30 000ms</td></tr>
+    <tr><td>Fréquence de cycle configurée (Intraday/Auto)</td><td>120 000ms</td></tr>
+    <tr><td>Fréquence de cycle configurée (Swing)</td><td>600 000ms</td></tr>
+  </table>
+  <div class="callout state">
+    <span class="label">Verdict §6 — compatible scalping, large marge</span>
+    175ms de calcul sur un budget de cycle de 30 000ms en Scalping = <strong>0,6% du temps disponible utilisé</strong>. Même avec 4 actifs actifs traités séquentiellement dans un même cycle (comme observé sur le compte réel), le calcul pur resterait sous la seconde. Non mesuré aujourd'hui : le temps d'aller-retour HTTP navigateur↔pont pour chaque appel (marketBrain, réconciliation, gestion de position) — sur localhost c'est typiquement quelques millisecondes à quelques dizaines de millisecondes, mais je ne l'ai pas chronométré précisément pour ce rapport, donc je le note comme non mesuré plutôt que de l'affirmer.
+  </div>
+  <div class="callout gap">
+    <span class="label">Piste d'optimisation repérée, pas urgente</span>
+    <code>find_order_blocks()</code>/<code>find_fvgs()</code> sont recalculés plusieurs fois par cycle (une fois dans <code>score_smart_money()</code>, une seconde fois dans le nouvel <code>_find_pending_entry_zone()</code>) — redondant mais sans impact réel vu la marge de 99,4% ci-dessus. À mutualiser un jour pour la propreté du code, pas pour la performance.
+  </div>
+
+  <h2 id="s7"><span class="num">07</span>Équivalent du "Mission Manager"</h2>
+  <div class="callout critical">
+    <span class="label">N'existe pas ici</span>
+    <code>psychological_state</code>, <code>aggressiveness_level</code>, <code>capital_preservation_mode</code> — recherché explicitement dans tout <code>EA_Bridge</code>, <strong>zéro occurrence</strong>. Ce ne sont pas des concepts implémentés dans ce projet, sous aucun nom.
+  </div>
+  <p>Ce qui existe et joue un rôle voisin mais beaucoup plus étroit : le <strong>Daily Goal Engine</strong> (<code>daily_goal_status()</code>) — objectif $ et perte max $ journaliers uniquement, sortie binaire (<code>stop_trading: true/false</code>). Aucun état gradué (Normal/Prudent/Défense/Protection), aucune variable "agressivité" qui module la sélectivité du CAIO (puisqu'il n'y a pas de CAIO ici), aucun horizon semaine/mois.</p>
+  <p><strong>Pour construire l'équivalent</strong>, il faudrait : un état gradué calculé à partir d'un historique de pertes consécutives (variable non trackée aujourd'hui — <code>Trade</code> a un statut mais rien n'agrège "combien de pertes d'affilée en ce moment"), et un mécanisme pour que cet état module concrètement <code>min_confidence</code>/<code>max_risk_percent</code> en temps réel plutôt que seulement au moment où l'utilisateur change de profil à la main. Rien de tout cela n'existe aujourd'hui — c'est un chantier neuf, pas une extension.</p>
+
+  <h2 id="s8"><span class="num">08</span>Gestion des timeframes</h2>
+  <p class="lede">Déjà traité en détail dans <a href="Logique_Decisionnelle_AlphaTrade_Gold_AI_Brain_2026-08-01.html">le document précédent</a> (§3, §6) — résumé ici pour la continuité.</p>
+  <ul>
+    <li><strong>Configurés</strong> par défaut selon le profil (Scalping→M5, Intraday→H1, Swing→H4).</li>
+    <li><strong>Décidés par l'IA</strong> uniquement en mode "AUTO" — <code>select_timeframe()</code> choisit parmi D1/H4/H1/M15/M5 celui qui confirme le biais dominant.</li>
+    <li><strong>Toujours pas hiérarchisés</strong> — vote à plat entre les 5 timeframes, pas de cascade D1→M1 comme envisagé. M1 absent du calcul.</li>
+    <li><strong>Non contraint par le profil actif</strong> — en Swing, le mode AUTO pourrait théoriquement encore proposer M5 si le vote le préfère (gap déjà noté §6 du doc précédent, non corrigé).</li>
+  </ul>
+
+  <h2 id="s9"><span class="num">09</span>Mode Scalping — ce qu'il change vraiment</h2>
+  <p class="lede">Déjà documenté intégralement dans le document précédent (§5), avec le tableau chiffré complet (timeframe, confiance min, risque max, trades/jour, break-even, fréquence de cycle). Complément sur les points spécifiquement redemandés ici :</p>
+  <table>
+    <tr><th>Point demandé</th><th>Réponse</th></tr>
+    <tr><td>Taille des TP/SL</td><td>Pas de multiplicateur différent par profil — TP/SL sont toujours ATR×1.5/3.0/5.0. Un TP est mécaniquement plus court en Scalping <em>uniquement</em> parce que l'ATR de M5 est plus petit que celui de H4, pas parce que Scalping utilise une formule différente.</td>
+    <tr><td>Type d'entrée privilégié</td><td>Aucune préférence par profil — l'Entry Planner (§4 doc précédent) décide MARKET/LIMIT/SKIP uniquement selon la distance à la zone, identiquement pour tous les profils.</td></tr>
+    <tr><td>Fréquence des Pending Orders</td><td>Pas de statistique différente par profil — même logique de distance ATR pour tous. Un lien indirect existe : un cycle plus rapide (30s en Scalping) revoit plus souvent si le prix a atteint une zone, donc réagit plus vite une fois une zone identifiée, mais ne change pas la probabilité qu'une zone soit détectée.</td></tr>
+  </table>
+  <div class="callout gap">
+    <span class="label">Constat</span>
+    Le mode Scalping change bien 5 paramètres réels (timeframe, confiance min, risque, trades/jour, cadence) — ce n'est pas qu'un nom dans l'interface. Mais il ne module ni le type d'entrée préféré, ni les multiplicateurs SL/TP, ni le comportement de l'Entry Planner — ces trois derniers points sont identiques quel que soit le profil actif aujourd'hui.
+  </div>
+
+  <h2 id="s10"><span class="num">10</span>Choix Pending Orders — raisonnement exact</h2>
+  <p>Entièrement couvert par le document précédent (§4, avec les 4 scénarios détaillés) et validé end-to-end aujourd'hui (<a href="Validation_E2E_EntryPlanner_LimitStop_2026-08-01.html">rapport de validation</a>, 6 tickets réels créés et vérifiés sur MT5). Résumé du raisonnement : distance à la zone réelle la plus proche (order block/FVG/golden pocket) en multiples d'ATR — pas de règle arbitraire de distance fixe en points, la distance s'adapte à la volatilité du moment via l'ATR.</p>
+
+  <h2 id="s11"><span class="num">11</span>Cohérence des objectifs</h2>
+  <table>
+    <tr><th>Objectif</th><th>Existe ?</th><th>Influence réelle le comportement ?</th></tr>
+    <tr><td>Journalier</td><td class="real">Oui</td><td>Oui — <code>daily_goal_status()</code> bloque réellement l'exécution autonome une fois atteint ou en cas de perte max (vérifié §2, wiré dans <code>autoExecute()</code>)</td></tr>
+    <tr><td>Hebdomadaire</td><td class="fake">N'existe pas</td><td>—</td></tr>
+    <tr><td>Mensuel</td><td class="fake">N'existe pas</td><td>—</td></tr>
+    <tr><td>Réduction auto du risque en approchant l'objectif</td><td class="fake">N'existe pas</td><td>Le blocage est binaire (0% ou 100% atteint), pas de palier intermédiaire</td></tr>
+    <tr><td>Mode défense après pertes consécutives</td><td class="fake">N'existe pas</td><td>Aucun compteur de pertes consécutives n'est même calculé aujourd'hui</td></tr>
+  </table>
+  <p><strong>Verdict</strong> : le seul mécanisme d'objectif qui existe (journalier) fonctionne réellement et n'est pas cosmétique — mais c'est le seul, et il n'a que deux états (actif / stoppé), aucune gradation.</p>
+
+  <h2 id="s12"><span class="num">12</span>Bug du calendrier</h2>
+  <div class="callout state">
+    <span class="label">Déjà corrigé et vérifié cette session</span>
+    Cause trouvée : <code>isToday(new Date(clé))</code> dans <code>PerformanceCalendar.jsx</code> reparse une chaîne "AAAA-MM-JJ" comme minuit <strong>UTC</strong> (comportement du constructeur <code>Date</code> de JavaScript pour ce format), puis compare à l'heure locale — décalant le jour affiché comme "aujourd'hui" pour tout utilisateur dans un fuseau différent d'UTC. Confirmé mathématiquement que cette machine est en UTC-5. Corrigé en comparant directement les clés de date locales sans reparser via <code>Date</code>. Le même problème existait côté backend pour le calcul de l'objectif journalier (regroupement des trades par jour UTC au lieu du jour local) — corrigé aussi (<code>_local_today()</code>/<code>_to_local_date()</code> dans <code>local_functions.py</code>). Les deux corrections sont poussées.
+  </div>
+
+  <h2 id="s13"><span class="num">13</span>Verdict et priorités avant démo</h2>
+  <table>
+    <tr><td><strong>Sain, vérifié, prêt</strong></td><td>Chemin d'exécution unique vers MT5 (après correction §2) ; aucun moteur LLM ; Entry Planner LIMIT/STOP validé end-to-end avec vrais tickets ; Daily Goal Engine réellement contraignant ; performances très largement compatibles scalping ; bug calendrier corrigé.</td></tr>
+    <tr><td><strong>Corrigé pendant cet audit</strong></td><td>QuickExecute/AlphaTradeActions ignoraient <code>entry_type</code> et forçaient toujours un ordre au marché.</td></tr>
+    <tr><td><strong>Écart majeur vs la vision "trader professionnel"</strong></td><td>Aucun équivalent Mission Manager — pas d'objectifs semaine/mois, pas de mode gradué après pertes consécutives, pas d'agressivité adaptative. C'est le plus gros trou entre l'architecture actuelle et la philosophie « gérer un capital avec discipline » citée dans ta demande.</td></tr>
+    <tr><td><strong>Écart structurel</strong></td><td>Pas de mémoire partagée avec métadonnées (source/expiration/version) — sans risque réel aujourd'hui (un seul processus synchrone) mais à revoir si l'architecture se distribue.</td></tr>
+    <tr><td><strong>Non testé en conditions réelles</strong></td><td>Un vrai cycle autonome complet qui va spontanément d'un signal à un LIMIT/STOP sur XAUUSD — testé manuellement aujourd'hui (BTCUSD, appels directs), pas encore observé depuis le cycle automatique en conditions de marché réelles.</td></tr>
+  </table>
+
+</div>
+</body>
+</html>

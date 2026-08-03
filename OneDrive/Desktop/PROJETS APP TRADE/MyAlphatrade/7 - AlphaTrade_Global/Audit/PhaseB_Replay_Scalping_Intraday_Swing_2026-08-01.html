@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase B — Scalping vs Intraday vs Swing, données réelles</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 980px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 740px; }
+  h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; color: #fff; margin: 48px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 7px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-wrap { overflow-x: auto; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 18px 0; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--bg-card); }
+  .stat .n { font-family: var(--mono); font-size: 1.5rem; color: #fff; }
+  .stat .l { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+  .stat.bad .n { color: var(--red); } .stat.mid .n { color: var(--amber); } .stat.ok .n { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Phase B — mesure avant d'ajouter de nouveaux cerveaux</div>
+    <h1>Scalping, Intraday, Swing : ce que le moteur actuel produit réellement</h1>
+    <p class="subtitle">Conformément à la recommandation reçue ("avant d'ajouter Hyperliquid et Global Market Intelligence, mesure si le cerveau actuel fonctionne"), voici les 3 profils testés sur des données MT5 réelles récupérées aujourd'hui — pas d'approximation, pas de moteur modifié pour ce test.</p>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat mid"><div class="n">8.10/j — 22.5%</div><div class="l">Scalping (M5, 100 jours)</div></div>
+    <div class="stat ok"><div class="n">1.45/j — 34.0%</div><div class="l">Intraday (H1, 73 jours)</div></div>
+    <div class="stat bad"><div class="n">0/j — n/a</div><div class="l">Swing (H4, 281 jours)</div></div>
+  </div>
+
+  <h2><span class="num">00</span>Méthodologie et données réelles utilisées</h2>
+  <p>Récupérées aujourd'hui directement du terminal MT5 déjà connecté (aucune donnée synthétique) :</p>
+  <ul>
+    <li><strong>M5</strong> — 20 000 bougies, 22/04/2026 → 31/07/2026 (~100 jours)</li>
+    <li><strong>H1</strong> — 1467 bougies, déjà utilisées précédemment (~90 jours de données brutes, ~73 jours réellement évalués après la période d'échauffement des indicateurs)</li>
+    <li><strong>H4</strong> — 1500 bougies, 20/10/2025 → 31/07/2026 (~343 jours de données brutes, ~281 jours évalués)</li>
+  </ul>
+  <p>Chaque profil utilise le vrai <code>fuse_direction_and_confidence()</code> (déjà corrigé cette session), sur le seul timeframe du profil (pas de multi-timeframe — même limite méthodologique que les tests précédents), avec un seuil de confiance et des multiples SL/TP en ATR propres à chaque style :</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Profil</th><th>Timeframe</th><th class="num">Seuil</th><th class="num">SL (ATR)</th><th class="num">TP (ATR)</th><th class="num">Horizon</th></tr>
+    <tr><td>Scalping</td><td>M5</td><td class="num">53</td><td class="num">0.5</td><td class="num">0.9</td><td class="num">1h</td></tr>
+    <tr><td>Intraday</td><td>H1</td><td class="num">57 (déjà en prod)</td><td class="num">1.5</td><td class="num">3.0</td><td class="num">10h</td></tr>
+    <tr><td>Swing</td><td>H4</td><td class="num">67</td><td class="num">2.0</td><td class="num">6.0</td><td class="num">~3.3j</td></tr>
+  </table>
+  </div>
+
+  <h2><span class="num">01</span>Résultats bruts, par profil</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Profil</th><th class="num">Trades</th><th class="num">Trades/jour</th><th class="num">Bons</th><th class="num">Faux</th><th class="num">Indéterminé</th><th class="num">Taux réussite</th></tr>
+    <tr><td><strong>Scalping</strong></td><td class="num">813 (271 BUY / 542 SELL)</td><td class="num">8.10</td><td class="num">183</td><td class="num">630</td><td class="num">0</td><td class="num">22.5%</td></tr>
+    <tr><td><strong>Intraday</strong></td><td class="num">106 (41 BUY / 65 SELL)</td><td class="num">1.45</td><td class="num">18</td><td class="num">35</td><td class="num">53</td><td class="num">34.0%</td></tr>
+    <tr><td><strong>Swing</strong></td><td class="num">0</td><td class="num">0.00</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">n/a</td></tr>
+  </table>
+  </div>
+
+  <h2><span class="num">02</span>Pourquoi le taux de réussite Intraday a changé (63.5% → 34.0%) — à ne pas cacher</h2>
+  <div class="callout gap">
+    <span class="label">Écart méthodologique assumé</span>
+    Les <strong>106 mêmes trades</strong> (41 BUY / 65 SELL, identiques aux deux tests) sont désormais jugés avec une classification plus stricte et plus réaliste : le test précédent demandait seulement 1.0 ATR de mouvement favorable pour valider un "bon trade" ; celui-ci exige d'atteindre le <strong>vrai TP1 (3.0 ATR)</strong> sans toucher le <strong>vrai SL (1.5 ATR)</strong>, dans une fenêtre de 10 heures. C'est un test plus dur, donc un chiffre plus honnête — mais 53 des 106 trades (50%) restent "indéterminés" : ni le TP ni le SL n'ont été touchés en 10 heures, ce qui sous-estime probablement la vraie performance (certains auraient pu gagner au-delà de cette fenêtre). <strong>34.0% est donc un plancher pessimiste, pas un chiffre définitif.</strong>
+  </div>
+
+  <h2><span class="num">03</span>Scalping — fréquence au rendez-vous, mais perdant en l'état</h2>
+  <p>8.10 trades/jour est cohérent avec l'estimation de "5-20 opportunités/jour" — la fréquence recherchée existe bien. Mais à 22.5% de réussite avec un ratio récompense:risque de 1.8:1 (TP 0.9 / SL 0.5 ATR), l'espérance est <strong>négative</strong> (≈ -0.37R par trade). Ce n'est pas une anomalie de mesure : les moteurs actuels (Market Structure, Smart Money, Fibonacci...) lisent des <em>structures de prix</em>, pas de la <em>microstructure de marché</em> (order flow, absorption, pression acheteur/vendeur réelle) — exactement le point que tu soulevais sur XAUUSD/MT5 n'ayant pas de vrai carnet d'ordres. Le scalping sur ces moteurs, tel quel, n'est pas viable.</p>
+
+  <h2><span class="num">04</span>Swing — le seuil 67 est simplement hors de portée sur H4</h2>
+  <p>Zéro trade en 281 jours n'est pas "le marché n'a jamais offert d'opportunité" — c'est que <strong>la confiance H4 plafonne à 65</strong> sur toute la période (moyenne 45.5, médiane 45). Le seuil 67 proposé était donc au-dessus du maximum atteignable avec les moteurs actuels sur ce timeframe.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Seuil testé</th><th class="num">Signaux sur 281 jours</th><th class="num">Signaux/jour</th></tr>
+    <tr><td>60</td><td class="num">25</td><td class="num">0.09</td></tr>
+    <tr><td>57</td><td class="num">77</td><td class="num">0.27</td></tr>
+    <tr><td>55</td><td class="num">127</td><td class="num">0.45</td></tr>
+    <tr><td>65</td><td class="num">1</td><td class="num">0.00</td></tr>
+    <tr><td>67</td><td class="num">0</td><td class="num">0.00</td></tr>
+  </table>
+  </div>
+  <p>À seuil 60, on retrouve exactement la fourchette "0.1-0.5 trade/jour" que tu anticipais toi-même pour le swing — un seuil H4 réaliste serait donc plus proche de 58-60 que de 67, avec les moteurs actuels.</p>
+
+  <h2><span class="num">05</span>Ce que ça implique avant de construire le Trading Style Engine</h2>
+  <div class="callout critical">
+    <span class="label">Conclusion honnête</span>
+    Offrir aujourd'hui un sélecteur "Scalping / Intraday / Swing" dans l'UI donnerait un mode Scalping structurellement perdant et un mode Swing calibré pour ne jamais trader. Seul le mode Intraday (déjà en production) est dans une zone plausible, avec la réserve du §02. Avant de coder le Trading Style Engine comme interface utilisateur, il faut soit : (a) accepter Intraday comme seul mode fiable pour l'instant, (b) recalibrer les seuils Scalping/Swing sur ces vraies données avant de les exposer, ou (c) pour le scalping spécifiquement, ne pas compter dessus tant qu'une vraie source de microstructure n'existe pas pour XAUUSD.
+  </div>
+
+  <h2><span class="num">06</span>Ce qui n'a pas été touché</h2>
+  <ul>
+    <li>Aucun moteur, aucune formule de production modifiée pour ce test — seuils/SL/TP par profil vivent uniquement dans le script de mesure.</li>
+    <li>Hyperliquid, Global Market Intelligence, Trading Style Engine (en tant que fonctionnalité persistante), Risk Guardian, architecture 3-couches : toujours pas codés, conformément à la priorité convenue.</li>
+  </ul>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposition — AI Confidence Engine à 3 couches</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 920px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.2rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 700px; }
+  h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 500; color: #fff; margin: 52px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 6px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  .tbl-wrap { overflow-x: auto; }
+  .layer { border-radius: 12px; border: 1px solid var(--border); padding: 22px 26px; margin: 18px 0; }
+  .layer.l1 { background: rgba(107,184,242,0.06); border-color: rgba(107,184,242,0.2); }
+  .layer.l2 { background: var(--accent-dim); border-color: rgba(52,211,153,0.2); }
+  .layer.l3 { background: var(--amber-dim); border-color: rgba(242,184,75,0.2); }
+  .layer h3 { margin-top: 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Proposition d'architecture — sans code, pour validation</div>
+    <h1>Séparer Direction, Qualité de Setup et Risque</h1>
+    <p class="subtitle">Aujourd'hui, un seul nombre (la confiance fusionnée) répond en même temps à trois questions différentes : dans quel sens, sur une configuration de quelle qualité, à quel risque. Cette proposition les sépare.</p>
+  </div>
+
+  <h2><span class="num">00</span>Le problème avec le système actuel, précisément</h2>
+  <p class="lede">Repris de l'exemple audité juste avant : Multi-Timeframe bullish 40%, Market Structure neutre 20%, Smart Money bearish 63%, Fibonacci bearish 65%, Indicator Fusion bullish 67%, Volume neutre 15%, Volatility neutre 20% → confiance finale <strong>18%</strong>.</p>
+  <p>Ce 18% répond à une seule question ("quel camp a le plus de poids × confiance cumulés"), mais un trader professionnel se pose en réalité trois questions séparées que ce chiffre unique confond :</p>
+  <ol>
+    <li><strong>Dans quel sens le marché penche-t-il ?</strong> (Direction)</li>
+    <li><strong>Y a-t-il une configuration propre pour entrer, où qu'elle soit ?</strong> (Qualité de setup)</li>
+    <li><strong>Est-ce le bon moment pour prendre ce risque ?</strong> (Risque)</li>
+  </ol>
+  <p>Un marché peut avoir une direction peu claire (18% comme ci-dessus) tout en étant sur une excellente zone Smart Money — aujourd'hui ce signal-là est noyé dans le même chiffre que la direction. À l'inverse, une direction très nette (80%+) sur un marché en compression de volatilité extrême est aujourd'hui traitée pareil qu'une direction nette en expansion — alors que le risque d'exécution n'est pas du tout le même.</p>
+
+  <h2><span class="num">01</span>Architecture proposée — 3 scores indépendants</h2>
+
+  <div class="layer l1">
+    <h3>1. Direction Confidence — "dans quel sens"</h3>
+    <p>Exactement le calcul actuel (vote pondéré par camp), mais restreint aux moteurs qui votent une <em>direction de marché</em> : Multi-Timeframe, Market Structure, Indicator Fusion, Session. Fibonacci et Smart Money sortent de ce calcul — leur biais directionnel dépend en réalité de la proximité d'une zone, ce qui est une question de <em>setup</em>, pas de direction pure (voir couche 2).</p>
+    <pre>direction_confidence = round( vote[camp_gagnant] / poids_total_direction × 100 )
+poids_total_direction = Multi-Timeframe(14) + Market Structure(14) + Indicator Fusion(10) + Session(4) = 42</pre>
+  </div>
+
+  <div class="layer l2">
+    <h3>2. Setup Quality Score — "y a-t-il une vraie configuration"</h3>
+    <p>Ne vote pas bullish/bearish — répond à "à quel point la configuration actuelle est-elle propre et actionnable", indépendamment du sens. Moteurs : Smart Money (zone fraîche/mitigée), Fibonacci (dans le golden pocket ou non), Liquidity (sweep confirmé ou non), Entry Planner (distance réelle à la zone la plus proche, déjà calculée par <code>_find_pending_entry_zone</code>).</p>
+    <pre>setup_quality = moyenne pondérée de :
+  - Smart Money : 100 si zone fraîche à &lt;0.3 ATR, dégressif ensuite
+  - Fibonacci   : 100 si golden pocket confirmé, 0 sinon
+  - Liquidity   : 100 si sweep détecté, 20 sinon
+  - Entry Planner : 100 - (distance_atr × 40), plafonné [0,100]</pre>
+    <div class="callout gap">
+      <span class="label">Implication de conception importante</span>
+      Ceci exige que Smart Money et Fibonacci <strong>publient une deuxième valeur</strong> en plus de leur biais actuel (une note de qualité de zone, distincte de leur confiance directionnelle) — aujourd'hui ces moteurs ne retournent qu'un seul chiffre qui mélange déjà les deux. Ce n'est pas un simple réétiquetage, c'est un changement de contrat de sortie pour ces deux moteurs.
+    </div>
+  </div>
+
+  <div class="layer l3">
+    <h3>3. Risk Score — "est-ce le bon moment pour ce risque"</h3>
+    <p>Répond à "les conditions d'exécution sont-elles favorables", indépendamment de la direction et du setup. Moteurs : Volatility (expansion=favorable, compression=défavorable), Volume (participation faible=défavorable), Session (hors kill zone=défavorable), plus deux entrées qui n'existent pas encore comme moteurs "analysis" mais existent déjà ailleurs dans le code : le budget de perte journalier restant (<code>score_risk_management</code>) et la latence d'exécution (<code>score_execution_engine</code>).</p>
+    <pre>risk_score = moyenne pondérée de :
+  - Volatility : 80 si expansion, 40 si normal, 15 si compression
+  - Volume     : proportionnel au ratio vs moyenne 20 périodes
+  - Session    : 90 si kill zone, 50 si session active, 15 sinon
+  - Budget de perte restant : 100 - (% du budget journalier déjà utilisé)</pre>
+  </div>
+
+  <h2><span class="num">02</span>Comment les 3 scores se combinent en décision</h2>
+  <p>Le point le plus important : <strong>ne pas les remoyenner en un seul chiffre</strong> — ce serait recréer exactement le problème qu'on essaie de résoudre. Proposition : une matrice de décision où chaque score doit franchir son propre seuil.</p>
+  <table>
+    <tr><th>Direction</th><th>Setup</th><th>Risque</th><th>Décision</th></tr>
+    <tr><td>≥ 65%</td><td>≥ 60%</td><td>≥ 50%</td><td><strong>Entrée autorisée</strong> — MARKET si setup=100 (déjà sur zone), sinon LIMIT/STOP</td></tr>
+    <tr><td>≥ 65%</td><td>&lt; 60%</td><td>—</td><td><strong>WAIT</strong> — direction claire mais pas de configuration propre pour entrer</td></tr>
+    <tr><td>&lt; 65%</td><td>≥ 60%</td><td>—</td><td><strong>WAIT</strong> — belle zone, mais pas de conviction directionnelle suffisante</td></tr>
+    <tr><td>≥ 65%</td><td>≥ 60%</td><td>&lt; 50%</td><td><strong>Entrée réduite</strong> — lot divisé par 2, ou WAIT selon seuil de tolérance choisi</td></tr>
+  </table>
+
+  <h2><span class="num">03</span>Impact sur les décisions actuelles — rejoué sur le vrai cas audité</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Système</th><th>Résultat</th></tr>
+    <tr><td>Actuel</td><td>Confiance fusionnée = 18% → WAIT (sous le plancher de 60%)</td></tr>
+    <tr><td>Proposé — Direction seule</td><td>Poids direction = 42 (MTF 14 + Structure 14 + Fusion 10 + Session 4). Bullish: MTF(14×0,40=5,6)+Fusion(10×0,67=6,7)=12,3. Bearish: aucun moteur directionnel bearish dans ce sous-ensemble (Smart Money/Fibonacci exclus). Neutre: Structure(14×0,20=2,8)+Session(inconnu ici). <strong>Direction Confidence ≈ 29-35%</strong> selon Session — toujours sous un seuil de décision raisonnable, mais pour une raison différente et plus lisible : "les moteurs de tendance ne sont pas convaincus", pas "tout le monde se contredit"</td></tr>
+    <tr><td>Proposé — Setup Quality</td><td>Smart Money bearish 63% et Fibonacci bearish 65% suggèrent une vraie zone bearish identifiée — <strong>Setup Quality pourrait être élevé (60-80%) côté bearish</strong> alors que la Direction seule seule seule ne l'est pas</td></tr>
+  </table></div>
+  <div class="callout critical">
+    <span class="label">Ce que ça change concrètement</span>
+    Avec le système actuel, ce cas se lit comme "rien de clair, WAIT". Avec le système à 3 couches, il se lirait plutôt : <strong>"direction faible, mais une vraie zone bearish existe (Smart Money + Fibonacci alignés) — si la direction se confirme, il y a déjà un setup prêt."</strong> C'est une information exploitable que le système actuel jette en la noyant dans un seul chiffre bas.
+  </div>
+
+  <h2><span class="num">04</span>Avantages / Inconvénients</h2>
+  <table>
+    <tr><th></th><th>Détail</th></tr>
+    <tr><td><strong>Avantage</strong></td><td>Distingue "pas de direction" de "pas de setup" de "trop risqué" — trois raisons de ne pas trader qui appellent des réactions différentes (attendre plus longtemps / chercher un autre symbole / attendre une meilleure session)</td></tr>
+    <tr><td><strong>Avantage</strong></td><td>Permet de détecter les cas "setup prêt, en attente de confirmation directionnelle" — actuellement invisible</td></tr>
+    <tr><td><strong>Avantage</strong></td><td>Le Risk Score isolé permet de réduire la taille sans annuler le trade, plus nuancé que le tout-ou-rien actuel</td></tr>
+    <tr><td><strong>Inconvénient</strong></td><td>Complexité doublée : 3 seuils à calibrer et expliquer au lieu d'1 seul — risque de confusion utilisateur si mal présenté à l'écran</td></tr>
+    <tr><td><strong>Inconvénient</strong></td><td>Exige de faire évoluer le contrat de sortie de Smart Money et Fibonacci (2 valeurs au lieu d'1) — pas un simple réarrangement, un vrai changement de code dans <code>engine_scoring.py</code></td></tr>
+    <tr><td><strong>Inconvénient</strong></td><td>La matrice de décision (§2) introduit 4 seuils numériques (65/60/50 + un seuil de réduction) qu'il faudra justifier et calibrer sur historique — aujourd'hui il n'y en a qu'un (60%)</td></tr>
+  </table>
+
+  <h2><span class="num">05</span>Risques de faux signaux</h2>
+  <ul>
+    <li><strong>Faux positif "setup prêt" sans confirmation</strong> : un Setup Quality élevé sans Direction suffisante pourrait pousser à créer une alerte/pending order sur un marché qui ne confirme jamais — nécessite une règle explicite "ne jamais poser un ordre en attente sur Setup seul sans Direction ≥ seuil", sinon on recrée le biais "toujours vouloir agir" que l'architecture actuelle évite justement grâce à son plancher unique.</li>
+    <li><strong>Sur-confiance en cas de scores discordants</strong> : Direction haute + Setup bas + Risque haut pourrait sembler "2 sur 3 au vert" et tenter un assouplissement du seuil — la matrice doit rester stricte (tous les seuils requis), pas un score composite qui masquerait à nouveau le même problème sous une autre forme.</li>
+    <li><strong>Recalibrage nécessaire de tous les seuils existants</strong> : le plancher actuel de 60% a été choisi pour un score qui mélangeait tout ; il ne peut pas être copié tel quel sur les 3 nouveaux scores sans recalibrage sur historique réel — sinon le système sera soit trop permissif soit trop restrictif par accident.</li>
+  </ul>
+
+  <h2><span class="num">06</span>Comparaison directe</h2>
+  <table>
+    <tr><th></th><th>Système actuel</th><th>Système proposé</th></tr>
+    <tr><td>Nombre de scores</td><td>1 (confiance fusionnée)</td><td>3 (Direction / Setup / Risque)</td></tr>
+    <tr><td>Distingue "pas de direction" de "pas de setup"</td><td>Non</td><td>Oui</td></tr>
+    <tr><td>Modulation de la taille de position</td><td>Non — tout ou rien</td><td>Possible via le Risk Score</td></tr>
+    <tr><td>Changement de code requis</td><td>—</td><td>Contrat de sortie de Smart Money/Fibonacci à étendre, nouvelle fonction de fusion ×3, nouvelle matrice de décision</td></tr>
+    <tr><td>Seuils à calibrer</td><td>1 (plancher 60%)</td><td>Au moins 4</td></tr>
+    <tr><td>Lisibilité à l'écran</td><td>Simple, un seul chiffre</td><td>Plus riche mais demande une meilleure présentation UI pour ne pas noyer l'utilisateur</td></tr>
+  </table>
+
+  <div class="callout state">
+    <span class="label">Recommandation</span>
+    L'idée est solide et répond à une vraie limite du système actuel (démontrée par l'exemple concret ci-dessus). Mais c'est un changement de contrat de plusieurs moteurs, pas une simple réorganisation de l'existant — je recommande de traiter ça comme un chantier séparé, à maquetter d'abord côté affichage (comment présenter 3 scores sans complexifier l'écran) avant de toucher au code de <code>engine_scoring.py</code>, cohérent avec la règle déjà établie sur ce projet.
+  </div>
+
+</div>
+</body>
+</html>

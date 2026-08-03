@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historique statistique de validation — synthèse</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 1000px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 760px; }
+  h2 { font-family: var(--serif); font-size: 1.4rem; font-weight: 500; color: #fff; margin: 48px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .date { color: var(--accent); font-family: var(--mono); font-size: 0.8rem; margin-right: 12px; font-weight: 600; }
+  h3 { font-size: 1rem; font-weight: 600; color: #fff; margin: 22px 0 8px; }
+  p { color: var(--text); margin: 10px 0; } p.lede { color: var(--text-dim); font-size: 0.94rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 5px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 14px 18px; margin: 14px 0; font-size: 0.9rem; }
+  .callout .label { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.84rem; }
+  th, td { text-align: left; padding: 8px 11px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 9.5px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-wrap { overflow-x: auto; }
+  .timeline-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 0; }
+  .timeline-nav a { font-size: 11px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); text-decoration: none; }
+  .timeline-nav a:hover { color: var(--accent); border-color: rgba(52,211,153,0.3); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Synthèse — toutes les validations réelles de cette session</div>
+    <h1>Historique statistique : ce qui a été mesuré, quand, et avec quelles données</h1>
+    <p class="subtitle">Un seul document réunissant chaque chiffre de validation produit depuis le début de l'audit — d'où il vient, sur quelles données réelles, et ce qu'il a changé. Rien n'est réinventé ici : chaque section renvoie au script/replay qui l'a produit.</p>
+    <div class="timeline-nav">
+      <a href="#p1">1. Phase A — état des lieux</a>
+      <a href="#p2">2. Formule de fusion — avant/après</a>
+      <a href="#p3">3. Styles de trading</a>
+      <a href="#p4">4. Incident réel + correctif</a>
+      <a href="#p5">5. Ce qui n'est pas encore validé</a>
+    </div>
+  </div>
+
+  <h2 id="p1"><span class="date">2026-08-01</span>Phase A — la confiance moyenne était de 26.5, jamais au-dessus de 52</h2>
+  <p class="lede">Premier audit de distribution sur 210 décisions réelles (BTCUSD/BOOM1000/CRASH1000), puis approfondi sur un vrai replay 90 jours XAUUSD H1 (1207 points de décision).</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Constat</th><th>Valeur mesurée</th></tr>
+    <tr><td>Confiance v1 moyenne (avant tout correctif)</td><td class="num">26.5</td></tr>
+    <tr><td>Confiance v1 maximum observée sur 90 jours réels</td><td class="num">52</td></tr>
+    <tr><td>Trades déclenchés sur 90 jours réels (floor=60)</td><td class="num">0</td></tr>
+    <tr><td>Multi-Timeframe : jamais &gt; 60 sur 210 décisions</td><td class="num">0%</td></tr>
+    <tr><td>Market Structure : neutre (aucune cassure) sur 210 décisions</td><td class="num">66.7%</td></tr>
+  </table>
+  </div>
+  <p>Cause identifiée : la formule de fusion était un <em>ratio de consensus</em> (part de zéro, punit tout désaccord), et Market Structure/Multi-Timeframe jetaient l'information hors des événements ponctuels (BOS/CHoCH, alignement exact).</p>
+
+  <h2 id="p2"><span class="date">2026-08-01</span>Formule base+addition — mesurée avant/après sur les mêmes 1207 points réels</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th></th><th class="num">Avant</th><th class="num">Après (fusion + Market Structure + Multi-TF corrigés)</th></tr>
+    <tr><td>Trades sur 90 jours réels</td><td class="num">0</td><td class="num"><strong>106</strong> (41 BUY / 65 SELL)</td></tr>
+    <tr><td>Confiance moyenne</td><td class="num">26.5</td><td class="num"><strong>46.7</strong></td></tr>
+    <tr><td>Confiance maximum</td><td class="num">52</td><td class="num"><strong>65+</strong></td></tr>
+  </table>
+  </div>
+  <p>Seuil de décision recalibré à partir de ce même replay (balayage réel, pas une estimation) :</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Seuil</th><th class="num">Trades/jour</th><th class="num">Taux de réussite</th></tr>
+    <tr><td>60 (ancien)</td><td class="num">0.36</td><td class="num">71.9%</td></tr>
+    <tr><td><strong>57 (retenu, en production)</strong></td><td class="num">1.18</td><td class="num">63.5%</td></tr>
+    <tr><td>55</td><td class="num">1.90</td><td class="num">56.3%</td></tr>
+  </table>
+  </div>
+  <div class="callout gap">
+    <span class="label">Réserve méthodologique, toujours valable</span>
+    Le "taux de réussite" de ce replay est une heuristique (TP/SL réels atteints dans une fenêtre de 10h), pas un vrai backtest avec exécution/spread/slippage. Un second passage avec un critère plus strict a montré 34.0% au lieu de 63.5% sur les mêmes 106 trades — signalé honnêtement en son temps, pas caché.
+  </div>
+
+  <h2 id="p3"><span class="date">2026-08-01</span>Scalping / Intraday / Swing — mesurés séparément sur données réelles</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Style</th><th>Données</th><th class="num">Trades/jour</th><th class="num">Taux de réussite</th></tr>
+    <tr><td>Scalping (M5)</td><td>20 000 bougies réelles, 100 jours</td><td class="num">8.10</td><td class="num">22.5%</td></tr>
+    <tr><td>Intraday (H1)</td><td>1467 bougies réelles, 73 jours évalués</td><td class="num">1.45</td><td class="num">34.0%</td></tr>
+    <tr><td>Swing (H4)</td><td>1500 bougies réelles, 281 jours évalués</td><td class="num">0.00</td><td class="num">n/a (seuil hors de portée)</td></tr>
+  </table>
+  </div>
+  <p>Conclusion actée : le moteur actuel (structure de prix) est un moteur Intraday, pas un moteur Scalping — confirmée ensuite par l'audit du code source d'AlphaTrade v4.1.0 (son mode scalping utilise le même calcul que son intraday, seul le seuil change).</p>
+
+  <h2 id="p4"><span class="date">2026-08-02</span>Incident réel détecté et corrigé aujourd'hui</h2>
+  <div class="callout critical">
+    <span class="label">Ce qui s'est réellement passé sur le compte Deriv-Demo</span>
+    6 ordres BTCUSD identiques (même entrée 63550.578, même SL, même TP) placés séparément entre 18:15 et 18:25, tous déclenchés simultanément à 18:31:03, tous stoppés simultanément à 20:28:20. Perte réelle : <strong>-63.22$</strong> sur 7 trades (6 BTCUSD + 1 ETHUSD), 0 gagnant.
+  </div>
+  <p><strong>Cause racine confirmée</strong> : aucune vérification n'empêchait de ré-exécuter la même décision à chaque cycle (toutes les ~2 minutes) tant que la bougie H1 sous-jacente n'avait pas changé. Corrigé : avant tout envoi d'ordre, le système vérifie maintenant s'il existe déjà une position ouverte ou un ordre en attente sur ce symbole.</p>
+  <p><strong>Effet de bord découvert en même temps</strong> : un ordre en attente ne créait jamais d'entité Trade tant qu'il n'était pas rempli — donc même rempli et fermé, il restait invisible du Calendrier. Corrigé (`reconcileTrades.js`) et les 7 vrais trades d'aujourd'hui ont été rétro-intégrés dans la vraie base de l'app avec leurs chiffres réels (le -63.22$ ci-dessus vient de cette réintégration, pas d'une estimation).</p>
+
+  <h2 id="p5"><span class="date">2026-08-02</span>Ce qui n'est PAS encore validé — à ne pas confondre avec ce qui l'est</h2>
+  <ul>
+    <li><strong>Economic Intelligence, Microstructure Engine, contexte macro/régime</strong> — activés directement dans les décisions à la demande explicite, avec <strong>zéro historique statistique</strong>. Aucun chiffre de validation n'existe encore pour ces trois ajouts.</li>
+    <li><strong>Crypto Intelligence Score / Global Market Intelligence</strong> — le journal d'observation vient tout juste d'être créé ; il faut des jours/semaines de collecte avant de pouvoir en tirer un chiffre comparable à ceux ci-dessus.</li>
+  </ul>
+  <div class="callout state">
+    <span class="label">Ce qui est solide vs ce qui est expérimental</span>
+    Les sections 1 à 4 reposent sur des centaines à des milliers de points de données réelles, mesurées avant/après chaque changement. La section 5 repose sur zéro donnée — c'est un choix assumé (demandé explicitement malgré le risque signalé), pas un oubli.
+  </div>
+
+</div>
+</body>
+</html>

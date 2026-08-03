@@ -1,0 +1,433 @@
+[
+  {
+    "method": "GET",
+    "path": "/rates?symbol=BTCUSD&timeframe=M1&count=1",
+    "request": null,
+    "status": 200,
+    "response": {
+      "candles": [
+        {
+          "close": 63056.543,
+          "high": 63060.779,
+          "low": 63056.542,
+          "open": 63060.779,
+          "spread": 2424,
+          "tick_volume": 49,
+          "time": "2026-08-01T12:38:00Z"
+        }
+      ],
+      "count": 1,
+      "ok": true,
+      "requested_symbol": "BTCUSD",
+      "symbol": "BTCUSD",
+      "timeframe": "M1"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "BUY",
+      "lot": 0.01,
+      "stop_loss": 62456.54,
+      "take_profit_1": 64056.54
+    },
+    "status": 200,
+    "response": {
+      "executed_price": 63066.967,
+      "lot": 0.01,
+      "ok": true,
+      "order_response": {
+        "executed_price": 63066.967,
+        "status": "executed",
+        "ticket": "9742746200"
+      },
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746200"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "SELL",
+      "lot": 0.01,
+      "stop_loss": 63656.54,
+      "take_profit_1": 62056.54
+    },
+    "status": 200,
+    "response": {
+      "executed_price": 63043.867,
+      "lot": 0.01,
+      "ok": true,
+      "order_response": {
+        "executed_price": 63043.867,
+        "status": "executed",
+        "ticket": "9742746202"
+      },
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746202"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_pending_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "BUY",
+      "lot": 0.01,
+      "entry_price": 62656.54,
+      "stop_loss": 62056.54,
+      "take_profit_1": 63656.54
+    },
+    "status": 200,
+    "response": {
+      "entry_price": 62656.54,
+      "lot": 0.01,
+      "ok": true,
+      "order_type": "BUY_LIMIT",
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746205"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_pending_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "SELL",
+      "lot": 0.01,
+      "entry_price": 63456.54,
+      "stop_loss": 64056.54,
+      "take_profit_1": 62456.54
+    },
+    "status": 200,
+    "response": {
+      "entry_price": 63456.54,
+      "lot": 0.01,
+      "ok": true,
+      "order_type": "SELL_LIMIT",
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746207"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_pending_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "BUY",
+      "lot": 0.01,
+      "entry_price": 63456.54,
+      "stop_loss": 62856.54,
+      "take_profit_1": 64456.54
+    },
+    "status": 200,
+    "response": {
+      "entry_price": 63456.54,
+      "lot": 0.01,
+      "ok": true,
+      "order_type": "BUY_STOP",
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746208"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_pending_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "SELL",
+      "lot": 0.01,
+      "entry_price": 62656.54,
+      "stop_loss": 63256.54,
+      "take_profit_1": 61656.54
+    },
+    "status": 200,
+    "response": {
+      "entry_price": 62656.54,
+      "lot": 0.01,
+      "ok": true,
+      "order_type": "SELL_STOP",
+      "resolved_symbol": "BTCUSD",
+      "ticket": "9742746213"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/positions",
+    "request": null,
+    "status": 200,
+    "response": {
+      "ok": true,
+      "positions": [
+        {
+          "current_price": 63044.23,
+          "direction": "BUY",
+          "entry_price": 63066.967,
+          "lot": 0.01,
+          "opened_at": "2026-08-01T08:38:21",
+          "profit": -0.23,
+          "stop_loss": 62456.54,
+          "swap": 0.0,
+          "symbol": "BTCUSD",
+          "take_profit": 64056.54,
+          "ticket": "9742746200"
+        },
+        {
+          "current_price": 63062.654,
+          "direction": "SELL",
+          "entry_price": 63043.867,
+          "lot": 0.01,
+          "opened_at": "2026-08-01T08:38:21",
+          "profit": -0.19,
+          "stop_loss": 63656.54,
+          "swap": 0.0,
+          "symbol": "BTCUSD",
+          "take_profit": 62056.54,
+          "ticket": "9742746202"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/pending_orders",
+    "request": null,
+    "status": 200,
+    "response": {
+      "ok": true,
+      "orders": [
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:21",
+          "price": 62656.54,
+          "stop_loss": 62056.54,
+          "symbol": "BTCUSD",
+          "take_profit": 63656.54,
+          "ticket": "9742746205",
+          "type": "BUY_LIMIT"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:21",
+          "price": 63456.54,
+          "stop_loss": 64056.54,
+          "symbol": "BTCUSD",
+          "take_profit": 62456.54,
+          "ticket": "9742746207",
+          "type": "SELL_LIMIT"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:22",
+          "price": 63456.54,
+          "stop_loss": 62856.54,
+          "symbol": "BTCUSD",
+          "take_profit": 64456.54,
+          "ticket": "9742746208",
+          "type": "BUY_STOP"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:22",
+          "price": 62656.54,
+          "stop_loss": 63256.54,
+          "symbol": "BTCUSD",
+          "take_profit": 61656.54,
+          "ticket": "9742746213",
+          "type": "SELL_STOP"
+        }
+      ]
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_pending_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "BUY",
+      "lot": 0.01,
+      "entry_price": 63056.49,
+      "stop_loss": 63048.54,
+      "take_profit_1": 63064.54
+    },
+    "status": 400,
+    "response": {
+      "current_price": 63062.654,
+      "error_code": "TOO_CLOSE_TO_MARKET",
+      "message": "entry_price (63056.49) is too close to the current price (63062.654) for a pending order \u2014 needs at least 24.0 distance. Use an immediate market order instead.",
+      "min_distance": 24.0,
+      "ok": false,
+      "reason": "TOO_CLOSE_TO_MARKET",
+      "success": false,
+      "symbol": "BTCUSD"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/send_order",
+    "request": {
+      "symbol": "BTCUSD",
+      "direction": "BUY",
+      "lot": 0.001,
+      "stop_loss": 62456.54,
+      "take_profit_1": 64056.54
+    },
+    "status": 400,
+    "response": {
+      "details": {
+        "issue": "below_minimum",
+        "lot": 0.001,
+        "min": 0.01,
+        "symbol": "BTCUSD"
+      },
+      "error_code": "INVALID_VOLUME",
+      "message": "Order rejected at validation stage: INVALID_VOLUME",
+      "ok": false,
+      "reason": "INVALID_VOLUME",
+      "stage": "PRE_ORDER_VALIDATION",
+      "success": false,
+      "symbol": "BTCUSD"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/close_position",
+    "request": {
+      "ticket": "9742746200"
+    },
+    "status": 200,
+    "response": {
+      "ok": true,
+      "ticket": "9742746217"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/close_position",
+    "request": {
+      "ticket": "9742746202"
+    },
+    "status": 200,
+    "response": {
+      "ok": true,
+      "ticket": "9742746219"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/cancel_pending_order",
+    "request": {
+      "ticket": "9742746205"
+    },
+    "status": 404,
+    "response": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n"
+  },
+  {
+    "method": "POST",
+    "path": "/cancel_pending_order",
+    "request": {
+      "ticket": "9742746207"
+    },
+    "status": 404,
+    "response": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n"
+  },
+  {
+    "method": "POST",
+    "path": "/cancel_pending_order",
+    "request": {
+      "ticket": "9742746208"
+    },
+    "status": 404,
+    "response": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n"
+  },
+  {
+    "method": "POST",
+    "path": "/cancel_pending_order",
+    "request": {
+      "ticket": "9742746213"
+    },
+    "status": 404,
+    "response": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n"
+  },
+  {
+    "method": "GET",
+    "path": "/positions",
+    "request": null,
+    "status": 200,
+    "response": {
+      "ok": true,
+      "positions": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/pending_orders",
+    "request": null,
+    "status": 200,
+    "response": {
+      "ok": true,
+      "orders": [
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:21",
+          "price": 62656.54,
+          "stop_loss": 62056.54,
+          "symbol": "BTCUSD",
+          "take_profit": 63656.54,
+          "ticket": "9742746205",
+          "type": "BUY_LIMIT"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:21",
+          "price": 63456.54,
+          "stop_loss": 64056.54,
+          "symbol": "BTCUSD",
+          "take_profit": 62456.54,
+          "ticket": "9742746207",
+          "type": "SELL_LIMIT"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:22",
+          "price": 63456.54,
+          "stop_loss": 62856.54,
+          "symbol": "BTCUSD",
+          "take_profit": 64456.54,
+          "ticket": "9742746208",
+          "type": "BUY_STOP"
+        },
+        {
+          "comment": "AT Global",
+          "lot": 0.01,
+          "magic": 234000,
+          "placed_at": "2026-08-01T08:38:22",
+          "price": 62656.54,
+          "stop_loss": 63256.54,
+          "symbol": "BTCUSD",
+          "take_profit": 61656.54,
+          "ticket": "9742746213",
+          "type": "SELL_STOP"
+        }
+      ]
+    }
+  }
+]

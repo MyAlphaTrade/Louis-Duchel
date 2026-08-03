@@ -54,6 +54,8 @@ except ImportError:
 
 import local_store
 import local_functions
+import hyperliquid_connector
+import global_market_intelligence
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -858,6 +860,40 @@ def health():
     })
 
 
+@app.route("/hyperliquid/intelligence", methods=["GET"])
+def hyperliquid_intelligence():
+    """Real crypto order-book pressure (OBI), funding rate and open
+    interest from Hyperliquid's public API — OBSERVATION ONLY. Does not
+    require MT5 to be connected (independent data source). Never consumed
+    by market_brain.py or any decision path; see hyperliquid_connector.py
+    for why this stays observation-only until validated."""
+    coins_param = request.args.get("coins")
+    coins = [c.strip().upper() for c in coins_param.split(",")] if coins_param else None
+    return jsonify(hyperliquid_connector.get_crypto_intelligence(coins))
+
+
+@app.route("/global-intelligence", methods=["GET"])
+def global_intelligence():
+    """Aggregated market_regime/crypto_pressure/liquidity_state/
+    volatility_state/crypto_intelligence_score snapshot — OBSERVATION
+    ONLY, see global_market_intelligence.py. Not consumed by
+    market_brain.py."""
+    coins_param = request.args.get("coins")
+    coins = [c.strip().upper() for c in coins_param.split(",")] if coins_param else None
+    macro = global_market_intelligence.get_macro_snapshot(fetch_candles_direct) if _connection["initialized"] else None
+    return jsonify(global_market_intelligence.get_global_market_intelligence(coins, macro=macro))
+
+
+@app.route("/global-intelligence/history", methods=["GET"])
+def global_intelligence_history():
+    """The observation journal itself — snapshots recorded automatically
+    every 10 minutes (see the collector thread in __main__), for reviewing
+    whether this data would actually have helped before any activation."""
+    limit = int(request.args.get("limit", 100))
+    snapshots = local_store.list_entities("CryptoIntelSnapshot", sort="-created_date", limit=limit)
+    return jsonify({"ok": True, "count": len(snapshots), "snapshots": snapshots})
+
+
 @app.route("/account", methods=["GET"])
 @app.route("/sync", methods=["GET"])
 def sync():
@@ -901,6 +937,24 @@ def send_order():
     normalized_lot = details["normalized_lot"]
     filling_const_val = details.get("filling_const", mt5.ORDER_FILLING_RETURN)
     price = details["tick_price"]
+
+    # Simulation mode: validated as if real (real symbol/price/lot/market
+    # hours above), but never reaches mt5.order_send — no real order, no
+    # real fill. Checked here, not just in the frontend, so it can't be
+    # bypassed by any caller of this endpoint.
+    if local_functions.is_simulation_mode():
+        sim_ticket = "SIM-" + str(int(time.time() * 1000))
+        log.info("[ORDER_SIMULATED] %s %s %s @ %s (resolved=%s, lot=%s) — execution_mode=simulation, no real MT5 order sent",
+                 direction, symbol, lot, price, resolved, normalized_lot)
+        return jsonify({
+            "ok": True,
+            "simulated": True,
+            "ticket": sim_ticket,
+            "executed_price": price,
+            "resolved_symbol": resolved,
+            "lot": normalized_lot,
+            "order_response": {"status": "simulated", "ticket": sim_ticket, "executed_price": price},
+        })
 
     trade_type = mt5.ORDER_TYPE_BUY if direction.upper() == "BUY" else mt5.ORDER_TYPE_SELL
 
@@ -1063,6 +1117,22 @@ def send_pending_order():
     else:
         order_type = mt5.ORDER_TYPE_SELL_LIMIT if entry_price > current_price else mt5.ORDER_TYPE_SELL_STOP
         pending_kind = "SELL_LIMIT" if entry_price > current_price else "SELL_STOP"
+
+    # Same simulation gate as /send_order — see there for why this is
+    # enforced here rather than trusted to the frontend.
+    if local_functions.is_simulation_mode():
+        sim_ticket = "SIM-" + str(int(time.time() * 1000))
+        log.info("[PENDING_ORDER_SIMULATED] %s %s %s @ %s (resolved=%s, lot=%s) — execution_mode=simulation, no real MT5 order sent",
+                 pending_kind, symbol, lot, entry_price, resolved, normalized_lot)
+        return jsonify({
+            "ok": True,
+            "simulated": True,
+            "ticket": sim_ticket,
+            "order_type": pending_kind,
+            "resolved_symbol": resolved,
+            "lot": normalized_lot,
+            "entry_price": entry_price,
+        })
 
     stops = validate_and_adjust_stops(resolved, direction, entry_price, stop_loss, take_profit)
 
@@ -1612,4 +1682,27 @@ if __name__ == "__main__":
             log.warning("MT5 not connected. Open MT5, log in, then restart this bridge.")
 
     threading.Thread(target=connect_mt5_and_start_monitor, daemon=True).start()
+
+    # Crypto Intelligence journal — independent of MT5 (Hyperliquid is a
+    # separate data source), collects a snapshot every 10 minutes so real
+    # observation history accumulates over the coming weeks whether or not
+    # any UI is open. Deliberately never touches market_brain.py or any
+    # decision — see global_market_intelligence.py's module docstring for
+    # why this stays observation-only until validated.
+    CRYPTO_INTEL_INTERVAL_SEC = 600
+
+    def collect_crypto_intelligence_loop():
+        while True:
+            try:
+                macro_fn = fetch_candles_direct if _connection["initialized"] else None
+                snapshot = global_market_intelligence.record_snapshot(macro_fn)
+                log.info("[CRYPTO_INTEL] regime=%s score=%s band=%s",
+                         snapshot["market_regime"], snapshot["crypto_intelligence_score"]["average"],
+                         snapshot["crypto_intelligence_score"]["band"])
+            except Exception as e:
+                log.warning("[CRYPTO_INTEL] snapshot failed: %s", e)
+            time.sleep(CRYPTO_INTEL_INTERVAL_SEC)
+
+    threading.Thread(target=collect_crypto_intelligence_loop, daemon=True).start()
+
     app.run(host=host, port=port, debug=False, threaded=True)

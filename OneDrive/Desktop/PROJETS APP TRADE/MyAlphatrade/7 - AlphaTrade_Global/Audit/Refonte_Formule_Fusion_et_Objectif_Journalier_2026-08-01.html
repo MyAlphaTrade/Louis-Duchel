@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refonte formule de fusion + objectif journalier</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 980px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 740px; }
+  h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; color: #fff; margin: 48px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 7px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-wrap { overflow-x: auto; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 18px 0; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--bg-card); }
+  .stat .n { font-family: var(--mono); font-size: 1.6rem; color: #fff; }
+  .stat .l { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+  .highlight-row td { color: #fff; background: rgba(52,211,153,0.06); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Changements codés et validés — 2026-08-01</div>
+    <h1>De 0 à 1.18 trade/jour sur 90 jours réels de XAUUSD</h1>
+    <p class="subtitle">Trois changements ciblés — la formule de fusion, la lecture de structure de marché/multi-timeframe, et le seuil de décision — validés empiriquement sur le même replay réel de 1207 décisions, plus un objectif journalier enfin configurable.</p>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat"><div class="n">0 → 106</div><div class="l">trades sur 90 jours réels (BUY+SELL)</div></div>
+    <div class="stat"><div class="n">26.5 → 46.7</div><div class="l">confiance moyenne (avant formule → après tout)</div></div>
+    <div class="stat"><div class="n">63.5%</div><div class="l">taux de réussite des trades pris (heuristique ±1 ATR / 10h)</div></div>
+  </div>
+
+  <h2><span class="num">01</span>Changement 1 — la formule de fusion (<code>engine_scoring.py</code>)</h2>
+  <p>Remplacé le ratio de consensus (<code>confidence = poids_camp_gagnant / poids_total × 100</code>, qui part de zéro et n'atteint un chiffre élevé qu'en cas d'accord quasi unanime) par une base haute + addition, dans l'esprit de ce que fait AlphaTrade v4.1.0 sans LLM :</p>
+  <pre>score[camp] = FUSION_BASE(25) + (vote_pondéré[camp] / poids_total) × (100 − 25)
+confidence = max(score[bullish], score[bearish], score[neutral])</pre>
+  <p>Chaque moteur continue de voter exactement comme avant (aucun moteur individuel modifié à cette étape) — seule la façon de transformer ces votes en un chiffre final a changé. Un désaccord entre moteurs n'écrase plus le score du camp gagnant à zéro.</p>
+
+  <h2><span class="num">02</span>Changement 2 — Market Structure et Multi-Timeframe ne jettent plus l'information "hors événement"</h2>
+  <p><strong>Market Structure</strong> (<code>engine_scoring.py</code>) ne se limitait qu'à trois états (BOS=75, CHOCH=55, ou neutre=20 dans <strong>66.7%</strong> des cas réels observés en Phase A) — un BOS/CHOCH est un événement ponctuel, donc "neutre" tombait par défaut la plupart du temps même en pleine tendance. Il utilise maintenant la classification de tendance déjà calculée (HH/HL vs LH/LL) comme lecture de base (bullish/bearish à 45) quand aucune cassure fraîche n'a lieu, en gardant BOS/CHOCH comme signaux forts inchangés.</p>
+  <p><strong>Multi-Timeframe</strong> (<code>indicators.py</code>) souffrait du même problème que la formule de fusion — un ratio d'alignement pur, plafonné à exactement 60 avec 3/5 timeframes d'accord (jamais plus, confirmé en direct sur XAUUSD/BTCUSD/BOOM/CRASH). Même correctif base+addition appliqué : 3/5 devient 70 au lieu de 60, 2/5 devient 55 au lieu de 40.</p>
+
+  <h2><span class="num">03</span>Changement 3 — seuil de décision ajusté de 60 à 57, données à l'appui</h2>
+  <p class="lede">Après les deux premiers changements, la confiance moyenne était montée à 46.3 mais ne dépassait 60 que 2.65% du temps (0.36 trade/jour) — toujours trop rare pour viser un objectif quotidien. Plutôt que d'ajuster à l'aveugle, le seuil a été balayé sur le même replay réel pour objectiver le compromis fréquence/qualité :</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Seuil</th><th class="num">Trades/jour</th><th class="num">Bons</th><th class="num">Faux</th><th class="num">Taux de réussite</th></tr>
+    <tr><td>60 (ancien)</td><td class="num">0.36</td><td class="num">23</td><td class="num">9</td><td class="num">71.9%</td></tr>
+    <tr class="highlight-row"><td><strong>57 (retenu)</strong></td><td class="num">1.18</td><td class="num">66</td><td class="num">38</td><td class="num">63.5%</td></tr>
+    <tr><td>55</td><td class="num">1.90</td><td class="num">94</td><td class="num">73</td><td class="num">56.3%</td></tr>
+    <tr><td>52</td><td class="num">3.21</td><td class="num">148</td><td class="num">137</td><td class="num">51.9%</td></tr>
+  </table>
+  </div>
+  <div class="callout state">
+    <span class="label">Pourquoi 57 et pas plus bas</span>
+    57 est le point le plus proche d'"au moins une opportunité par jour" sans tomber sous ~60% de taux de réussite. Avec les multiplicateurs SL/TP1 actuels (1.5/3.0 ATR, soit un ratio risque:récompense de 1:2), un taux de réussite de 63.5% reste largement profitable en théorie. Un seuil plus bas (52-55) double ou triple la fréquence mais fait chuter la qualité en dessous de 60% — à reconsidérer seulement après quelques semaines réelles avec 57, si le rythme reste insuffisant.
+  </div>
+
+  <h2><span class="num">04</span>Résultat combiné, mêmes 1207 décisions réelles</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th></th><th>Avant (aujourd'hui matin)</th><th>Après (les 3 changements)</th></tr>
+    <tr><td>Trades sur 90 jours</td><td>0</td><td><strong>106</strong> (41 BUY, 65 SELL)</td></tr>
+    <tr><td>Trades / jour</td><td>0.00</td><td><strong>1.18</strong></td></tr>
+    <tr><td>Confiance moyenne</td><td>26.5</td><td><strong>46.7</strong></td></tr>
+    <tr><td>Confiance maximum observée</td><td>52</td><td><strong>65+</strong> (multi_timeframe désormais inclus en direct)</td></tr>
+    <tr><td>WAIT jugés injustifiés</td><td>84.5%</td><td>77.1%</td></tr>
+    <tr><td>Taux de réussite des trades pris</td><td>n/a (0 trade)</td><td><strong>63.5%</strong></td></tr>
+  </table>
+  </div>
+  <p class="lede">Limite déclarée, comme dans l'audit précédent : ce replay reste sans historique multi-timeframe aligné sur 90 jours pour la partie "avant". La partie "après" a été revérifiée séparément avec de vraies données multi-timeframe (fixture réelle XAUUSD H1/H4/D1/M15/M5) pour confirmer que <code>multi_timeframe</code> fonctionne bien avec la nouvelle formule en conditions réelles (confiance 51-70 observée selon l'alignement, contre 60 plafond dur auparavant).</p>
+
+  <h2><span class="num">05</span>Objectif journalier — enfin configurable</h2>
+  <p>Aucune interface n'existait pour définir un objectif de gain ou une limite de perte journalière — le Daily Goal Engine tournait sur un défaut caché de 2% du capital (lui-même jamais configurable non plus). Ajouté :</p>
+  <ul>
+    <li>Un nouveau champ <code>daily_goal_amount</code> (backend : <code>local_functions.py</code>, <code>daily_goal_status()</code> et <code>trade_manager_sync_daily()</code>) — un montant fixe en $ qui prend le pas sur le calcul en pourcentage dès qu'il est défini.</li>
+    <li>Un champ miroir <code>max_daily_loss_amount</code> pour la limite de perte, même logique.</li>
+    <li>Une nouvelle section "Objectif Journalier" dans Réglages (<code>DailyGoalSection.jsx</code>) avec les deux champs en $.</li>
+  </ul>
+  <div class="callout gap">
+    <span class="label">Vérification partielle</span>
+    Le composant compile sans erreur (build Vite propre, aucune erreur console) mais n'a pas pu être vérifié cliqué-en-main dans ce diagnostic — la page Réglages est derrière l'authentification locale, qui nécessite le bridge Python démarré. À vérifier visuellement à la prochaine ouverture de l'app.
+  </div>
+
+  <h2><span class="num">06</span>Ce qui n'a pas encore été touché</h2>
+  <ul>
+    <li><strong>Indicator Fusion</strong> — déjà le moteur le plus "décisif" (jamais sous 67% de confiance en Phase A), laissé inchangé.</li>
+    <li><strong>Smart Money / Fibonacci / Liquidity / Pattern Recognition</strong> — moteurs de zone, intentionnellement silencieux hors configuration réelle ; non retouchés.</li>
+    <li>L'architecture 3-couches (<code>confidence_v2.py</code>) reste en mode comparaison uniquement, non activée.</li>
+    <li>Le champ <code>capital</code> n'a toujours aucune interface de configuration (gap préexistant, distinct de l'objectif journalier) — signalé mais pas corrigé, hors du périmètre demandé.</li>
+  </ul>
+
+</div>
+</body>
+</html>

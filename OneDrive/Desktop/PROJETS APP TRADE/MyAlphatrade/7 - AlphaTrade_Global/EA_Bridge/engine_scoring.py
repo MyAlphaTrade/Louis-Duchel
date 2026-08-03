@@ -9,23 +9,41 @@ never picked first and then justified (that was the old LLM pattern) — it
 is derived bottom-up from these votes, weighted by each engine's
 importance (see ENGINE_WEIGHTS, mirroring Dist/base44/shared/engines.ts).
 
-Economic Intelligence (news calendar) is left out: there is no data source
-for it yet, and inventing one would just reintroduce the original problem
-(a plausible-sounding number nobody computed).
+Economic Intelligence now has a real source (economic_calendar.py, a
+public no-key calendar feed) — restored at its originally-documented
+weight of 6, after being a zero-weight stub since this file's creation.
 """
+
+import logging
 
 from indicators import ema, rsi, macd, atr, bollinger_bands, find_swings, classify_structure, fibonacci_levels, bias_from_snapshot
 from market_analysis import bos_choch, find_fvgs, find_order_blocks, find_liquidity_zones, detect_sweep, detect_candlestick_pattern
+from economic_calendar import score_economic
 
-# Mirrors Dist/base44/shared/engines.ts ANALYSIS_ENGINES weights.
-# Economic Intelligence (weight 6) is omitted — no data source yet.
+# Diagnostic-only logger (Phase A follow-up): confirms whether market_structure
+# and indicator_fusion actually see fresh candle data between two analyze()
+# cycles, or are stuck on stale inputs. Purely additive — never read by any
+# decision logic, safe to ignore or filter out by logger name.
+diag_log = logging.getLogger("engine_diagnostics")
+
+# Mirrors Dist/base44/shared/engines.ts ANALYSIS_ENGINES weights, plus
+# "microstructure" (new, real order-flow data via Hyperliquid — see
+# market_brain.py's _microstructure_engine_result). Not in ENGINE_SCORERS
+# below: like multi_timeframe, it needs data beyond a single symbol's
+# candles (Hyperliquid's own order book), so it's injected into
+# engine_results externally by market_brain.py, only for symbols where
+# real data exists (BTCUSD/ETHUSD) — absent entirely for everything else,
+# which correctly excludes its weight from total_weight for those symbols
+# rather than forcing a fake "neutral" vote.
 ENGINE_WEIGHTS = {
     "multi_timeframe": 14,
     "market_structure": 14,
     "smart_money": 12,
     "indicator_fusion": 10,
+    "microstructure": 15,
     "liquidity": 8,
     "entry_planner": 8,
+    "economic": 6,
     "fibonacci": 7,
     "volume": 7,
     "pattern_recognition": 5,
@@ -38,12 +56,16 @@ def _clamp(v, lo=0, hi=100):
     return max(lo, min(hi, round(v)))
 
 
-def build_context(candles):
-    """Everything the per-engine scorers need, computed once."""
+def build_context(candles, symbol=None):
+    """Everything the per-engine scorers need, computed once. `symbol` is
+    optional (defaults to None, backward compatible with every existing
+    caller) — only score_economic uses it, to pick which currency's news
+    calendar is relevant."""
     closes = [c["close"] for c in candles]
     swings = find_swings(candles, 3)
     return {
         "candles": candles,
+        "symbol": symbol,
         "closes": closes,
         "ema20": ema(closes, 20),
         "ema50": ema(closes, 50),
@@ -59,11 +81,34 @@ def build_context(candles):
 
 def score_market_structure(ctx):
     event = bos_choch(ctx["candles"], ctx["swings"])
+    last_swing = ctx["swings"][-1] if ctx["swings"] else None
+    candle_time = ctx["candles"][-1]["time"] if ctx["candles"] else None
     if event["event"] == "BOS":
-        return {"id": "market_structure", "bias": event["direction"], "confidence": 75, "findings": [event["detail"]]}
-    if event["event"] == "CHOCH":
-        return {"id": "market_structure", "bias": event["direction"], "confidence": 55, "findings": [event["detail"]]}
-    return {"id": "market_structure", "bias": "neutral", "confidence": 20, "findings": [event["detail"]]}
+        result = {"id": "market_structure", "bias": event["direction"], "confidence": 75, "findings": [event["detail"]]}
+    elif event["event"] == "CHOCH":
+        result = {"id": "market_structure", "bias": event["direction"], "confidence": 55, "findings": [event["detail"]]}
+    else:
+        # No fresh break on THIS candle -- true most of the time by
+        # definition (a break is a one-off event, not a continuous state).
+        # Previously this fell through to flat neutral/20 regardless of
+        # what the underlying HH/HL vs LH/LL structure actually showed,
+        # discarding real information on ~2/3 of all candles (see
+        # Audit/Audit_PhaseA_Distribution_Moteurs_Directionnels). A trend
+        # that hasn't just broken out is still a trend.
+        structure = ctx["structure"]
+        if structure["label"] == "uptrend":
+            result = {"id": "market_structure", "bias": "bullish", "confidence": 45, "findings": [structure["detail"]]}
+        elif structure["label"] == "downtrend":
+            result = {"id": "market_structure", "bias": "bearish", "confidence": 45, "findings": [structure["detail"]]}
+        else:
+            result = {"id": "market_structure", "bias": "neutral", "confidence": 20, "findings": [structure["detail"]]}
+    diag_log.info(
+        "market_structure candle_time=%s event=%s last_swing=%s bias=%s confidence=%s",
+        candle_time, event["event"],
+        f"{last_swing['type']}@{last_swing['price']:.2f}" if last_swing else None,
+        result["bias"], result["confidence"],
+    )
+    return result
 
 
 def score_smart_money(ctx):
@@ -131,16 +176,31 @@ def score_indicator_fusion(ctx):
     if hist is not None:
         votes.append("bullish" if hist > 0 else "bearish")
 
+    candle_time = ctx["candles"][-1]["time"] if ctx["candles"] else None
+
     if not votes:
-        return {"id": "indicator_fusion", "bias": "neutral", "confidence": 10, "findings": ["Historique insuffisant pour les indicateurs"]}
-    bulls, bears = votes.count("bullish"), votes.count("bearish")
-    total = len(votes)
-    if bulls == bears:
-        return {"id": "indicator_fusion", "bias": "neutral", "confidence": 25, "findings": [f"Indicateurs partagés ({bulls} haussiers / {bears} baissiers)"]}
-    bias = "bullish" if bulls > bears else "bearish"
-    agree = max(bulls, bears)
-    conf = _clamp(30 + (agree / total) * 55)
-    return {"id": "indicator_fusion", "bias": bias, "confidence": conf, "findings": [f"{agree}/{total} indicateurs (EMA50/200, RSI, MACD) s'accordent {bias}"]}
+        result = {"id": "indicator_fusion", "bias": "neutral", "confidence": 10, "findings": ["Historique insuffisant pour les indicateurs"]}
+    else:
+        bulls, bears = votes.count("bullish"), votes.count("bearish")
+        total = len(votes)
+        if bulls == bears:
+            result = {"id": "indicator_fusion", "bias": "neutral", "confidence": 25, "findings": [f"Indicateurs partagés ({bulls} haussiers / {bears} baissiers)"]}
+        else:
+            bias = "bullish" if bulls > bears else "bearish"
+            agree = max(bulls, bears)
+            conf = _clamp(30 + (agree / total) * 55)
+            result = {"id": "indicator_fusion", "bias": bias, "confidence": conf, "findings": [f"{agree}/{total} indicateurs (EMA50/200, RSI, MACD) s'accordent {bias}"]}
+
+    diag_log.info(
+        "indicator_fusion candle_time=%s ema50=%s ema200=%s rsi14=%s macd_hist=%s bias=%s confidence=%s",
+        candle_time,
+        f"{e50:.2f}" if e50 is not None else None,
+        f"{e200:.2f}" if e200 is not None else None,
+        f"{r:.1f}" if r is not None else None,
+        f"{hist:.4f}" if hist is not None else None,
+        result["bias"], result["confidence"],
+    )
+    return result
 
 
 def score_volume(ctx):
@@ -225,17 +285,42 @@ ENGINE_SCORERS = {
     "session": score_session,
     "pattern_recognition": score_pattern_recognition,
     "entry_planner": score_entry_planner,
+    "economic": lambda ctx: score_economic(ctx.get("symbol")),
 }
 
 
-def run_all_engines(ctx, multi_timeframe_result=None):
+def run_all_engines(ctx, multi_timeframe_result=None, microstructure_result=None):
     """Runs every scorer that only needs a single timeframe's context, plus
-    the already-real multi_timeframe result computed upstream (it needs
-    several timeframes' snapshots, not just this one)."""
+    externally-computed results that need more than that (multi_timeframe
+    needs several timeframes' snapshots; microstructure needs Hyperliquid's
+    real order-book/funding data, only available for BTCUSD/ETHUSD)."""
     results = {name: fn(ctx) for name, fn in ENGINE_SCORERS.items()}
     if multi_timeframe_result is not None:
         results["multi_timeframe"] = multi_timeframe_result
+    if microstructure_result is not None:
+        results["microstructure"] = microstructure_result
     return results
+
+
+# Confidence floor for whichever side ends up dominant. A trader forming a
+# view rarely starts from "zero conviction, must be earned back to 100" —
+# and neither should this formula. The previous version computed
+# `weighted_votes[dominant] / total_weight`, a pure consensus RATIO: any
+# disagreement between engines (including engines voting neutral) directly
+# divided the winning side's score down, so a real but non-unanimous
+# majority (e.g. 60% of weighted opinion agreeing) produced a low score
+# (~60% of 100 only if literally everyone agreed). Replayed against 90 days
+# of real XAUUSD H1 data, that ratio never once reached the 60 decision
+# floor — zero trades in 90 days of a real, tradeable downtrend. Below,
+# each side's score starts at FUSION_BASE and only ADDS what engines
+# contribute to it — mirroring how AlphaTrade's own (non-LLM) scoring
+# works (buy/sell both start at 25, confirmations add points, see
+# `alphatrade_engine.py:1009-1058` in the sibling project) — so one side's
+# score is never dragged down by how much weight the other side or neutral
+# engines accumulated. Still fully deterministic, still no LLM: same
+# weighted-vote inputs as before, only the final mapping from vote to
+# confidence changed.
+FUSION_BASE = 25
 
 
 def fuse_direction_and_confidence(engine_results):
@@ -261,6 +346,10 @@ def fuse_direction_and_confidence(engine_results):
     if total_weight == 0:
         return {"direction": "neutral", "confidence": 0, "breakdown": breakdown}
 
-    dominant = max(weighted_votes, key=weighted_votes.get)
-    confidence = round((weighted_votes[dominant] / total_weight) * 100)
+    scores = {
+        bias: FUSION_BASE + (vote / total_weight) * (100 - FUSION_BASE)
+        for bias, vote in weighted_votes.items()
+    }
+    dominant = max(scores, key=scores.get)
+    confidence = round(scores[dominant])
     return {"direction": dominant, "confidence": confidence, "breakdown": breakdown}

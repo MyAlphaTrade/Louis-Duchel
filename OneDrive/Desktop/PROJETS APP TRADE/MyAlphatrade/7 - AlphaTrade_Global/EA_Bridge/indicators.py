@@ -269,6 +269,17 @@ def bias_from_snapshot(snapshot):
     return "neutral"  # ema and structure disagree — no real reason to pick a side
 
 
+# Mirrors engine_scoring.FUSION_BASE (not imported directly — indicators.py
+# is imported BY engine_scoring.py, so importing back would be circular).
+# Same reasoning: a pure agreement ratio (round(agreeing/total*100)) meant
+# alignment_score could never exceed 60 with only 3/5 timeframes agreeing,
+# and never dropped below 40 with 2/5 — confirmed live, this engine only
+# ever emitted exactly 40 or 60 regardless of symbol (see
+# Audit/Audit_PhaseA_Distribution_Moteurs_Directionnels). Base+additive
+# gives partial agreement real room to move instead of two fixed values.
+_MTF_BASE = 25
+
+
 def compute_multi_timeframe_view(snapshots_by_timeframe):
     """Real confluence across timeframes — each one's bias comes from its own
     real candles, computed above."""
@@ -291,7 +302,8 @@ def compute_multi_timeframe_view(snapshots_by_timeframe):
 
     total = len(timeframes)
     dominant_bias = max(counts.items(), key=lambda kv: kv[1])[0] if total > 0 else "neutral"
-    alignment_score = round((counts[dominant_bias] / total) * 100) if total > 0 else 0
+    agreement_ratio = (counts[dominant_bias] / total) if total > 0 else 0
+    alignment_score = round(_MTF_BASE + agreement_ratio * (100 - _MTF_BASE)) if total > 0 else 0
 
     return {
         "timeframes": timeframes,

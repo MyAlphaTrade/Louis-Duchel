@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validation end-to-end — Entry Planner LIMIT/STOP</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 920px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 48px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.2rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 680px; }
+  .meta-row { display: flex; gap: 24px; margin-top: 20px; font-size: 12px; color: var(--text-faint); font-family: var(--mono); flex-wrap: wrap; }
+  h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 500; color: #fff; margin: 56px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 26px 0 10px; }
+  p { color: var(--text); margin: 12px 0; }
+  p.lede { color: var(--text-dim); font-size: 0.96rem; margin-bottom: 22px; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  a { color: var(--accent); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; color: var(--text-dim); }
+  pre .k { color: #c9f2e2; }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.proof { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); }
+  .callout.proof .label { color: var(--accent); }
+  .callout.note { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); }
+  .callout.note .label { color: var(--amber); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.07em; }
+  td { color: var(--text-dim); }
+  td strong, td.num { color: #fff; }
+  .tbl-wrap { overflow-x: auto; }
+  .ok { color: var(--accent); font-weight: 700; }
+  .fail { color: var(--red); font-weight: 700; }
+  .chip { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--text-dim); }
+  .ticket { font-family: var(--mono); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Validation fonctionnelle end-to-end — pas un audit statique</div>
+    <h1>Entry Planner → Bridge MT5 → Ordre réel</h1>
+    <p class="subtitle">Preuve que la chaîne complète (Market Brain → choix MARKET/LIMIT/STOP/SKIP → Bridge → MetaTrader 5) fonctionne réellement, avec de vrais tickets créés et vérifiés sur le compte démo connecté, pas seulement une lecture de code.</p>
+    <div class="meta-row">
+      <span>1er août 2026, 08:38 UTC</span>
+      <span>Symbole testé : BTCUSD (marché ouvert le week-end — XAUUSD était fermé au moment du test)</span>
+      <span>Compte : Deriv-Demo #201660817</span>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Pourquoi BTCUSD et pas XAUUSD</span>
+    Au moment du test, le marché XAUUSD était <strong>fermé</strong> (week-end) — chaque tentative d'ordre sur XAUUSD a été rejetée par MT5 lui-même avec <code>retcode=10018 "Market closed"</code>. C'est en soi une preuve utile : la requête atteint bien l'exécution MT5 réelle et reçoit un vrai refus métier, pas une erreur de câblage. Pour obtenir de vrais tickets exécutés, j'ai basculé le test sur BTCUSD (marché crypto, ouvert 24/7 sur ce broker) — même code, même chaîne, seul le symbole change. La logique de classification LIMIT/STOP est indépendante du symbole.
+  </div>
+
+  <h2 id="s1"><span class="num">01</span>Le Market Brain — où chaque valeur est calculée</h2>
+  <p class="lede">Chemin exact dans <code>EA_Bridge/market_brain.py</code>, fonction <code>analyze()</code>.</p>
+  <table>
+    <tr><th>Variable</th><th>Ligne</th><th>Calcul</th></tr>
+    <tr><td><strong>decision</strong></td><td class="chip">L140</td><td><code>_bias_to_decision(fusion["direction"])</code> — direction du vote pondéré des 11 moteurs</td></tr>
+    <tr><td><strong>entry_type</strong> (init.)</td><td class="chip">L165</td><td>par défaut <code>"wait_confirmation"</code></td></tr>
+    <tr><td><strong>pending_zone</strong></td><td class="chip">L169</td><td><code>_find_pending_entry_zone(ctx, atr_val, decision_bias)</code> — zone réelle la plus proche (order block / FVG / golden pocket)</td></tr>
+    <tr><td>Cas immédiat</td><td class="chip">L176-178</td><td>zone absente ou ≤ 0,15 ATR → <code>entry_type="immediate"</code>, <code>ideal_entry=current_price</code></td></tr>
+    <tr><td>Cas ordre en attente</td><td class="chip">L179-186</td><td>0,15 à 1,5 ATR → <code>entry_type="pending_order"</code>, <code>ideal_entry=pending_zone["price"]</code></td></tr>
+    <tr><td>Cas trop loin (SKIP)</td><td class="chip">L187-196</td><td>&gt; 1,5 ATR → <code>entry_type="wait_confirmation"</code>, direction conservée pour mémoire, aucun ordre</td></tr>
+    <tr><td><strong>stop_loss</strong></td><td class="chip">L200 / L205</td><td><code>ideal_entry ∓ ATR × 1.5</code></td></tr>
+    <tr><td><strong>take_profit_1</strong></td><td class="chip">L201 / L206</td><td><code>ideal_entry ± ATR × 3.0</code></td></tr>
+    <tr><td><strong>take_profit_2</strong></td><td class="chip">L202 / L207</td><td><code>ideal_entry ± ATR × 5.0</code></td></tr>
+    <tr><td><strong>RR (ratio risque/récompense)</strong></td><td>—</td><td>implicite : SL à 1,5 ATR, TP1 à 3,0 ATR → <strong>RR = 2,0</strong> sur TP1 par construction, systématique, jamais calculé/affiché explicitement nulle part comme un champ séparé</td></tr>
+    <tr><td><strong>Construction finale (AIDecision)</strong></td><td class="chip">L267-283</td><td><code>return {"decision", "confidence", "entry_type", "ideal_entry", "stop_loss", "take_profit_1", ...}</code></td></tr>
+  </table>
+  <div class="callout note">
+    <span class="label">Point signalé, pas corrigé aujourd'hui</span>
+    Le RR n'est jamais un champ calculé séparément — c'est une conséquence mécanique des multiplicateurs ATR fixes (1.5 / 3.0 / 5.0). Si vous voulez un RR minimum configurable ou affiché explicitement, c'est un ajout séparé, pas encore fait.
+  </div>
+
+  <h2 id="s2"><span class="num">02</span>Transmission — le chemin complet des variables</h2>
+  <p class="lede">De la décision du Brain jusqu'à la requête HTTP envoyée au pont.</p>
+  <pre>market_brain.analyze()
+  <span class="k">retourne</span> { decision, confidence, entry_type, ideal_entry, stop_loss, take_profit_1, take_profit_2, break_even, ... }
+        ↓
+EA_Bridge/local_functions.py : <span class="k">market_brain_analyze()</span> (L696-730 avant ce patch)
+  persiste le dict complet dans l'entité <span class="k">AIDecision</span>, le retourne tel quel au frontend
+        ↓
+Dist/src/lib/AnalysisSessionStore.jsx : <span class="k">autoExecute(decision)</span> (L37+)
+  <span class="k">const entryType = decision.entry_type</span>
+  <span class="k">if (entryType === 'wait_confirmation') return null;</span>  ← SKIP : aucune requête envoyée, prouvé par construction
+  <span class="k">const isPending = entryType === 'pending_order';</span>
+  orderPayload = { symbol, direction, entry_price: decision.ideal_entry, stop_loss, take_profit_1, take_profit_2, ... }
+  <span class="k">isPending ? invokeConnector('send_pending_order', orderPayload) : invokeConnector('send_order', orderPayload)</span>
+        ↓
+Dist/src/connectors/trading/baseConnector.js : <span class="k">BRIDGE_ACTIONS</span> (L14) inclut 'send_order'/'send_pending_order'
+  → routées <span class="k">directement navigateur→pont</span> (pas via le backend local), avec la clé API du pont
+        ↓
+Dist/src/connectors/trading/eaBridge.js (L198) : <span class="k">bridgeFetch(apiUrl, "/send_order" ou "/send_pending_order", apiKey, payload)</span>
+        ↓
+EA_Bridge/alphatg_bridge.py : <span class="k">@app.route("/send_order")</span> ou <span class="k">@app.route("/send_pending_order")</span>
+  → <span class="k">mt5.order_send(request_data)</span> — appel MT5 réel
+</pre>
+  <p>Chaque flèche ci-dessus est un appel de fonction ou une requête HTTP réel, vérifié par lecture directe du code à chaque étape — aucun maillon inventé ou supposé.</p>
+
+  <h2 id="s3"><span class="num">03</span>La conversion LIMIT / STOP dans le pont — code exact</h2>
+  <p class="lede"><code>EA_Bridge/alphatg_bridge.py</code>, fonction <code>send_pending_order()</code>, lignes 1058-1065 :</p>
+  <pre>
+<span class="k"># BUY: entry below current price = LIMIT (waiting for a pullback down),
+# entry above = STOP (waiting for a breakout up). SELL is the mirror.</span>
+if direction == "BUY":
+    order_type = mt5.ORDER_TYPE_BUY_LIMIT if entry_price &lt; current_price else mt5.ORDER_TYPE_BUY_STOP
+    pending_kind = "BUY_LIMIT" if entry_price &lt; current_price else "BUY_STOP"
+else:
+    order_type = mt5.ORDER_TYPE_SELL_LIMIT if entry_price &gt; current_price else mt5.ORDER_TYPE_SELL_STOP
+    pending_kind = "SELL_LIMIT" if entry_price &gt; current_price else "SELL_STOP"
+</pre>
+  <p>Cette classification est <strong>indépendante du Market Brain</strong> — le pont ne fait confiance à aucun label envoyé par l'appelant, il redérive lui-même LIMIT vs STOP à partir de la comparaison réelle <code>entry_price</code> vs <code>current_price</code> au moment de l'envoi. C'est exactement le comportement testé et confirmé en §5.</p>
+
+  <h2 id="s4"><span class="num">04</span>La logique — confirmée par preuve, pas seulement lue</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Direction</th><th>Prix actuel</th><th>Entrée demandée</th><th>Attendu</th><th>Réellement classé par MT5</th></tr>
+    <tr><td>BUY</td><td class="num">63 056,54</td><td class="num">62 656,54 (-400)</td><td>BUY LIMIT</td><td class="ok">BUY_LIMIT ✓</td></tr>
+    <tr><td>BUY</td><td class="num">63 056,54</td><td class="num">63 456,54 (+400)</td><td>BUY STOP</td><td class="ok">BUY_STOP ✓</td></tr>
+    <tr><td>SELL</td><td class="num">63 056,54</td><td class="num">63 456,54 (+400)</td><td>SELL LIMIT</td><td class="ok">SELL_LIMIT ✓</td></tr>
+    <tr><td>SELL</td><td class="num">63 056,54</td><td class="num">62 656,54 (-400)</td><td>SELL STOP</td><td class="ok">SELL_STOP ✓</td></tr>
+  </table></div>
+  <p>Les 4 lignes ci-dessus viennent directement de la réponse <code>GET /pending_orders</code> après création (voir §5) — c'est MT5 qui rapporte le <code>type</code>, pas une valeur que j'ai moi-même affirmée.</p>
+
+  <h2 id="s5"><span class="num">05</span>Vérification end-to-end réelle — les 6 scénarios</h2>
+  <p class="lede">Instance de pont isolée (port 8001, base de données jetable), attachée au <strong>même terminal MT5 réel</strong> déjà connecté — aucune interférence avec votre session principale (port 8000). Chaque requête ci-dessous est un appel HTTP réel exécuté à 08:38 UTC.</p>
+
+  <div class="tbl-wrap"><table>
+    <tr><th>Scénario</th><th>Requête</th><th>Résultat MT5</th><th>Ticket</th></tr>
+    <tr><td><strong>BUY MARKET</strong></td><td><code>POST /send_order</code> {direction: BUY, lot: 0.01}</td><td class="ok">Exécuté à 63 066,97</td><td class="ticket">9742746200</td></tr>
+    <tr><td><strong>SELL MARKET</strong></td><td><code>POST /send_order</code> {direction: SELL, lot: 0.01}</td><td class="ok">Exécuté à 63 043,87</td><td class="ticket">9742746202</td></tr>
+    <tr><td><strong>BUY LIMIT</strong></td><td><code>POST /send_pending_order</code> {direction: BUY, entry: 62 656,54}</td><td class="ok">Ordre en attente placé, type=BUY_LIMIT</td><td class="ticket">9742746205</td></tr>
+    <tr><td><strong>SELL LIMIT</strong></td><td><code>POST /send_pending_order</code> {direction: SELL, entry: 63 456,54}</td><td class="ok">Ordre en attente placé, type=SELL_LIMIT</td><td class="ticket">9742746207</td></tr>
+    <tr><td><strong>BUY STOP</strong></td><td><code>POST /send_pending_order</code> {direction: BUY, entry: 63 456,54}</td><td class="ok">Ordre en attente placé, type=BUY_STOP</td><td class="ticket">9742746208</td></tr>
+    <tr><td><strong>SELL STOP</strong></td><td><code>POST /send_pending_order</code> {direction: SELL, entry: 62 656,54}</td><td class="ok">Ordre en attente placé, type=SELL_STOP</td><td class="ticket">9742746213</td></tr>
+  </table></div>
+
+  <div class="callout proof">
+    <span class="label">Vérification indépendante</span>
+    Après création des 6 ordres, <code>GET /positions</code> a listé exactement les 2 positions marché (BUY/SELL) avec leurs SL/TP réels, et <code>GET /pending_orders</code> a listé exactement les 4 ordres en attente avec le <code>type</code> exact rapporté par MT5 lui-même — pas une valeur renvoyée par le code qui a créé l'ordre, une lecture <strong>indépendante</strong> de l'état réel du compte.
+  </div>
+
+  <h3>Nettoyage effectué</h3>
+  <p>Les 2 positions ont été fermées via <code>POST /close_position</code>, les 4 ordres en attente annulés via <code>POST /cancel_order</code>. Vérifié après coup : <code>/positions</code> et <code>/pending_orders</code> retournent tous deux des listes vides — le compte démo est revenu exactement à son état initial.</p>
+  <div class="callout note">
+    <span class="label">Erreur corrigée en cours de route</span>
+    Mon script de test a d'abord appelé <code>/cancel_pending_order</code> (404 — endpoint inexistant) au lieu du vrai endpoint <code>/cancel_order</code>. Erreur de mon script de test, pas du code de l'application — vérifié que le vrai frontend (<code>eaBridge.js</code>, <code>baseConnector.js</code>, <code>Trades.jsx</code>) appelle bien <code>/cancel_order</code> partout. Les 4 ordres ont été annulés dans un second appel une fois l'erreur repérée.
+  </div>
+
+  <h2 id="s7"><span class="num">07</span>Cas d'erreur testés réellement</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Cas</th><th>Requête</th><th>Résultat réel</th></tr>
+    <tr><td>Entrée trop proche du marché</td><td>BUY LIMIT à 0,05$ du prix actuel</td><td class="ok">Rejeté : <code>TOO_CLOSE_TO_MARKET</code> — "needs at least 24.0 distance"</td></tr>
+    <tr><td>Volume sous le minimum</td><td>lot=0.001 (minimum réel du broker: 0.01)</td><td class="ok">Rejeté avant même d'atteindre MT5 : <code>INVALID_VOLUME</code>, stage=PRE_ORDER_VALIDATION</td></tr>
+    <tr><td>Marché fermé</td><td>Tout ordre XAUUSD pendant la fermeture du week-end</td><td class="ok">Rejeté par MT5 lui-même : <code>retcode=10018 "Market closed"</code></td></tr>
+  </table></div>
+  <div class="callout note">
+    <span class="label">Non testés aujourd'hui, par manque de conditions réelles pour les déclencher</span>
+    <strong>Spread excessif</strong>, <strong>freeze level</strong> et <strong>mode de remplissage (filling mode)</strong> ont chacun une gestion dédiée dans le code (retry automatique sur 3 modes de remplissage différents pour <code>send_order</code>/<code>send_pending_order</code>, ajustement automatique des stops via <code>validate_and_adjust_stops</code>) — mais je n'ai pas réussi à provoquer ces conditions précises sur ce broker/compte en conditions réelles aujourd'hui (le fait que les 6 scénarios soient passés du premier coup signifie que le mode de remplissage correct a été trouvé sans jamais avoir besoin du retry). Ces chemins sont <strong>déduits du code, pas prouvés par un test</strong> — voir tableau final.
+  </div>
+
+  <h2 id="s8"><span class="num">08</span>Rapport final</h2>
+  <table>
+    <tr><th>Fonction</th><th>Statut</th><th>Preuve</th></tr>
+    <tr><td>BUY MARKET</td><td class="ok">✅</td><td>Ticket réel 9742746200, exécuté à 63 066,97, confirmé par <code>/positions</code>, fermé proprement</td></tr>
+    <tr><td>SELL MARKET</td><td class="ok">✅</td><td>Ticket réel 9742746202, exécuté à 63 043,87, confirmé par <code>/positions</code>, fermé proprement</td></tr>
+    <tr><td>BUY LIMIT</td><td class="ok">✅</td><td>Ticket réel 9742746205, <code>type=BUY_LIMIT</code> confirmé par <code>/pending_orders</code>, annulé proprement</td></tr>
+    <tr><td>SELL LIMIT</td><td class="ok">✅</td><td>Ticket réel 9742746207, <code>type=SELL_LIMIT</code> confirmé par <code>/pending_orders</code>, annulé proprement</td></tr>
+    <tr><td>BUY STOP</td><td class="ok">✅</td><td>Ticket réel 9742746208, <code>type=BUY_STOP</code> confirmé par <code>/pending_orders</code>, annulé proprement</td></tr>
+    <tr><td>SELL STOP</td><td class="ok">✅</td><td>Ticket réel 9742746213, <code>type=SELL_STOP</code> confirmé par <code>/pending_orders</code>, annulé proprement</td></tr>
+  </table>
+
+  <h3>Ce qui est réellement prouvé par un test aujourd'hui</h3>
+  <ul>
+    <li>Les 6 combinaisons direction × type d'ordre créent un vrai ticket MT5 avec le type exact attendu, vérifié par une lecture indépendante du compte.</li>
+    <li>Le rejet <code>TOO_CLOSE_TO_MARKET</code>, <code>INVALID_VOLUME</code> et <code>MARKET_CLOSED</code> fonctionnent réellement, avec les vrais codes d'erreur MT5.</li>
+    <li>Le nettoyage (fermeture/annulation) fonctionne et ramène le compte à un état vide vérifié.</li>
+    <li>La classification LIMIT vs STOP dans le pont est bien pilotée par la comparaison de prix au moment de l'envoi, pas par un label envoyé en amont.</li>
+  </ul>
+  <h3>Ce qui est déduit du code, pas encore prouvé par un test</h3>
+  <ul>
+    <li>Que <code>_find_pending_entry_zone()</code> du Market Brain, en conditions de marché réelles futures, produira effectivement un <code>entry_type='pending_order'</code> qui ira ensuite jusqu'à un vrai ticket via le <strong>parcours complet automatique</strong> (cycle de <code>AnalysisSessionStore.jsx</code>, pas un appel HTTP manuel comme aujourd'hui) — le calcul de zone a été validé en isolation (§ session précédente, contre XAUUSD) et la transmission a été validée en isolation (§5, contre BTCUSD) ; les deux n'ont pas encore été observés <strong>enchaînés automatiquement</strong> dans un seul cycle réel du système.</li>
+    <li>Le comportement exact sous spread excessif, freeze level, ou échec du premier mode de remplissage (le retry automatique n'a jamais été sollicité aujourd'hui car le premier essai a toujours réussi).</li>
+  </ul>
+  <h3>Ce qui n'a pas encore été validé</h3>
+  <ul>
+    <li>Un vrai signal BUY/SELL provenant du cycle autonome complet (pas un test manuel) qui aboutit à un LIMIT/STOP sur XAUUSD — le marché est resté indécis (WAIT) ou fermé pendant toute la session de test.</li>
+  </ul>
+
+  <p style="margin-top:40px; color:var(--text-faint); font-size:0.85rem;">Journal brut complet (chaque requête/réponse) : <a href="E2E_Log_Complet_EntryPlanner_2026-08-01.json">E2E_Log_Complet_EntryPlanner_2026-08-01.json</a></p>
+
+</div>
+</body>
+</html>

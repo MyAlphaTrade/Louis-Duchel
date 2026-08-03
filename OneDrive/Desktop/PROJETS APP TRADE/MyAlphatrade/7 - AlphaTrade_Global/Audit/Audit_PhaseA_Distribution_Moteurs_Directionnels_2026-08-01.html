@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase A — Distribution statistique des 10 moteurs</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 960px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.2rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 720px; }
+  h2 { font-family: var(--serif); font-size: 1.5rem; font-weight: 500; color: #fff; margin: 52px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 6px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tbl-wrap { overflow-x: auto; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.ok { background: var(--accent-dim); color: var(--accent); }
+  .pill.warn { background: var(--amber-dim); color: var(--amber); }
+  .pill.bad { background: var(--red-dim); color: var(--red); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Phase A — analyse statistique pure, aucun code modifié</div>
+    <h1>Les 3 moteurs directionnels savent-ils détecter une tendance exploitable ?</h1>
+    <p class="subtitle">Distribution de confiance/biais des 10 moteurs sur les 210 décisions réelles disponibles dans la base de l'application installée. Conformément à la demande : aucune formule n'a été changée, aucun code n'a été touché — uniquement de la lecture et du calcul statistique.</p>
+  </div>
+
+  <h2><span class="num">00</span>Méthodologie et limite importante des données</h2>
+  <p>Les données viennent d'une copie en lecture seule de la vraie base de l'app installée (<code>alphatg_local.db</code>). C'est la <strong>totalité</strong> de l'historique <code>AIDecision</code> stocké : 210 décisions, toutes entre 13h16 et 13h56 le 2026-08-01 (une seule fenêtre de 40 minutes), réparties sur exactement 3 symboles :</p>
+  <ul>
+    <li><strong>BTCUSD</strong> — 70 décisions</li>
+    <li><strong>BOOM1000INDEX</strong> — 70 décisions</li>
+    <li><strong>CRASH1000INDEX</strong> — 70 décisions</li>
+  </ul>
+  <div class="callout gap">
+    <span class="label">Limite déclarée</span>
+    Zéro décision XAUUSD n'existe dans cette base — le marché de l'or était fermé tout le week-end. Le terminal MT5 n'est pas lancé actuellement, donc impossible de générer de nouvelles décisions live pour l'instant. Les conclusions ci-dessous portent uniquement sur BTCUSD/BOOM1000INDEX/CRASH1000INDEX, sur une fenêtre de 40 minutes. Elles ne remplacent pas un test sur XAUUSD, mais un problème structurel visible ici (section 03) le serait tout autant sur XAUUSD, puisque le code des moteurs est identique quel que soit le symbole.
+  </div>
+
+  <h2><span class="num">01</span>Tableau demandé — distribution des 10 moteurs</h2>
+  <p class="lede">Moyenne / médiane / min / max / % de décisions où le moteur dépasse 60, calculés sur les 210 décisions.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Moteur</th><th class="num">Moyenne</th><th class="num">Médiane</th><th class="num">Min</th><th class="num">Max</th><th class="num">% &gt;60</th></tr>
+    <tr><td><strong>multi_timeframe</strong></td><td class="num">46.7</td><td class="num">40</td><td class="num">40</td><td class="num">60</td><td class="num">0.0%</td></tr>
+    <tr><td><strong>market_structure</strong></td><td class="num">38.3</td><td class="num">20</td><td class="num">20</td><td class="num">75</td><td class="num">33.3%</td></tr>
+    <tr><td><strong>indicator_fusion</strong></td><td class="num">75.6</td><td class="num">67</td><td class="num">67</td><td class="num">85</td><td class="num">100.0%</td></tr>
+    <tr><td>smart_money</td><td class="num">68.5</td><td class="num">73</td><td class="num">20</td><td class="num">80</td><td class="num">88.1%</td></tr>
+    <tr><td>fibonacci</td><td class="num">24.6</td><td class="num">15</td><td class="num">15</td><td class="num">65</td><td class="num">18.1%</td></tr>
+    <tr><td>liquidity</td><td class="num">25.1</td><td class="num">20</td><td class="num">20</td><td class="num">65</td><td class="num">11.4%</td></tr>
+    <tr><td>pattern_recognition</td><td class="num">27.0</td><td class="num">20</td><td class="num">20</td><td class="num">100</td><td class="num">10.0%</td></tr>
+    <tr><td>volume</td><td class="num">15.9</td><td class="num">15</td><td class="num">15</td><td class="num">46</td><td class="num">0.0%</td></tr>
+    <tr><td>volatility</td><td class="num">33.1</td><td class="num">35</td><td class="num">20</td><td class="num">55</td><td class="num">0.0%</td></tr>
+    <tr><td>session</td><td class="num">60.0</td><td class="num">60</td><td class="num">60</td><td class="num">60</td><td class="num">0.0%</td></tr>
+  </table>
+  </div>
+  <p>Les 3 moteurs en gras sont les moteurs directionnels visés par votre question. Deux faits sautent déjà aux yeux ici, avant même de descendre par symbole : <code>multi_timeframe</code> ne dépasse jamais 60 sur les 210 décisions (0.0%), et <code>indicator_fusion</code> ne descend jamais sous 67 (100% &gt; 60). Ces deux moteurs occupent chacun l'extrême opposé de la plage — l'un toujours prudent, l'autre toujours confiant.</p>
+
+  <h2><span class="num">02</span>Fréquences de biais — les 3 moteurs directionnels</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Moteur</th><th class="num">Bullish</th><th class="num">Bearish</th><th class="num">Neutral</th><th class="num">Confiance &gt;60</th></tr>
+    <tr><td><strong>multi_timeframe</strong></td><td class="num">210 (100.0%)</td><td class="num">0 (0.0%)</td><td class="num">0 (0.0%)</td><td class="num">0/210 (0.0%)</td></tr>
+    <tr><td><strong>market_structure</strong></td><td class="num">70 (33.3%)</td><td class="num">0 (0.0%)</td><td class="num">140 (66.7%)</td><td class="num">70/210 (33.3%)</td></tr>
+    <tr><td><strong>indicator_fusion</strong></td><td class="num">165 (78.6%)</td><td class="num">45 (21.4%)</td><td class="num">0 (0.0%)</td><td class="num">210/210 (100.0%)</td></tr>
+  </table>
+  </div>
+  <p><code>market_structure</code>, décomposé par événement structurel (déduit de sa confiance, qui vaut exactement 75 pour un BOS, 55 pour un CHoCH, ou 20 sinon — c'est la seule information stockée) :</p>
+  <ul>
+    <li><strong>BOS</strong> : 70/210 (33.3%)</li>
+    <li><strong>CHoCH</strong> : 0/210 (0.0%)</li>
+    <li><strong>Aucun événement</strong> : 140/210 (66.7%)</li>
+  </ul>
+  <p>Sur ces 210 décisions, <code>market_structure</code> n'a <strong>jamais</strong> détecté ni un CHoCH, ni le moindre biais baissier — et <code>multi_timeframe</code> n'a <strong>jamais</strong> voté autre chose que bullish. C'est le premier signal qui a motivé la ventilation par symbole ci-dessous.</p>
+
+  <h2><span class="num">03</span>La découverte qui change la question posée</h2>
+  <div class="callout critical">
+    <span class="label">Résultat le plus important de cet audit</span>
+    En ventilant par symbole, les 3 moteurs directionnels affichent une <strong>variance quasi nulle à l'intérieur d'un même symbole</strong>, sur 70 décisions étalées sur 40 minutes. Ce n'est pas un signe de moteurs "trop prudents" — c'est le signe possible d'un moteur qui ne recalcule pas réellement à partir de données fraîches à chaque appel.
+  </div>
+
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Symbole</th><th>multi_timeframe</th><th>market_structure</th><th>indicator_fusion</th></tr>
+    <tr>
+      <td><strong>BTCUSD</strong></td>
+      <td>bullish 70/70 — confiance <strong>fixe à 40</strong> sur les 70</td>
+      <td>neutre 70/70 — confiance <strong>fixe à 20</strong> sur les 70</td>
+      <td>bearish 45 / bullish 25 — mais confiance <strong>toujours exactement 67</strong>, jamais une autre valeur</td>
+    </tr>
+    <tr>
+      <td><strong>BOOM1000INDEX</strong></td>
+      <td>bullish 70/70 — confiance <strong>fixe à 60</strong> sur les 70</td>
+      <td>neutre 70/70 — confiance <strong>fixe à 20</strong> sur les 70</td>
+      <td>bullish 70/70 — confiance <strong>fixe à 85</strong> sur les 70</td>
+    </tr>
+    <tr>
+      <td><strong>CRASH1000INDEX</strong></td>
+      <td>bullish 70/70 — confiance <strong>fixe à 40</strong> sur les 70</td>
+      <td>bullish (BOS) 70/70 — confiance <strong>fixe à 75</strong> sur les 70</td>
+      <td>bullish 70/70 — confiance oscille entre 67 et 85 seulement</td>
+    </tr>
+  </table>
+  </div>
+
+  <p>Points notables :</p>
+  <ul>
+    <li><strong>multi_timeframe</strong> vote bullish à 100% pour les 3 symboles, y compris <code>CRASH1000INDEX</code> — un indice synthétique construit pour chuter brutalement à intervalles réguliers. Sa confiance ne varie jamais à l'intérieur d'un symbole (une seule valeur sur 70 échantillons), seulement d'un symbole à l'autre (40, 60 ou 40). Sur 40 minutes réelles de marché, une confluence multi-timeframe qui ne bouge jamais d'un iota est anormale, que le marché monte ou descende.</li>
+    <li><strong>market_structure</strong> reste figé sur exactement le même état (BOS ou absence de structure) pendant toute la fenêtre pour chaque symbole. Sur <code>BTCUSD</code> et <code>BOOM1000INDEX</code>, aucun BOS n'est détecté une seule fois en 70 passages ; sur <code>CRASH1000INDEX</code>, c'est l'inverse — un BOS haussier à chaque passage. Un swing structurel qui ne change jamais pendant 40 minutes de bougies réelles suggère que la fenêtre de swings utilisée est trop longue pour réagir, ou que les bougies fournies au moteur ne se renouvellent pas d'un appel à l'autre.</li>
+    <li><strong>indicator_fusion</strong> est le seul des 3 à montrer un peu de mouvement (BTCUSD alterne bearish/bullish, CRASH1000INDEX alterne 67/85), mais toujours entre un très petit nombre de valeurs discrètes exactes, jamais un continuum — cohérent avec des indicateurs (RSI/MACD/Bollinger) qui changent de camp par paliers plutôt que par la magnitude réelle du mouvement.</li>
+  </ul>
+
+  <h2><span class="num">04</span>Réponse à la question posée</h2>
+  <p><strong>« Est-ce que les trois moteurs directionnels actuels savent réellement détecter une tendance exploitable ? »</strong></p>
+  <p>Avec les réserves de la section 00 (pas de XAUUSD, fenêtre de 40 minutes, 3 symboles seulement), la réponse honnête est <strong>en l'état, on ne peut pas encore le savoir</strong> — et c'est un résultat plus sérieux que "trop conservateurs". Un moteur trop conservateur donnerait des scores bas mais qui bougent avec le marché. Ici, deux des trois moteurs (<code>multi_timeframe</code>, <code>market_structure</code>) donnent des scores qui ne bougent quasiment pas du tout à l'intérieur d'un symbole, ce qui empêche de juger s'ils "détectent mal" une tendance ou s'ils ne recalculent tout simplement pas correctement à chaque appel.</p>
+  <p>Avant de toucher aux formules ou aux poids (Phase B), il faut vérifier une hypothèse plus basique : est-ce que <code>multi_timeframe</code> et <code>market_structure</code> reçoivent bien des bougies fraîches et réellement différentes à chaque appel d'<code>analyze()</code>, ou est-ce qu'une valeur est mise en cache/recalculée sur une fenêtre de swings trop large pour bouger en 40 minutes ? Si le problème est là, retravailler la formule de fusion ou les poids ne changerait rien : on ajusterait la présentation d'un chiffre qui ne varie déjà pas assez à la source.</p>
+
+  <div class="callout state">
+    <span class="label">Recommandation pour la suite</span>
+    Avant Phase B (retravailler MTF/Structure/Indicator Fusion) : vérifier avec des logs bruts sur quelques appels <code>analyze()</code> consécutifs si les bougies passées à <code>compute_multi_timeframe_view</code> et à <code>bos_choch</code>/<code>classify_structure</code> changent réellement d'un appel à l'autre. Cette vérification est rapide, ne modifie aucun code de production, et détermine si le problème est "moteur trop prudent" (Phase B a du sens) ou "moteur qui ne voit pas de données fraîches" (un tout autre correctif, plus urgent).
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logique décisionnelle — AlphaTrade Gold AI Brain</title>
+<style>
+  :root {
+    --bg: #0a0f0d;
+    --bg-card: #0f1613;
+    --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6;
+    --text-dim: #8b978f;
+    --text-faint: #5c6863;
+    --accent: #34d399;
+    --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b;
+    --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b;
+    --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2;
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.65;
+    margin: 0;
+    padding: 0;
+  }
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 56px 28px 120px;
+  }
+  .masthead {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: 2.4rem;
+    font-weight: 500;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    color: #fff;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 1.02rem;
+    max-width: 640px;
+  }
+  .meta-row {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+  }
+  h2 {
+    font-family: var(--serif);
+    font-size: 1.55rem;
+    font-weight: 500;
+    color: #fff;
+    margin: 64px 0 8px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    text-wrap: balance;
+  }
+  h2 .num {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    margin-right: 10px;
+  }
+  h3 {
+    font-size: 1.08rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 32px 0 12px;
+  }
+  p { color: var(--text); margin: 14px 0; }
+  p.lede { color: var(--text-dim); font-size: 0.98rem; margin-bottom: 28px; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 6px 0; }
+  strong { color: #fff; font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255,255,255,0.06);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #c9f2e2;
+  }
+  a { color: var(--accent); }
+
+  .callout {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    margin: 20px 0;
+    font-size: 0.94rem;
+  }
+  .callout .label {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); }
+  .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); }
+  .callout.gap .label { color: var(--amber); }
+  .callout.proposal { background: rgba(107,184,242,0.08); border-color: rgba(107,184,242,0.25); }
+  .callout.proposal .label { color: var(--blue); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); }
+  .callout.critical .label { color: var(--red); }
+
+  .flow {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    margin: 24px 0;
+    font-family: var(--mono);
+    font-size: 0.86rem;
+  }
+  .flow-step {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 10px 0;
+  }
+  .flow-step .n {
+    color: var(--accent);
+    min-width: 20px;
+  }
+  .flow-step .arrow {
+    text-align: center;
+    color: var(--text-faint);
+    padding: 2px 0 2px 20px;
+  }
+  .flow-step .desc { color: var(--text-dim); font-family: var(--sans); font-size: 0.88rem; }
+  .flow-step .title { color: #fff; font-weight: 600; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--text-faint);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+  }
+  td { color: var(--text-dim); }
+  td.num, td strong { color: #fff; }
+  tr:last-child td { border-bottom: none; }
+  .tbl-wrap { overflow-x: auto; }
+
+  .engine-weights {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    margin: 20px 0;
+  }
+  .ew {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .ew .name { font-size: 0.82rem; color: var(--text); }
+  .ew .weight { font-family: var(--mono); font-size: 1.1rem; color: var(--accent); font-weight: 600; }
+
+  .scenario {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 24px 0;
+  }
+  .scenario .decision-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 4px 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  .decision-badge.buy { background: var(--accent-dim); color: var(--accent); }
+  .decision-badge.sell { background: var(--red-dim); color: var(--red); }
+  .decision-badge.wait { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+  .scenario ol { margin: 12px 0; }
+  .scenario li { color: var(--text-dim); }
+  .scenario li strong { color: var(--text); }
+
+  .toc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 32px 0;
+  }
+  .toc .label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 12px; }
+  .toc ol { columns: 2; column-gap: 32px; padding-left: 18px; }
+  .toc li { font-size: 0.88rem; margin: 5px 0; break-inside: avoid; }
+  .toc a { color: var(--text-dim); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+
+  .summary-table td:first-child { color: #fff; font-weight: 600; width: 30%; }
+
+  @media print {
+    body { background: #fff; color: #000; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Document technique — avant développement</div>
+    <h1>Logique décisionnelle du Market Brain</h1>
+    <p class="subtitle">Comment AlphaTrade Gold observe le marché, fait dialoguer ses moteurs, et arrive à une décision de trading — état réel du code aujourd'hui, écarts identifiés par rapport à la vision cible, et propositions concrètes avant de coder quoi que ce soit.</p>
+    <div class="meta-row">
+      <span>AlphaTrade Global — EA_Bridge / Market Brain</span>
+      <span>1er août 2026</span>
+      <span>Sans code — lecture directe du comportement réel</span>
+    </div>
+  </div>
+
+  <div class="toc">
+    <div class="label">Sommaire</div>
+    <ol>
+      <li><a href="#cycle">Le cycle de décision complet</a></li>
+      <li><a href="#collab">Comment les moteurs collaborent</a></li>
+      <li><a href="#mtf">Le rôle du Multi-Timeframe</a></li>
+      <li><a href="#entrytype">BUY MARKET, LIMIT, STOP ou WAIT</a></li>
+      <li><a href="#profils">Ce que change vraiment le Scalping</a></li>
+      <li><a href="#timeframes">Les timeframes imposés ou choisis</a></li>
+      <li><a href="#confiance">Le niveau de confiance</a></li>
+      <li><a href="#desaccords">Les désaccords entre moteurs</a></li>
+      <li><a href="#entryplanner">L'Entry Planner</a></li>
+      <li><a href="#cerveau">Un cerveau, pas un robot à paramètres</a></li>
+      <li><a href="#scenarios">Quatre scénarios déroulés</a></li>
+      <li><a href="#synthese">Synthèse — ce qui est solide, ce qui manque</a></li>
+    </ol>
+  </div>
+
+  <h2 id="cycle"><span class="num">01</span>Le cycle de décision complet</h2>
+  <p class="lede">Avant de parler des moteurs individuellement, voici le trajet réel que suit une analyse, de la bougie brute jusqu'à l'ordre envoyé — ou jusqu'au refus de trader.</p>
+
+  <div class="flow">
+    <div class="flow-step"><span class="n">1</span><span class="title">MARCHÉ</span></div>
+    <div class="flow-step arrow">↓ bougies réelles MT5 (D1 → M5, jusqu'à 300 par unité de temps)</div>
+    <div class="flow-step"><span class="n">2</span><span class="title">OBSERVATION</span> <span class="desc">— indicators.py calcule EMA20/50/200, RSI14, MACD, ATR14, Bollinger, swings, structure, pour CHAQUE timeframe séparément</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">3</span><span class="title">ANALYSE (11 moteurs pondérés)</span> <span class="desc">— chacun vote un biais (haussier/baissier/neutre) + sa propre confiance dans ce biais, sur les bougies du timeframe retenu</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">4</span><span class="title">FUSION PONDÉRÉE</span> <span class="desc">— les votes sont agrégés par (poids du moteur × sa confiance), regroupés par camp (haussier/baissier/neutre) ; le camp qui pèse le plus lourd l'emporte</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">5</span><span class="title">VÉRIFICATION DU SEUIL PLANCHER (60%)</span> <span class="desc">— sous ce seuil, la décision est ramenée à WAIT quel que soit le camp gagnant</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">6</span><span class="title">STRATÉGIE VALIDÉE (supplément, pas déclencheur)</span> <span class="desc">— si une stratégie backtestée est active sur ce symbole/profil, elle peut confirmer (+5% confiance) ou opposer son veto (ramène à WAIT), jamais transformer un WAIT en BUY/SELL toute seule</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">7</span><span class="title">CONSTRUCTION DU PLAN</span> <span class="desc">— prix d'entrée, stop loss (ATR×1.5), TP1 (ATR×3), TP2 (ATR×5), break-even (50% du chemin vers TP1)</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">8</span><span class="title">EXPLICATION</span> <span class="desc">— rationale assemblé à partir des vrais résultats des moteurs, classés par poids × confiance — jamais une phrase inventée</span></div>
+    <div class="flow-step arrow">↓</div>
+    <div class="flow-step"><span class="n">9</span><span class="title">DÉCISION (AIDecision)</span> <span class="desc">— persistée en base ; si mode autonome actif ET confiance ≥ seuil d'exécution configuré → exécution réelle</span></div>
+  </div>
+
+  <div class="callout state">
+    <span class="label">État actuel</span>
+    Ce pipeline est <strong>entièrement déterministe et réel</strong> — aucun appel à un modèle de langage à aucune étape. Chaque nombre affiché (structure, volume, fibonacci, confiance finale) est recalculé à chaque cycle à partir des bougies réelles du compte MT5 connecté. Vérifié ligne à ligne dans <code>market_brain.py</code> et <code>engine_scoring.py</code>.
+  </div>
+
+  <h2 id="collab"><span class="num">02</span>Comment les moteurs collaborent</h2>
+  <p class="lede">Question directe : lequel parle en premier, lequel attend les autres, lequel coordonne ?</p>
+
+  <p>Aujourd'hui, la réponse honnête est : <strong>ils parlent tous en même temps, puis un mécanisme de fusion les départage</strong>. Il n'y a pas de séquence "le moteur A parle, puis B attend la réponse de A pour ajuster son propre vote". Chaque moteur reçoit exactement le même contexte de marché déjà calculé (le "context" produit par <code>build_context()</code> : EMA, RSI, MACD, ATR, Bollinger, swings, structure) et rend son verdict indépendamment des autres.</p>
+
+  <p>Ce qui coordonne réellement, ce n'est pas un agent au sens d'un "cerveau qui parle aux autres cerveaux" — c'est une fonction de fusion (<code>fuse_direction_and_confidence</code>) qui joue exactement le rôle que vous appelez le CAIO : elle ne vote pas elle-même, elle pèse les votes des autres et déclare un vainqueur. C'est ce mécanisme qu'il faut comprendre comme "le coordinateur", même s'il n'est pas présenté comme un moteur à part dans l'interface.</p>
+
+  <h3>Les poids réels (importance de chaque moteur)</h3>
+  <div class="engine-weights">
+    <div class="ew"><div class="name">Multi-Timeframe</div><div class="weight">14</div></div>
+    <div class="ew"><div class="name">Market Structure</div><div class="weight">14</div></div>
+    <div class="ew"><div class="name">Smart Money</div><div class="weight">12</div></div>
+    <div class="ew"><div class="name">Indicator Fusion</div><div class="weight">10</div></div>
+    <div class="ew"><div class="name">Liquidité</div><div class="weight">8</div></div>
+    <div class="ew"><div class="name">Entry Planner</div><div class="weight">8</div></div>
+    <div class="ew"><div class="name">Fibonacci</div><div class="weight">7</div></div>
+    <div class="ew"><div class="name">Volume</div><div class="weight">7</div></div>
+    <div class="ew"><div class="name">Pattern Recognition</div><div class="weight">5</div></div>
+    <div class="ew"><div class="name">Volatilité</div><div class="weight">5</div></div>
+    <div class="ew"><div class="name">Session</div><div class="weight">4</div></div>
+  </div>
+  <p>Total : 94. Economic Intelligence a un poids de <strong>0</strong> — pas de source de données branchée, donc neutralisé plutôt que de compter pour rien dans le calcul (voir §7 sur la confiance pour le détail du calcul).</p>
+
+  <div class="callout gap">
+    <span class="label">Écart identifié</span>
+    Ces poids sont <strong>fixes et identiques pour tous les profils et toutes les conditions de marché</strong>. Un trader professionnel donnerait plus de poids à Smart Money/Liquidité en range et plus de poids à Multi-Timeframe/Structure en tendance forte. Aujourd'hui, la pondération ne s'adapte pas au régime de marché — c'est une simplification qui mériterait d'être challengée dans une prochaine itération (voir §10).
+  </div>
+
+  <h2 id="mtf"><span class="num">03</span>Le rôle du Multi-Timeframe</h2>
+  <p class="lede">Vous pensez qu'il devrait devenir le coordinateur du contexte de marché (D1 fixe la tendance → H4 confirme → H1 cherche les zones → M15 cherche l'opportunité → M5/M1 cherche l'entrée). Voici ce qu'il fait réellement aujourd'hui.</p>
+
+  <h3>Ce qui existe réellement</h3>
+  <p><code>compute_multi_timeframe_view()</code> calcule un biais indépendant sur <strong>D1, H4, H1, M15, M5</strong> (M1 n'est pas inclus dans ce calcul), puis fait un <strong>vote à plat</strong> : chaque timeframe compte pour une voix, sans hiérarchie. Le "biais dominant" est simplement celui qui a le plus de voix, et le "score d'alignement" est le pourcentage de timeframes d'accord avec ce biais dominant.</p>
+
+  <p>Ensuite, une seconde fonction (<code>select_timeframe</code>) choisit <strong>un seul timeframe</strong> parmi ces cinq pour y faire l'analyse principale — celui qui est d'accord avec le biais dominant, en préférant le plus réactif en cas d'égalité (M5 avant H1 avant H4 avant D1). Ce choix n'intervient que lorsque le mode "AUTO" est sélectionné pour le timeframe.</p>
+
+  <div class="callout gap">
+    <span class="label">Écart avec votre vision</span>
+    Ce n'est <strong>pas</strong> une cascade hiérarchique. Aujourd'hui, D1 et M5 ont exactement le même poids dans le calcul de l'"alignement" — un désaccord de D1 pèse autant qu'un désaccord de M5. Votre intuition (D1 fixe le cadre, les timeframes inférieurs cherchent l'exécution <em>à l'intérieur</em> de ce cadre, jamais contre lui) n'est pas ce qui est codé. C'est une différence de fond, pas un détail.
+  </div>
+
+  <div class="callout proposal">
+    <span class="label">Proposition</span>
+    Faire du Multi-Timeframe Engine un vrai <strong>coordinateur de contexte</strong>, sans créer d'agent supplémentaire — la logique de cascade tient dans la fonction existante, pas dans une nouvelle entité :
+    <ol>
+      <li><strong>D1</strong> établit le biais directeur (tendance de fond). Aucun trade n'est autorisé à contredire ce biais, sauf configuration explicite "contre-tendance".</li>
+      <li><strong>H4</strong> doit confirmer ce biais pour que l'analyse continue ; sinon, statut "contexte non confirmé" → confiance plafonnée.</li>
+      <li><strong>H1</strong> cherche les zones d'intérêt (structure, smart money, liquidité) à l'intérieur du cadre D1/H4 — c'est ici que la recherche de zone a du sens, pas en votant sur la direction.</li>
+      <li><strong>M15</strong> cherche une configuration d'entrée actionnable dans ces zones.</li>
+      <li><strong>M5/M1</strong> (M1 à ajouter au calcul, absent aujourd'hui) affinent le timing d'entrée — jamais le sens du trade.</li>
+    </ol>
+    Techniquement : remplacer le vote à plat par une pondération dégressive stricte (D1 ≫ H4 ≫ H1 ≫ M15 ≫ M5/M1) et ajouter une règle de veto ("si D1 contredit franchement, le trade est bloqué indépendamment du score des autres timeframes"). Pas besoin d'un agent séparé — c'est une réécriture de <code>compute_multi_timeframe_view</code> et de son intégration dans la fusion.
+  </div>
+
+  <h2 id="entrytype"><span class="num">04</span>BUY MARKET, LIMIT, STOP ou WAIT — comment ça se décide</h2>
+  <p class="lede">C'est le point le plus important de cet audit à traiter en priorité avant de développer davantage.</p>
+
+  <div class="callout critical">
+    <span class="label">Constat</span>
+    <strong>Aujourd'hui, le cerveau ne choisit jamais entre BUY MARKET, BUY LIMIT, BUY STOP, SELL MARKET, SELL LIMIT, SELL STOP.</strong> Il n'existe que deux issues : <code>immediate</code> (= un ordre au marché, dès que la décision n'est pas WAIT) ou <code>wait_confirmation</code> (= aucun ordre, on attend). Vérifié dans <code>market_brain.py</code> : la variable <code>entry_type</code> ne prend jamais d'autre valeur que ces deux-là. Le pont MT5 sait pourtant déjà envoyer des ordres en attente (<code>send_pending_order</code>, gestion des tickets, annulation) — l'infrastructure existe côté exécution, mais rien ne la sollicite côté décision.
+    <br><br>
+    Concrètement : si le Market Brain détecte une configuration haussière mais que le prix n'est pas encore dans la zone d'intérêt (zone de demande, golden pocket Fibonacci), il n'a aujourd'hui que deux choix — <strong>entrer immédiatement au marché même si le prix n'est pas idéal</strong>, ou <strong>ne rien faire du tout</strong>. Un BUY LIMIT posé à la zone n'est jamais envisagé.
+  </div>
+
+  <p>Il y a bien une fonction <code>_find_actionable_zone</code> qui identifie une zone Smart Money ou Fibonacci pertinente — mais elle sert uniquement à <strong>enrichir l'explication textuelle</strong> ("configuration d'entrée actionnable via smart_money"), pas à changer le type d'ordre.</p>
+
+  <div class="callout proposal">
+    <span class="label">Proposition — comment un Entry Planner complet devrait raisonner</span>
+    Le choix entre les 7 issues devrait dépendre de la <strong>distance actuelle entre le prix et la zone d'intérêt</strong>, mesurée en multiples d'ATR (la volatilité du moment), pas en pips fixes :
+    <div class="tbl-wrap"><table>
+      <tr><th>Situation</th><th>Distance à la zone</th><th>Décision</th><th>Pourquoi</th></tr>
+      <tr><td>Prix déjà dans la zone, bougie de confirmation</td><td>0 ATR</td><td><strong>BUY/SELL MARKET</strong></td><td>Attendre serait perdre l'entrée — la confirmation est déjà là</td></tr>
+      <tr><td>Prix proche mais pas encore arrivé, zone claire (order block, golden pocket)</td><td>0,3 – 1,5 ATR</td><td><strong>BUY/SELL LIMIT</strong></td><td>On sait où le prix devrait revenir avant de repartir — pas besoin de payer le spread maintenant</td></tr>
+      <tr><td>Cassure de structure en cours, prix au-delà d'un niveau clé</td><td>—</td><td><strong>BUY/SELL STOP</strong></td><td>On veut confirmer la continuation, pas anticiper un retournement — entrer seulement si le prix casse plus haut/plus bas</td></tr>
+      <tr><td>Zone trop loin, volatilité trop faible pour l'atteindre à temps</td><td>&gt; 2 ATR</td><td><strong>WAIT</strong></td><td>Le risque d'attendre une entrée qui n'arrivera jamais dépasse le bénéfice</td></tr>
+      <tr><td>Aucune zone claire, indicateurs seuls au-dessus du plancher</td><td>—</td><td><strong>WAIT ou MARKET selon la confiance</strong></td><td>Sans structure, la confiance doit être plus élevée pour justifier une entrée</td></tr>
+    </table></div>
+    Critères d'entrée dans ce calcul : distance à la zone (en ATR), momentum (le prix accélère-t-il vers la zone ou s'en éloigne-t-il), liquidité/volume (une entrée LIMIT dans une zone à faible volume risque de ne jamais se remplir), session active (une LIMIT posée juste avant la clôture asiatique a peu de chances d'être touchée avant le réveil de Londres), et le risque déjà engagé sur le compte (position ouverte, budget de perte journalier).
+  </div>
+
+  <h2 id="profils"><span class="num">05</span>Ce que change vraiment le mode Scalping</h2>
+  <p class="lede">Vérifié directement dans <code>tradingProfiles.js</code> — voici exactement, chiffre par chiffre, ce que chaque profil change.</p>
+
+  <div class="tbl-wrap"><table>
+    <tr><th>Paramètre</th><th>Scalping</th><th>Intraday</th><th>Swing</th><th>Auto</th></tr>
+    <tr><td>Timeframe par défaut</td><td class="num">M5</td><td class="num">H1</td><td class="num">H4</td><td class="num">choisi par le Brain</td></tr>
+    <tr><td>Confiance minimale pour exécuter</td><td class="num">80%</td><td class="num">70%</td><td class="num">75%</td><td class="num">70%</td></tr>
+    <tr><td>Risque maximum par trade</td><td class="num">0,5%</td><td class="num">1%</td><td class="num">1,5%</td><td class="num">1%</td></tr>
+    <tr><td>Trades maximum par jour</td><td class="num">10</td><td class="num">5</td><td class="num">2</td><td class="num">3</td></tr>
+    <tr><td>Déclencheur break-even</td><td class="num">0,5R</td><td class="num">1R</td><td class="num">2R</td><td class="num">1R</td></tr>
+    <tr><td>Délai entre cycles d'analyse</td><td class="num">30s</td><td class="num">120s</td><td class="num">600s</td><td class="num">120s</td></tr>
+  </table></div>
+
+  <p>Donc pour répondre précisément à votre question : le mode Scalping ne signifie <strong>ni</strong> "plus de BUY MARKET" <strong>ni</strong> "plus d'ordres LIMIT" — il change objectivement le timeframe par défaut, exige une confiance plus élevée pour compenser le bruit plus important sur M5, réduit le risque par trade, autorise plus de trades/jour, resserre le déclencheur de protection du capital, et scanne le marché quatre fois plus souvent (30s vs 120s). Ce ne sont pas des TP plus courts au sens strict — le calcul du TP reste basé sur l'ATR du timeframe choisi, donc un TP en Scalping est mécaniquement plus court <em>parce que</em> l'ATR de M5 est plus petit que celui de H4, pas parce qu'un multiplicateur différent est appliqué.</p>
+
+  <div class="callout gap">
+    <span class="label">Écart identifié</span>
+    Changer de profil dans les Paramètres ne copie <strong>que</strong> <code>min_confidence</code>, <code>max_risk_percent</code> et <code>max_daily_trades</code> vers la configuration active — vérifié dans <code>TradingProfileSelector.jsx</code>. Le <code>break_even_trigger</code> du profil (0,5R en Scalping, 2R en Swing) <strong>n'est pas copié</strong> : passer en Scalping ne resserre donc pas réellement la protection du capital comme le tableau ci-dessus le laisse penser tant que l'utilisateur ne l'ajuste pas manuellement. À corriger : copier <code>break_even_trigger</code> au moment du changement de profil, comme les trois autres champs.
+  </div>
+
+  <h2 id="timeframes"><span class="num">06</span>Les timeframes doivent-ils être imposés ?</h2>
+  <p class="lede">Votre intuition est déjà partiellement dans le code — mais pas complètement.</p>
+  <p>Le mode <strong>AUTO</strong> existe et fonctionne : quand il est sélectionné, le Brain choisit lui-même le timeframe (parmi D1/H4/H1/M15/M5) en fonction de celui qui confirme le mieux le biais dominant du moment. Rien n'empêche qu'un jour ce soit M15 et le lendemain M5 — c'est déjà dynamique, pas figé.</p>
+
+  <div class="callout gap">
+    <span class="label">Limite actuelle</span>
+    <ul>
+      <li><strong>M1 n'existe pas</strong> dans ce calcul multi-timeframe — même en Scalping, le choix automatique ne descendra jamais à M1.</li>
+      <li>Le choix reste un <strong>vote à plat</strong> (voir §3) — il ne tient pas compte du profil actif. Un utilisateur en Swing pourrait théoriquement se voir proposer une entrée M5 si le vote automatique le préfère, ce qui contredit l'esprit "positions de plusieurs jours" du profil Swing.</li>
+    </ul>
+  </div>
+  <div class="callout proposal">
+    <span class="label">Proposition</span>
+    Contraindre le choix automatique à l'intérieur de la liste <code>timeframes</code> du profil actif (déjà définie dans <code>tradingProfiles.js</code>, juste jamais utilisée pour filtrer <code>select_timeframe</code>) : en Swing, ne choisir qu'entre H4/D1 ; en Scalping, entre M1/M5 une fois M1 ajouté. Le brain garde sa liberté de décision, mais à l'intérieur du cadre que le style de trading choisi impose — cohérent avec votre exemple "aujourd'hui aucune entrée M1, seulement M15".
+  </div>
+
+  <h2 id="confiance"><span class="num">07</span>Le niveau de confiance — comment il est vraiment calculé</h2>
+  <p class="lede">Ce n'est ni une moyenne, ni un arbitrage manuel du CAIO au sens d'un jugement séparé — c'est un <strong>vote pondéré et orienté</strong>. Voici le calcul exact.</p>
+
+  <p>Pour chaque moteur : <code>poids du moteur × (sa confiance / 100)</code>, ajouté au camp de son biais (haussier, baissier ou neutre). À la fin :</p>
+  <p style="font-family: var(--mono); background: var(--bg-card); padding: 16px 20px; border-radius: 8px; border: 1px solid var(--border);">confiance finale = (somme pondérée du camp gagnant / somme totale des poids) × 100</p>
+
+  <p>Ce n'est donc <strong>ni une moyenne simple</strong> (qui traiterait un moteur mineur comme Session à égalité avec Multi-Timeframe) <strong>ni un simple vote majoritaire</strong> (qui ignorerait à quel point chaque moteur est confiant dans son propre vote). Un moteur important mais peu confiant pèse peu ; un moteur mineur mais très confiant pèse peu aussi — c'est le produit des deux qui compte.</p>
+
+  <div class="callout critical">
+    <span class="label">Point capital que vous avez raison de challenger</span>
+    Il existe aujourd'hui <strong>deux seuils de confiance distincts et indépendants</strong>, ce qui peut prêter à confusion :
+    <ol>
+      <li><strong>Le plancher de décision (60%, fixe, non configurable)</strong> — sous ce seuil, la décision du Brain lui-même devient WAIT. C'est une constante dans <code>market_brain.py</code>, identique pour tout le monde, tout le temps.</li>
+      <li><strong>Le seuil d'exécution (<code>min_confidence</code>, configurable, 70-80% selon le profil)</strong> — même si le Brain décide BUY à 65% (au-dessus du plancher), l'exécution automatique ne l'enverra <strong>pas</strong> en ordre réel si 65% est sous le seuil configuré. Le trade reste enregistré comme "signal", jamais exécuté.
+      </li>
+    </ol>
+    Résultat concret : une décision "BUY, 65%" peut apparaître dans l'historique sans qu'aucun ordre n'ait jamais été envoyé — pas un bug, mais une architecture à deux étages qui n'est nulle part expliquée à l'écran aujourd'hui.
+  </div>
+  <div class="callout proposal">
+    <span class="label">Proposition</span>
+    Rendre ce double seuil visible et explicite dans l'interface ("Décision du Brain : BUY 65% — sous le seuil d'exécution (70%), aucun ordre envoyé") plutôt que de laisser deviner pourquoi rien ne s'est passé. Envisager aussi de faire varier le plancher de décision (60%) selon la clarté du marché plutôt qu'une constante universelle — mais cela demande davantage de recul statistique avant d'être tranché.
+  </div>
+
+  <h2 id="desaccords"><span class="num">08</span>Les désaccords entre moteurs — comment ils sont arbitrés</h2>
+  <p>Reprenons votre exemple : Structure vote BUY, Smart Money vote WAIT (neutre), Liquidité vote SELL LIMIT (baissier). Il n'y a pas de "CAIO" séparé qui lit ces trois avis et tranche par jugement — le vote pondéré <strong>est</strong> l'arbitrage :</p>
+  <ol>
+    <li>Chaque moteur contribue son poids × sa confiance à son propre camp (Structure → camp haussier, Smart Money → camp neutre, Liquidité → camp baissier).</li>
+    <li>Les camps sont totalisés indépendamment.</li>
+    <li>Le camp le plus lourd gagne — pas le plus nombreux, le plus lourd.</li>
+    <li>Les moteurs qui n'ont pas voté pour le camp gagnant sont listés comme "conflits" dans la décision finale, avec le nombre exact de moteurs en désaccord — ils ne sont jamais supprimés ni ignorés, juste comptés comme minoritaires.</li>
+  </ol>
+  <p>La <strong>stratégie validée</strong> (une des 4 stratégies backtestées, activée pour ce symbole/profil) agit en second passage, jamais en premier : elle ne peut que <strong>confirmer</strong> une direction déjà choisie par le vote (+5% confiance) ou <strong>y opposer son veto</strong> (ramène à WAIT), jamais transformer un WAIT en BUY de sa propre initiative. C'est la garde-fou le plus proche d'un "second avis" dans l'architecture actuelle.</p>
+
+  <div class="callout gap">
+    <span class="label">Écart identifié</span>
+    Ce mécanisme fonctionne, mais il n'explique jamais <strong>pourquoi</strong> le camp gagnant a gagné au-delà d'un nombre ("12,3 sur 94"). Un trader professionnel dirait plutôt : "je privilégie la baisse parce que Indicator Fusion et Multi-Timeframe, mes deux indicateurs de tendance, sont alignés, même si la majorité des moteurs sont neutres." Le raisonnement humain accorde une importance qualitative à *quels* moteurs sont d'accord, pas seulement à leur poids numérique cumulé.
+  </div>
+  <div class="callout proposal">
+    <span class="label">Proposition</span>
+    Ajouter une phrase de synthèse générée à partir des vrais poids et biais (pas un LLM — un gabarit conditionnel déterministe) : identifier si les moteurs "structurels" (Multi-Timeframe, Structure, Smart Money) sont alignés entre eux indépendamment du score brut, et le signaler explicitement ("les 3 moteurs de tendance sont alignés en baisse, malgré une majorité de moteurs neutres") — cela rendrait l'arbitrage lisible sans changer le calcul lui-même.
+  </div>
+
+  <h2 id="entryplanner"><span class="num">09</span>L'Entry Planner</h2>
+  <p>Contrairement à ce que son nom suggère, l'Entry Planner actuel <strong>ne choisit pas le type d'ordre</strong> — c'est un moteur de <em>timing</em>, pas de <em>type d'exécution</em>. Sa seule question est : "le prix est-il actuellement dans une zone actionnable (Smart Money ou Fibonacci) ?" Il reprend les lectures déjà calculées par ces deux moteurs, retient celle qui a la plus haute confiance, et répond neutre s'il n'y a aucune zone propre.</p>
+  <p>C'est un moteur informatif de plus dans le vote pondéré (poids 8) — il n'a aujourd'hui aucune autorité spéciale sur la décision finale malgré son nom. Le vrai choix du type d'ordre (§4) n'est fait par <strong>personne</strong> dans l'architecture actuelle — c'est le trou le plus important à combler.</p>
+
+  <h2 id="cerveau"><span class="num">10</span>Un cerveau, pas un robot à paramètres</h2>
+  <p class="lede">Ce que l'architecture permet déjà, et ce qu'il faudrait ajouter pour aller au bout de cette ambition.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Capacité recherchée</th><th>État aujourd'hui</th></tr>
+    <tr><td>Interpréter le marché sans inventer de signal</td><td>Oui — chaque moteur renvoie une confiance basse et honnête (15-35%) quand rien n'est clair, jamais un chiffre plausible fabriqué</td></tr>
+    <tr><td>S'adapter au style de trading</td><td>Partiel — les profils changent les seuils et le timeframe par défaut, mais les 11 poids des moteurs restent identiques pour tous les profils</td></tr>
+    <tr><td>Changer de style tout seul</td><td>Non — le profil est un choix manuel de l'utilisateur, le Brain ne bascule jamais de lui-même entre Scalping/Swing selon le régime de marché</td></tr>
+    <tr><td>Choisir le meilleur timeframe</td><td>Oui en mode AUTO, mais par vote à plat non hiérarchisé (§3) et sans respecter le cadre du profil actif (§6)</td></tr>
+    <tr><td>Choisir le meilleur type d'entrée</td><td>Non — seulement MARKET ou WAIT (§4), l'écart le plus important de cet audit</td></tr>
+    <tr><td>Savoir quand ne pas trader</td><td>Oui, et c'est solide — plancher de confiance à 60%, budget de perte journalier, objectif journalier, tout stoppe réellement l'exécution</td></tr>
+  </table></div>
+
+  <div class="callout proposal">
+    <span class="label">Proposition d'ensemble</span>
+    Trois chantiers, dans cet ordre de priorité, pour transformer "un ensemble de scores" en "un trader qui raisonne" :
+    <ol>
+      <li><strong>Entry Planner réel</strong> (§4) — le manque le plus visible et le plus attendu par vous.</li>
+      <li><strong>Multi-Timeframe hiérarchique</strong> (§3) — change la qualité de fond de chaque décision, pas seulement le type d'ordre.</li>
+      <li><strong>Pondération adaptative par régime de marché</strong> — une fois les deux premiers en place, ajuster les 11 poids selon que le marché est en tendance forte, en range, ou en expansion de volatilité (déjà mesuré par le moteur Volatilité, jamais réinjecté dans les poids des autres moteurs aujourd'hui).</li>
+    </ol>
+  </div>
+
+  <h2 id="scenarios"><span class="num">11</span>Quatre scénarios déroulés</h2>
+  <p class="lede">Les scénarios 1 et 3 décrivent le comportement <strong>réel</strong> du système aujourd'hui. Les scénarios 2 et 4 décrivent comment l'Entry Planner proposé au §4 <strong>devrait</strong> raisonner — puisqu'aucun des deux n'est possible dans le code actuel (le système ne pose jamais d'ordre LIMIT ou STOP à ce jour).</p>
+
+  <div class="scenario">
+    <span class="decision-badge buy">BUY MARKET — réel, comportement actuel</span>
+    <p>Multi-Timeframe (poids 14) : 4 des 5 timeframes haussiers → 80% confiance, haussier. Market Structure (14) : cassure de structure (BOS) confirmée → 75%, haussier. Indicator Fusion (10) : EMA50&gt;EMA200, RSI&gt;50, MACD positif, 3/3 d'accord → 85%, haussier.</p>
+    <ol>
+      <li><strong>Fusion</strong> : le camp haussier cumule un score largement supérieur aux camps baissier/neutre → confiance finale calculée à, disons, 78%.</li>
+      <li><strong>Seuil plancher</strong> : 78% &gt; 60% → la décision reste BUY, ne bascule pas en WAIT.</li>
+      <li><strong>Stratégie validée</strong> : si une stratégie active confirme la direction haussière → +5%, sinon la décision reste inchangée à 78%.</li>
+      <li><strong>Type d'entrée</strong> : le système actuel ne vérifie aucune zone pour décider du type — dès que la décision n'est pas WAIT, l'entrée est <code>immediate</code> par construction. D'où BUY MARKET, même si le prix n'est pas exactement au meilleur niveau.</li>
+      <li><strong>Seuil d'exécution</strong> : si 78% ≥ <code>min_confidence</code> du profil actif (70% en Intraday) → ordre réellement envoyé à MT5.</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <span class="decision-badge buy">BUY LIMIT — scénario cible, non implémenté aujourd'hui</span>
+    <p>Mêmes moteurs haussiers qu'au-dessus, mais le prix actuel est à 1,2 ATR au-dessus d'une zone de demande (order block) identifiée par Smart Money, avec un golden pocket Fibonacci qui recoupe cette même zone.</p>
+    <ol>
+      <li>La fusion pondérée arrive à la même conclusion directionnelle : haussier, confiance suffisante.</li>
+      <li>Avec l'Entry Planner proposé : la distance à la zone (1,2 ATR) est dans la fourchette "LIMIT justifiée" (0,3–1,5 ATR, voir tableau §4) — pas assez proche pour une entrée immédiate, mais assez proche et assez claire pour poser un ordre en attente plutôt que de rater l'opportunité en attendant une confirmation qui pourrait ne jamais venir.</li>
+      <li><strong>Pourquoi ne pas entrer immédiatement ?</strong> Entrer au marché maintenant, c'est payer 1,2 ATR de plus que le meilleur prix disponible et dégrader le ratio risque/récompense du trade sans aucune contrepartie — le mouvement haussier attendu n'a pas encore de raison de démarrer avant que le prix revisite cette zone.</li>
+      <li><strong>Pourquoi ne pas attendre (WAIT) plutôt que poser un ordre ?</strong> Parce que la zone est claire et documentée (order block + golden pocket alignés) — le risque de "louper le train" si le prix repart sans jamais revenir en dessous justifie de préparer l'entrée à l'avance plutôt que de scanner en boucle en espérant.</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <span class="decision-badge wait">WAIT — réel, comportement actuel</span>
+    <p>C'est exactement la situation observée en direct sur le compte pendant cette session : Multi-Timeframe baissier 40%, Indicator Fusion baissier 67%, mais Market Structure neutre 20%, Smart Money neutre 20%, Volume neutre 15%, Liquidité neutre 20%, Volatilité neutre 35%, Session neutre 30%, Pattern Recognition neutre 20%, contre Fibonacci haussier 65% et Entry Planner haussier 65%.</p>
+    <ol>
+      <li><strong>Fusion</strong> : le camp baissier cumule environ 12,3 sur 94 de poids total, le camp neutre environ 11,8 — les deux sont proches, aucun ne domine clairement.</li>
+      <li><strong>Confiance finale</strong> : environ 13% (12,3/94 × 100) — très en dessous du plancher de 60%.</li>
+      <li><strong>Décision</strong> : WAIT, forcé par le seuil plancher, indépendamment du fait que le camp baissier ait techniquement "gagné" le vote.</li>
+      <li><strong>Ce qui manque pour sortir du WAIT</strong> : soit une cassure nette de structure (Market Structure et Smart Money sortent de leur neutralité), soit une expansion de volatilité qui rendrait les mouvements plus fiables (Volatilité Engine dépasse son seuil actuel de compression), soit un alignement multi-timeframe plus net (au-delà de 40% du côté baissier).</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <span class="decision-badge sell">SELL STOP — scénario cible, non implémenté aujourd'hui</span>
+    <p>Le prix approche un niveau de résistance majeur identifié par Liquidité (zone où des ordres stop acheteurs sont probablement regroupés) et par Market Structure (dernier plus haut significatif). La structure n'a pas encore cassé à la baisse.</p>
+    <ol>
+      <li>Avec l'Entry Planner proposé : entrer SELL maintenant serait anticiper une cassure qui n'a pas encore eu lieu — un pari sur un retournement, pas une confirmation de continuation.</li>
+      <li>Une confirmation de cassure vers le bas (le prix passe sous le dernier plus bas significatif, avec volume) validerait que la liquidité au-dessus a bien été balayée puis que le marché repart dans le sens attendu — c'est le principe du <em>stop</em> : entrer seulement si le prix confirme en allant plus loin, jamais avant.</li>
+      <li><strong>Logique</strong> : SELL STOP placé légèrement sous ce niveau de structure. Si le prix ne casse jamais, l'ordre n'est jamais déclenché — pas de perte inutile sur un pari raté. S'il casse, l'entrée se fait exactement au moment où la probabilité de continuation est la plus forte.</li>
+      <li>Un SELL LIMIT aurait été le mauvais choix ici : cela reviendrait à vendre en anticipant que la résistance tienne, alors que Liquidité signale justement un risque de sweep (balayage des stops) avant un vrai retournement — configuration typique où un LIMIT se ferait piéger.</li>
+    </ol>
+  </div>
+
+  <h2 id="synthese"><span class="num">12</span>Synthèse — ce qui est solide, ce qui manque</h2>
+
+  <table class="summary-table">
+    <tr><td>Solide, vérifié, ne pas retoucher</td><td>Fusion pondérée par bias (pas une moyenne), seuil plancher à 60%, protection de capital (objectif/perte journalière), aucune confiance inventée quand le marché est flou, stratégie validée comme second avis jamais comme déclencheur seul</td></tr>
+    <tr><td>Écart n°1 — priorité immédiate</td><td>Aucun choix réel entre MARKET / LIMIT / STOP — l'Entry Planner ne décide pas du type d'ordre malgré son nom (§4, §9)</td></tr>
+    <tr><td>Écart n°2</td><td>Multi-Timeframe en vote à plat, pas en cascade hiérarchique D1→M1 ; M1 absent du calcul (§3, §6)</td></tr>
+    <tr><td>Écart n°3</td><td>Changer de profil ne copie pas <code>break_even_trigger</code> — la protection réelle ne suit pas le profil affiché (§5)</td></tr>
+    <tr><td>Écart n°4</td><td>Deux seuils de confiance coexistent sans être expliqués à l'écran — source de confusion legitime (§7)</td></tr>
+    <tr><td>Écart n°5</td><td>Poids des 11 moteurs figés, ne s'adaptent pas au régime de marché (tendance / range / volatilité) (§2, §10)</td></tr>
+  </table>
+
+  <p style="margin-top:40px; color:var(--text-faint); font-size:0.85rem;">Document préparé à partir d'une lecture directe et exhaustive de <code>market_brain.py</code>, <code>engine_scoring.py</code>, <code>indicators.py</code>, <code>backtest_engine.py</code>, <code>tradingProfiles.js</code> et des composants de configuration associés — aucune affirmation de ce document n'est déduite, chacune est vérifiable ligne par ligne dans le code actuel.</p>
+
+</div>
+</body>
+</html>

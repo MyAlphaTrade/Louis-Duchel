@@ -8,9 +8,19 @@ strategy-as-supplement rule, same confidence tiers) but every number here
 is computed, not guessed by a model.
 """
 
+import logging
+import time
+
 import indicators as ind
 import engine_scoring as es
+import confidence_v2 as cv2
 from market_analysis import find_order_blocks, find_fvgs
+from local_store import list_entities as _list_entities
+
+# Diagnostic-only logger (Phase A follow-up) — see engine_scoring.py's
+# diag_log for the market_structure/indicator_fusion counterparts. Never
+# read by any decision logic.
+diag_log = logging.getLogger("engine_diagnostics")
 
 # Beyond this many ATRs from the nearest real zone, a pending order isn't
 # worth placing — price may never come back, and it wouldn't be a plan
@@ -27,7 +37,15 @@ ACTION_TIERS = [
     (0, "none", "Aucune action"),
 ]
 
-CONFIDENCE_FLOOR = 60  # below this, force WAIT regardless of direction — mirrors the old resolveDecision()
+# Below this, force WAIT regardless of direction. Was 60, dropped to 57
+# after a real 90-day XAUUSD H1 replay (see Audit/Replay_Reel_XAUUSD_...)
+# showed the new fusion formula (FUSION_BASE, engine_scoring.py) crossing 60
+# only 0.36x/day — not enough to ever reliably hit a daily goal. Sweeping
+# the floor on the same real data: 57 -> ~1.18 trades/day at 63.5% win rate
+# (vs 60 -> 0.36/day at 71.9%; 55 -> 1.90/day at 56.3%). 57 was chosen as
+# the point closest to "at least one opportunity per day" without falling
+# into the range where win rate drops below ~60%.
+CONFIDENCE_FLOOR = 57
 
 
 def _tier_for(confidence):
@@ -39,6 +57,108 @@ def _tier_for(confidence):
 
 def _bias_to_decision(bias):
     return {"bullish": "BUY", "bearish": "SELL", "neutral": "WAIT"}[bias]
+
+
+# --- Global Market Intelligence context — ACTIVATED 2026-08-02 at the
+# user's explicit instruction, despite zero accumulated validation history
+# in the CryptoIntelSnapshot journal (see Audit/... for the exchange where
+# this trade-off was made explicit — the user was told the risk and chose
+# to proceed anyway). For BTC/ETH, the real Hyperliquid signal now votes
+# directly inside the fusion as the "microstructure" engine (see
+# _microstructure_engine_result and ENGINE_WEIGHTS in engine_scoring.py) —
+# what's left here is only the weaker, unmeasured cross-asset regime
+# hypothesis (e.g. "risk-off favors gold") for everything else. Same
+# principle as validated_strategy just below in analyze(): a supplement
+# that can reinforce a decision, never turn a WAIT into a BUY/SELL by
+# itself. Reads the last snapshot already written by the 10-minute
+# background collector (see alphatg_bridge.py) instead of calling
+# Hyperliquid live on every analyze() — a live call here would tie every
+# single decision's latency (including for symbols with nothing to do
+# with crypto) to a third-party API's availability. CRYPTO_CONTEXT_ENABLED
+# is a kill switch: flip to False to fully disable without removing code.
+CRYPTO_CONTEXT_ENABLED = True
+CRYPTO_CONTEXT_MAX_AGE_SEC = 1800  # ignore a snapshot older than this — stale data is worse than none
+MACRO_REGIME_BOOST = 5       # smaller effect for the unmeasured cross-asset regime hypothesis
+
+
+def _crypto_symbol_coin(symbol):
+    """BTCUSD/ETHUSD-style MT5 symbols map directly to a Hyperliquid coin —
+    same underlying asset, different venue, a directly justified link.
+    Everything else (XAUUSD, synthetic indices, ...) falls through to the
+    much weaker/unmeasured market_regime hypothesis below."""
+    s = (symbol or "").upper()
+    if s.startswith("BTC"):
+        return "BTC"
+    if s.startswith("ETH"):
+        return "ETH"
+    return None
+
+
+def _microstructure_engine_result(symbol):
+    """Real order-flow data for BTC/ETH (Hyperliquid: OBI, funding, open
+    interest — see hyperliquid_connector.py/global_market_intelligence.py)
+    as a genuine voting engine, not a post-hoc bonus — see
+    ENGINE_WEIGHTS["microstructure"] in engine_scoring.py. Same
+    reasoning as apply_global_intelligence_context below for reading the
+    last stored snapshot instead of calling Hyperliquid live here. Returns
+    None for anything that isn't BTC/ETH, which correctly excludes this
+    engine's weight from that symbol's fusion entirely (see
+    engine_scoring.run_all_engines) instead of forcing a fake neutral vote."""
+    coin = _crypto_symbol_coin(symbol)
+    if not coin:
+        return None
+    snaps = _list_entities("CryptoIntelSnapshot", sort="-created_date", limit=1)
+    if not snaps:
+        return None
+    snapshot = snaps[0]
+    if snapshot.get("fetched_at") and (time.time() - snapshot["fetched_at"]) > CRYPTO_CONTEXT_MAX_AGE_SEC:
+        return None
+    coin_data = (snapshot.get("sources") or {}).get("crypto", {}).get(coin)
+    if not coin_data:
+        return None
+    pressure = coin_data.get("pressure")
+    if pressure in (None, "unknown"):
+        return None
+    coin_score = (snapshot.get("crypto_intelligence_score") or {}).get("per_coin", {}).get(coin, {})
+    confidence = coin_score.get("score", 50)
+    obi = (coin_data.get("order_book") or {}).get("obi")
+    obi_str = f"{obi:.2f}" if obi is not None else "n/d"
+    return {
+        "id": "microstructure", "bias": pressure, "confidence": confidence,
+        "findings": [f"Hyperliquid {coin}: OBI {obi_str}, funding {coin_data.get('funding_rate')}, OI {coin_data.get('open_interest') or 0:.0f}"],
+    }
+
+
+def apply_global_intelligence_context(decision, confidence, symbol, decision_bias):
+    if not CRYPTO_CONTEXT_ENABLED or decision == "WAIT":
+        return decision, confidence, "none"
+
+    if _crypto_symbol_coin(symbol):
+        # Real Hyperliquid data for this symbol already voted as a genuine
+        # weighted engine (see _microstructure_engine_result, applied
+        # BEFORE fusion) — applying the same signal again here as a bonus
+        # would double-count it. Only the macro-regime hypothesis below
+        # (for symbols with no direct microstructure engine of their own)
+        # still applies as a supplement.
+        return decision, confidence, "handled_by_microstructure_engine"
+
+    snaps = _list_entities("CryptoIntelSnapshot", sort="-created_date", limit=1)
+    if not snaps:
+        return decision, confidence, "no_data"
+    snapshot = snaps[0]
+    if snapshot.get("fetched_at") and (time.time() - snapshot["fetched_at"]) > CRYPTO_CONTEXT_MAX_AGE_SEC:
+        return decision, confidence, "stale"
+
+    # Non-crypto symbol: the cross-asset regime link (e.g. "risk-off favors
+    # gold") is a hypothesis, not something measured for this system yet —
+    # kept deliberately weaker (smaller boost, never a veto) than the
+    # direct same-asset microstructure engine above.
+    regime = snapshot.get("market_regime")
+    if regime == "risk_off" and decision_bias == "bullish":
+        return decision, min(100, confidence + MACRO_REGIME_BOOST), "risk_off_context"
+    if regime == "risk_on" and decision_bias == "bearish":
+        return decision, min(100, confidence + MACRO_REGIME_BOOST), "risk_on_context"
+    return decision, confidence, "neutral"
 
 
 def select_timeframe(multi_tf_view):
@@ -118,7 +238,7 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
                           "stats": {...}} or None — the live-evaluated active Strategy
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
-    ctx = es.build_context(candles)
+    ctx = es.build_context(candles, symbol=symbol)
 
     mtf_view = None
     if multi_tf_candles:
@@ -132,10 +252,30 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             "confidence": mtf_view["alignment_score"],
             "findings": [f"{mtf_view['timeframes_analyzed']} timeframes analysés, {mtf_view['alignment_score']}% alignés sur {mtf_view['dominant_bias']}"],
         }
+        per_tf = ", ".join(f"{t['timeframe']}={t['bias']}@{t['current_price']:.2f}" for t in mtf_view["timeframes"])
+        diag_log.info(
+            "multi_timeframe symbol=%s per_tf=[%s] dominant_bias=%s confidence=%s",
+            symbol, per_tf, mtf_engine_result["bias"], mtf_engine_result["confidence"],
+        )
 
-    engine_results = es.run_all_engines(ctx, multi_timeframe_result=mtf_engine_result)
+    microstructure_result = _microstructure_engine_result(symbol) if CRYPTO_CONTEXT_ENABLED else None
+    engine_results = es.run_all_engines(ctx, multi_timeframe_result=mtf_engine_result, microstructure_result=microstructure_result)
     fusion = es.fuse_direction_and_confidence(engine_results)
     breakdown = fusion["breakdown"]
+
+    # --- AI Confidence Engine v2 — comparison mode only, NOT activated. ---
+    # Computed in parallel from the same engine_results/ctx, but never fed
+    # back into `decision`, `confidence`, the Entry Planner or the
+    # Autonomous Trading Engine. Purely observational fields exposed below
+    # (confidence_v1/v2, direction_score, setup_quality_score,
+    # market_condition_score) so old vs new can be compared live without
+    # any behavior change. See confidence_v2.py.
+    v2_direction = cv2.calculate_direction_score(engine_results)
+    v2_setup = cv2.calculate_setup_quality_score(ctx, engine_results)
+    v2_condition = cv2.calculate_market_condition_score(ctx)
+    v2_final_confidence = cv2.calculate_final_confidence(
+        v2_direction["score"], v2_setup["score"], v2_condition["score"]
+    )
 
     decision = _bias_to_decision(fusion["direction"])
     confidence = fusion["confidence"]
@@ -157,6 +297,8 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             strategy_agreement = "conflict"
             confidence = min(confidence, 40)
             decision = "WAIT"
+
+    decision, confidence, crypto_context = apply_global_intelligence_context(decision, confidence, symbol, fusion["direction"])
 
     tier = _tier_for(confidence)
     current_price = snapshot["current_price"]
@@ -227,6 +369,16 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         elif strategy_agreement == "no_signal":
             strategy_note = f" La stratégie validée « {vs_name} » n'émet aucun signal sur cette bougie."
 
+    # "agree"/"conflict" no longer occur here for BTC/ETH — that signal now
+    # votes directly inside the fusion via the microstructure engine (see
+    # engine_results/breakdown above), so only the weaker macro-regime
+    # supplement (for non-crypto symbols) still needs an explanation note.
+    crypto_context_notes = {
+        "risk_off_context": f" Régime de marché global risk-off (+{MACRO_REGIME_BOOST}, hypothèse non validée statistiquement).",
+        "risk_on_context": f" Régime de marché global risk-on (+{MACRO_REGIME_BOOST}, hypothèse non validée statistiquement).",
+    }
+    crypto_note = crypto_context_notes.get(crypto_context, "")
+
     entry_plan_note = ""
     if decision != "WAIT" and pending_zone is not None:
         if entry_type == "immediate":
@@ -237,11 +389,11 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             entry_plan_note = f" Zone la plus proche à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR) — trop loin pour un ordre en attente, en attente que le prix se rapproche."
 
     if decision == "WAIT":
-        reason = "aucun consensus directionnel suffisant entre les moteurs" if confidence < CONFIDENCE_FLOOR else "conflit avec la stratégie validée"
-        explanation = f"WAIT — {reason} (confiance fusionnée {confidence}%).{strategy_note}"
+        reason = "aucun consensus directionnel suffisant entre les moteurs" if confidence < CONFIDENCE_FLOOR else "conflit avec la stratégie validée ou le contexte de marché"
+        explanation = f"WAIT — {reason} (confiance fusionnée {confidence}%).{strategy_note}{crypto_note}"
     else:
         engines_favorable = ", ".join(r["findings"][0] for r in supporting[:3]) if supporting else "aucun détail"
-        explanation = f"{decision} avec {confidence}% de confiance. Moteurs favorables : {engines_favorable}.{strategy_note}{entry_plan_note}"
+        explanation = f"{decision} avec {confidence}% de confiance. Moteurs favorables : {engines_favorable}.{strategy_note}{crypto_note}{entry_plan_note}"
 
     invalidation = None
     if decision != "WAIT" and stop_loss is not None:
@@ -287,6 +439,13 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         "conflicts": [{"engines": [r0["id"] if False else eid for eid in [e]], "description": "", "resolution": ""} for e in []],
         "multi_timeframe_view": mtf_view,
         "validated_strategy_agreement": strategy_agreement,
+        "crypto_context": crypto_context,
         "tier": tier,
         "fused_confidence": fusion["confidence"],
+        # --- Comparison mode (AI Confidence Engine v2 prep, not active) ---
+        "confidence_v1": confidence,
+        "confidence_v2": v2_final_confidence,
+        "direction_score": v2_direction["score"],
+        "setup_quality_score": v2_setup["score"],
+        "market_condition_score": v2_condition["score"],
     }

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnostic — panneau Market Data figé au démarrage</title>
+<style>
+  :root {
+    --bg: #0a0f0d; --bg-card: #0f1613; --border: rgba(255,255,255,0.08);
+    --text: #e4e9e6; --text-dim: #8b978f; --text-faint: #5c6863;
+    --accent: #34d399; --accent-dim: rgba(52,211,153,0.12);
+    --amber: #f2b84b; --amber-dim: rgba(242,184,75,0.12);
+    --red: #f26b6b; --red-dim: rgba(242,107,107,0.12);
+    --blue: #6bb8f2; --blue-dim: rgba(107,184,242,0.1);
+    --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.65; margin: 0; }
+  .page { max-width: 960px; margin: 0 auto; padding: 56px 28px 120px; }
+  .masthead { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--serif); font-size: 2.1rem; font-weight: 500; margin: 0 0 14px; color: #fff; text-wrap: balance; }
+  .subtitle { color: var(--text-dim); font-size: 1rem; max-width: 720px; }
+  h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; color: #fff; margin: 48px 0 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.9rem; margin-right: 10px; }
+  h3 { font-size: 1.02rem; font-weight: 600; color: #fff; margin: 24px 0 10px; }
+  p { color: var(--text); margin: 12px 0; } p.lede { color: var(--text-dim); font-size: 0.96rem; }
+  code { font-family: var(--mono); font-size: 0.85em; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; color: #c9f2e2; }
+  ul, ol { padding-left: 22px; } li { margin: 7px 0; color: var(--text-dim); } li strong { color: var(--text); }
+  pre { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+  .callout { border-radius: 10px; border: 1px solid var(--border); padding: 16px 20px; margin: 18px 0; font-size: 0.93rem; }
+  .callout .label { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; display: block; }
+  .callout.state { background: var(--accent-dim); border-color: rgba(52,211,153,0.25); } .callout.state .label { color: var(--accent); }
+  .callout.gap { background: var(--amber-dim); border-color: rgba(242,184,75,0.25); } .callout.gap .label { color: var(--amber); }
+  .callout.critical { background: var(--red-dim); border-color: rgba(242,107,107,0.3); } .callout.critical .label { color: var(--red); }
+  .timeline { border-left: 2px solid var(--border); margin: 20px 0 20px 8px; padding-left: 24px; }
+  .step { position: relative; padding-bottom: 22px; }
+  .step::before { content: ''; position: absolute; left: -29px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); border: 2px solid var(--text-faint); }
+  .step.fail::before { border-color: var(--red); background: var(--red-dim); }
+  .step.ok::before { border-color: var(--accent); background: var(--accent-dim); }
+  .step .t { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-bottom: 4px; }
+  .step .d { color: var(--text); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.86rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-faint); font-weight: 600; text-transform: uppercase; font-size: 10px; }
+  td { color: var(--text-dim); } td strong { color: #fff; }
+  .tbl-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="masthead">
+    <div class="eyebrow">Diagnostic — cause racine, aucun code modifié</div>
+    <h1>Pourquoi le panneau Market Data reste figé sur "Non Connecté" au démarrage</h1>
+    <p class="subtitle">Le bridge se connecte bien automatiquement à MT5 au lancement — mais un test de connexion frontend, exécuté une seule fois et sans nouvelle tentative, perd systématiquement la course contre ce démarrage MT5. Le clic sur "Reconnect" ne fait rien de spécial : il relance le même test, plus tard, quand MT5 a fini de démarrer.</p>
+  </div>
+
+  <h2><span class="num">00</span>Cause racine — en une phrase</h2>
+  <div class="callout critical">
+    <span class="label">Cause racine unique</span>
+    <code>Dist/src/hooks/useAutoConfigureLocalBridge.js:43</code> exécute <strong>un seul essai</strong> de <code>invokeConnector('test')</code> au montage de l'app, sans retry ni backoff, alors que la connexion MT5 côté bridge (<code>mt5.initialize()</code>, lancée dans un thread à <code>alphatg_bridge.py:1614</code>) est asynchrone et peut prendre <strong>de quelques secondes à plus d'une minute</strong>. Cet essai perd presque toujours la course, l'échec est persisté comme <code>connection_status: "failed"</code> côté backend, et l'exception est avalée silencieusement par <code>.catch(() =&gt; {})</code>. Rien ne relance ce test ensuite — seul un clic manuel sur "Reconnect" le refait, à un moment où MT5 a eu le temps de finir.
+  </div>
+
+  <h2><span class="num">01</span>Le bridge se connecte-t-il automatiquement ? Oui, mais en tâche de fond</h2>
+  <ul>
+    <li><code>alphatg_bridge.py:1614</code> — <code>threading.Thread(target=connect_mt5_and_start_monitor, daemon=True).start()</code> : la connexion MT5 démarre dans un thread <strong>non bloquant</strong>.</li>
+    <li>Le serveur Flask (port 8000) démarre presque immédiatement après — volontairement, pour que <code>/auth</code>, <code>/entities</code>, <code>/health</code> répondent sans attendre MT5.</li>
+    <li><code>mt5.initialize()</code> (appelé depuis <code>mt5_auto_connect()</code>, <code>alphatg_bridge.py:176-184</code>) peut prendre bien plus d'une seconde sur un cold start — un commentaire déjà présent dans le code (lignes 1601-1602) le signalait avant même cet audit.</li>
+    <li>Pendant cette fenêtre, <code>GET /health</code> répond <code>200 OK</code> mais avec <code>mt5_connected: false</code> ; <code>GET /account</code> répond <strong>HTTP 400</strong> <code>{"error": "MT5 not connected"}</code>.</li>
+  </ul>
+  <p>Le process HTTP est prêt vite. MT5, lui, ne l'est pas. Et rien côté bridge ne <em>pousse</em> l'information au frontend quand il le devient — c'est un état interrogeable (pull), jamais notifié (push).</p>
+
+  <h2><span class="num">02</span>Le frontend part-il d'un état par défaut "non connecté" ?</h2>
+  <p>Oui. <code>Dist/src/pages/Dashboard.jsx:32-35</code> fait un <code>useQuery(['trading-account'], () =&gt; invokeConnector('read'))</code>. L'action <code>'read'</code> n'est <strong>pas</strong> dans <code>BRIDGE_ACTIONS</code> (<code>baseConnector.js:11-15</code>) — elle ne teste jamais la connexion réelle, elle renvoie juste le dernier état <strong>persisté</strong> côté backend (<code>local_functions.py:207-243</code>). Si cet état vaut <code>"failed"</code> ou <code>"untested"</code>, l'UI l'affiche tel quel indéfiniment, tant que rien ne réécrit un état <code>"connected"</code>.</p>
+
+  <h2><span class="num">03</span>La course perdue — déroulé exact</h2>
+  <div class="timeline">
+    <div class="step ok">
+      <div class="t">t+0ms — alphatg_bridge.py:1614</div>
+      <div class="d">Le thread <code>connect_mt5_and_start_monitor</code> démarre. <code>mt5.initialize()</code> est en cours — durée variable, potentiellement &gt;60s sur cold start.</div>
+    </div>
+    <div class="step ok">
+      <div class="t">t+~1s — useAutoConfigureLocalBridge.js:22-24</div>
+      <div class="d">Les identifiants du bridge local arrivent via IPC (<code>bridge_api_key.txt</code>, écrit très tôt par le bridge, avant même <code>app.run()</code>).</div>
+    </div>
+    <div class="step fail">
+      <div class="t">t+~1s — useAutoConfigureLocalBridge.js:43</div>
+      <div class="d"><code>await invokeConnector('test').catch(() =&gt; {})</code> — <strong>un seul essai</strong>. Passe par <code>testBridge()</code> (<code>eaBridge.js:31-56</code>) : <code>GET /health</code> (OK) puis <code>GET /account</code>. MT5 n'a pas fini → <strong>400 "MT5 not connected"</strong>.</div>
+    </div>
+    <div class="step fail">
+      <div class="t">t+~1s — baseConnector.js:66-70</div>
+      <div class="d"><code>save_bridge_result</code> persiste <code>connection_status: "failed"</code> (<code>local_functions.py:343</code>), puis lève une exception — <strong>avalée silencieusement</strong> par le <code>.catch(() =&gt; {})</code> de la ligne 43. Aucune trace, aucun retry.</div>
+    </div>
+    <div class="step fail">
+      <div class="t">t+~1s — useAutoConfigureLocalBridge.js:45-47</div>
+      <div class="d"><code>invalidateQueries(['trading-account'])</code> — refetch via <code>'read'</code>, qui renvoie l'état <code>"failed"</code> tout juste écrit. Le <code>useEffect</code> se termine ici, pour de bon : pas d'<code>setInterval</code>, pas de nouvelle tentative.</div>
+    </div>
+    <div class="step fail">
+      <div class="t">indéfiniment — useTradingLiveSync.js</div>
+      <div class="d"><code>isBridgeConnected()</code> (ligne 46-59) exige <code>connection_status === 'connected'</code> → toujours faux. La boucle <code>sseRetryId</code> (ligne 169, toutes les 2s) ne fait jamais <code>startStream()</code>. <code>fallbackPoll</code>, <code>historyTick</code>, <code>positionsTick</code> court-circuitent tous sur <code>!isBridgeConnected()</code>. Tous les intervals tournent à vide, indéfiniment — d'où "même après attente prolongée, rien ne change".</div>
+    </div>
+    <div class="step ok">
+      <div class="t">clic manuel — TradingPlatformSection.jsx:115-123</div>
+      <div class="d"><code>reconnect()</code> appelle <code>invokeConnector('reconnect')</code> → <strong>exactement le même</strong> <code>testBridge()</code> → <code>GET /health</code> + <code>GET /account</code>. Différence unique : au moment du clic, le thread <code>connect_mt5_and_start_monitor</code> a eu le temps de finir → <code>/account</code> répond 200 avec de vraies données → <code>connection_status: "connected"</code> → la boucle <code>sseRetryId</code>, déjà active depuis le montage, capte le changement au tick suivant (2s).</div>
+    </div>
+  </div>
+
+  <h2><span class="num">04</span>Réponse point par point aux 5 questions posées</h2>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Question</th><th>Réponse</th></tr>
+    <tr><td><strong>1. Auto-connexion backend au démarrage ?</strong></td><td>Oui (<code>alphatg_bridge.py:1614</code>), mais asynchrone et sans notification vers le frontend quand elle aboutit.</td></tr>
+    <tr><td><strong>2. Le frontend reçoit-il un état initial ?</strong></td><td>Non — <code>'read'</code> ne teste rien, il relit un état persisté qui vaut <code>"failed"</code> dès la première seconde (voir §3).</td></tr>
+    <tr><td><strong>3. SSE avant ou après la connexion bridge ?</strong></td><td>La boucle de retry SSE démarre dès le montage (<code>useTradingLiveSync.js:169</code>) et tourne en continu, mais elle est bloquée par <code>isBridgeConnected()</code> qui reste faux tant que le test unique a échoué — ce n'est pas un problème d'ordre de démarrage, c'est un problème de test unique jamais réessayé.</td></tr>
+    <tr><td><strong>4. Dépendance à un clic manuel "Reconnect" ?</strong></td><td>Oui, de fait — pas par conception explicite, mais parce que c'est le seul déclencheur restant capable de relancer <code>testBridge()</code> après l'échec initial.</td></tr>
+    <tr><td><strong>5. Diff avant/après reconnexion manuelle ?</strong></td><td>Aucun nouveau code-path : même fonction (<code>testBridge()</code>), même requêtes (<code>/health</code> + <code>/account</code>). Seule la <em>date</em> de l'appel change — assez tard pour que MT5 ait fini d'initialiser.</td></tr>
+  </table>
+  </div>
+
+  <div class="callout state">
+    <span class="label">Ce que ce diagnostic n'inclut pas</span>
+    Conformément à la demande, aucun correctif n'a été codé. La correction la plus directe suggérée par la cause racine serait un retry avec backoff dans <code>useAutoConfigureLocalBridge.js</code> (ou un <code>setInterval</code> similaire à celui déjà présent dans <code>useTradingLiveSync.js</code>) tant que <code>connection_status !== 'connected'</code> — mais ce choix d'implémentation reste à valider avant tout code.
+  </div>
+
+</div>
+</body>
+</html>
