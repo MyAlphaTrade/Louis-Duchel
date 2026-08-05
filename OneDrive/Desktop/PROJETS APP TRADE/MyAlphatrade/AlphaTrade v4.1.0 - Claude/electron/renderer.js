@@ -726,6 +726,58 @@ const WN_INFO = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y
 
 const WHATS_NEW_LOG = [
   {
+    version: '5.1.1',
+    items: [
+      {
+        icon: 'cpu', tag: 'new', title: 'Exécution réelle du Scenario Engine',
+        body: `
+          <p>Depuis la v5.1.1, le Scenario Engine ne se contente plus d'observer : quand le CAIO valide un scénario, AlphaTrade ouvre réellement une position d'ancrage sur MT5, avec un Stop-Loss et un Take-Profit calculés par le scénario lui-même (zone d'invalidation / cible la plus proche ou la plus loin) — pas les réglages fixes du moteur classique. Des scalps réels peuvent aussi s'ajouter tant que le scénario reste sain, avec un cooldown et un plafond pour ne jamais s'empiler sans limite.</p>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Chaque scénario n'ouvre sa position qu'une seule fois — jamais de tentative en boucle.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Toujours filtré par le bouton Démarrer, la protection de session et le Portfolio Brain — les mêmes garde-fous que le moteur classique.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Coupe-circuit dédié et indépendant : le désactiver ne coupe pas l'observation/l'apprentissage du Scenario Engine, juste l'exécution réelle.</li>
+          </ul>`,
+        howto: 'Réglable dans Paramètres → carte "Exécution réelle du Scenario Engine" — indépendant de l\'activation générale du Scenario Engine.',
+      },
+      {
+        icon: 'shield', tag: 'new', title: 'Portfolio Brain et Trading Style Engine deviennent actifs',
+        body: `
+          <p>Ces deux agents, jusqu'ici en observation seule, agissent désormais réellement. Le Portfolio Brain bloque les nouvelles entrées — classiques et Scenario Engine — dès que l'exposition du panier XAUUSD (nombre de positions, lot total, perte flottante en % de l'équité) dépasse les limites configurées. Le Trading Style Engine change réellement le mode de stratégie actif quand le régime de marché et la volatilité réels le justifient, avec un délai minimum entre deux changements pour éviter les allers-retours.</p>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Le Portfolio Brain agit comme filet de sécurité commun entre le moteur classique et le Scenario Engine, pour qu'ils ne s'empilent jamais sans coordination.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Chaque changement automatique de mode est tracé dans le nouvel historique des adaptations IA, avec sa raison.</li>
+          </ul>`,
+        howto: 'Réglable dans Paramètres → cartes "Portfolio Brain" et "Trading Style Engine" (section pilotée par l\'intelligence).',
+      },
+      {
+        icon: 'star', tag: 'new', title: 'Paramètres pilotés par l\'IA + historique + backtest automatique',
+        body: `
+          <p>L'onglet Paramètres s'ouvre maintenant sur une section "Piloté par l'intelligence" : les réglages calculés par le Scenario Engine, le CAIO, le Dynamic Position Manager et le Portfolio Brain s'affichent en lecture seule, avec leur valeur actuelle et pourquoi elle existe. Un nouvel historique des adaptations IA journalise chaque ajustement automatique réel (jamais de donnée inventée). Un backtest automatique se relance seul (au démarrage puis toutes les 24h), rejoue l'historique MT5 disponible et affiche trades, winrate, profit, drawdown et meilleures/pires conditions.</p>
+          <div class="wn-sublabel">Ce que ça change concrètement</div>
+          <ul class="wn-mech">
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Renfort &amp; Rebond et Take Profit / BE sont désormais verrouillés par défaut (le Scenario Engine calcule déjà son propre SL/TP) — un interrupteur "Activer le contrôle manuel" reste disponible sur chaque carte si besoin.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Les objectifs de session et journalier restent modifiables normalement — ce sont des limites de compte, pas des réglages d'analyse.</li>
+          </ul>`,
+        howto: 'Paramètres → en haut de la page, avant les cartes habituelles.',
+      },
+      {
+        icon: 'shield', tag: 'fix', title: 'Correctifs trouvés en observation réelle',
+        body: `
+          <p>Deux bugs remontés en conditions réelles cette semaine, corrigés à la racine plutôt qu'en façade.</p>
+          <div class="wn-sublabel">Avant / après</div>
+          <ul class="wn-mech">
+            <li class="before"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${WN_CROSS}</svg>Avant : le Journal pouvait spammer la même ligne plusieurs fois par seconde — le throttle censé l'empêcher était effacé à chaque cycle par une relecture de fichier à schéma fixe.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Maintenant : le throttle vit en mémoire, plus jamais effacé — une même situation bloquée ne s'affiche plus qu'une fois toutes les 3 secondes.</li>
+            <li class="before"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${WN_CROSS}</svg>Avant : un échec d'envoi Slack (ex: mauvaise URL de Webhook) ne laissait aucune trace visible, nulle part.</li>
+            <li><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${WN_CHECK}</svg>Maintenant : ces échecs apparaissent dans le Journal, avec le détail de l'erreur.</li>
+          </ul>`,
+        howto: 'Aucune action requise — ces correctifs sont automatiques.',
+      },
+    ],
+  },
+  {
     version: '5.1.0',
     items: [
       {

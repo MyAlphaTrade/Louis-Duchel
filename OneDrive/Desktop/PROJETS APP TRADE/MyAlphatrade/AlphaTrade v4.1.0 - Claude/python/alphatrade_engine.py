@@ -792,6 +792,19 @@ def db_conn() -> sqlite3.Connection:
         )
         """
     )
+    # 05/08/2026 -- migration additive (bug trouve en observation reelle,
+    # Louis) : le bucket "origin" seul (BOT/EXTERNAL_AI/MANUAL) ne suffisait
+    # pas a l'UI pour afficher le nom precis de l'EA externe (ex: "AT
+    # Global") une fois le trade cloture et relu depuis la base -- seules
+    # les positions ENCORE OUVERTES (jamais persistees, calculees a chaque
+    # lecture via trade_origin()) l'avaient. ADD COLUMN est idempotent via
+    # le garde OperationalError : aucune perte de donnees existantes, les
+    # anciennes lignes restent NULL et retombent sur legacy_origin_name().
+    for column in ("origin_name TEXT", "origin_type TEXT", "origin_magic INTEGER"):
+        try:
+            conn.execute(f"ALTER TABLE trades ADD COLUMN {column}")
+        except sqlite3.OperationalError:
+            pass  # colonne deja presente
     conn.commit()
     return conn
 
@@ -1710,8 +1723,8 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params:
         conn.execute(
             """
             INSERT OR REPLACE INTO trades
-            (id,ticket,position_id,symbol,direction,origin,lot,open_price,open_time,close_price,close_time,profit,status)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (id,ticket,position_id,symbol,direction,origin,lot,open_price,open_time,close_price,close_time,profit,status,origin_name,origin_type,origin_magic)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 trade["id"],
@@ -1727,6 +1740,9 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params:
                 trade["close_time"],
                 trade["profit"],
                 trade["status"],
+                trade.get("origin_name"),
+                trade.get("origin_type"),
+                trade.get("origin_magic"),
             ),
         )
         trades.append(trade)
@@ -1734,16 +1750,21 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params:
 
     rows = conn.execute(
         """
-        SELECT id,ticket,position_id,symbol,direction,origin,lot,open_price,open_time,close_price,close_time,profit,status
+        SELECT id,ticket,position_id,symbol,direction,origin,lot,open_price,open_time,close_price,close_time,profit,status,origin_name,origin_type,origin_magic
         FROM trades ORDER BY close_time DESC LIMIT 500
         """
     ).fetchall()
-    keys = ["id", "ticket", "position_id", "symbol", "direction", "origin", "lot", "open_price", "open_time", "close_price", "close_time", "profit", "status"]
+    keys = ["id", "ticket", "position_id", "symbol", "direction", "origin", "lot", "open_price", "open_time", "close_price", "close_time", "profit", "status", "origin_name", "origin_type", "origin_magic"]
     output = []
     for row in rows:
         item = dict(zip(keys, row))
         item["symbol_key"] = reverse.get(item["symbol"], "EURUSD" if "EURUSD" in item["symbol"].upper() else "XAUUSD" if "XAU" in item["symbol"].upper() else item["symbol"])
         item["move"] = round((item["close_price"] - item["open_price"]) if item["direction"] == "BUY" else (item["open_price"] - item["close_price"]), 2)
+        # Lignes anterieures a cette migration (ou origine inconnue) : pas de
+        # nom precis stocke -- retombe sur le meme repli honnete que
+        # from_db() plutot que d'afficher None.
+        if not item.get("origin_name"):
+            item["origin_name"], item["origin_type"] = legacy_origin_name(str(item.get("origin") or ""))
         output.append(item)
     return output
 
@@ -3945,7 +3966,27 @@ def gold_brain_snapshot(
             arguments=[str(decision.get("reason") or "Signal du pipeline classique.")],
             ttl_seconds=60,
         ))
-    daily = payload.get("today_stats", {})
+    # 05/08/2026 -- bug trouve en observation reelle (rapporte par Louis,
+    # capture d'ecran a l'appui) : payload["today_stats"] vient de
+    # daily_stats(trades, positions), qui n'est JAMAIS filtre par origine --
+    # il agrege TOUTES les positions/trades du compte MT5, y compris ceux
+    # d'une autre application (ex: AT Global, origin EXTERNAL_AI). Passe tel
+    # quel a mission_state() -> protection_state(), qui ECRASE
+    # session_state.json (meme fichier que le calcul correct, deja filtre,
+    # fait juste avant dans status_payload()) avec un "Pic"/session_profit
+    # qui compte les gains d'un autre logiciel comme si c'etaient ceux
+    # d'AlphaTrade Gold. Confirme : 4 positions ouvertes, toutes
+    # origin=EXTERNAL_AI (AT Global) ; $0.42 de trades AlphaTrade clotures
+    # aujourd'hui ; pourtant daily_peak affichait $118.44. Corrige en
+    # recalculant ici les VRAIES stats du jour, deja filtrees BOT/ALPHATRADE/
+    # ALPHAKARIS (meme filtre que application_session_stats()) -- l'objectif
+    # d'AlphaTrade Gold ne doit refleter QUE ses propres gains, jamais ceux
+    # d'un autre logiciel qui partage le meme compte MT5.
+    bot_trades = [t for t in (trades or []) if str(t.get("origin", "")).upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
+    bot_positions_today = [
+        p for p in positions if str(p.get("origin", "")).upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+    ]
+    daily = daily_stats(bot_trades, bot_positions_today)
     mission_report = mission_state(
         params, trades or [], positions, daily, int(account.login) if account else None,
     )

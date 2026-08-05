@@ -10,6 +10,7 @@ mais n'est pas connecte), on installe un faux module `mt5` minimal
 gold_brain=True (candles/CAIO/place_order reels) reste a valider avec un
 vrai compte demo -- conforme au plan de securite, aucune fonctionnalite
 d'execution n'est validee sans session demo dediee."""
+import json
 import os
 import tempfile
 
@@ -104,6 +105,38 @@ def test_gold_brain_snapshot_record_false_does_not_pollute_learning_history():
     print("test_gold_brain_snapshot_record_false_does_not_pollute_learning_history OK")
 
 
+def test_gold_brain_snapshot_mission_state_ignores_external_positions():
+    """05/08/2026 -- bug trouve en observation reelle (Louis, capture d'ecran
+    a l'appui) : gold_brain_snapshot() passait payload["today_stats"]
+    (jamais filtre par origine) a mission_state() -> protection_state(), qui
+    ECRASE session_state.json avec un Pic/session_profit comptant les gains
+    d'un AUTRE logiciel (ex: AT Global, origin EXTERNAL_AI) partageant le
+    meme compte MT5, comme si c'etaient ceux d'AlphaTrade Gold. L'objectif
+    d'AlphaTrade Gold ne doit refleter QUE ses propres positions (BOT/
+    ALPHATRADE/ALPHAKARIS)."""
+    (ae.DATA_DIR / "session_state.json").unlink(missing_ok=True)
+    params = ae.merge_params()
+    params["gold_brain_enabled"] = True
+    external_position = {
+        "ticket": 1, "symbol_key": "XAUUSD", "direction": "BUY", "origin": "EXTERNAL_AI",
+        "origin_name": "AT Global", "lot": 0.01, "profit": 118.44,
+    }
+    bot_position = {
+        "ticket": 2, "symbol_key": "XAUUSD", "direction": "BUY", "origin": "BOT",
+        "origin_name": "AlphaTrade AI", "lot": 0.01, "profit": 0.0,
+    }
+    ae.gold_brain_snapshot(
+        params, _FakeAccount(), "XAUUSD", {"XAUUSD": "XAUUSD"},
+        params.get("symbols", {}).get("XAUUSD", {}),
+        {}, {}, {}, [external_position, bot_position], [], record=False,
+    )
+    session_state = json.loads((ae.DATA_DIR / "session_state.json").read_text(encoding="utf-8"))
+    assert session_state["current"] == 0.0, f"current ne doit pas inclure le flottant externe: {session_state}"
+    assert session_state["daily_peak"] < 1.0, f"le pic ne doit pas inclure le flottant externe: {session_state}"
+    (ae.DATA_DIR / "session_state.json").unlink(missing_ok=True)
+    print("test_gold_brain_snapshot_mission_state_ignores_external_positions OK")
+
+
 if __name__ == "__main__":
     test_gold_brain_enabled_defaults_to_false()
     test_fetch_candles_empty_without_mt5()
@@ -111,4 +144,5 @@ if __name__ == "__main__":
     test_auto_trade_step_works_without_trades_argument()
     test_gold_brain_snapshot_degrades_gracefully_without_candles()
     test_gold_brain_snapshot_record_false_does_not_pollute_learning_history()
+    test_gold_brain_snapshot_mission_state_ignores_external_positions()
     print("ALL TESTS PASSED (le chemin gold_brain=True reste a valider en demo -- voir plan de securite)")
