@@ -1114,6 +1114,14 @@ async function loadForfaitsFromServer() {
 async function saveForfaits() {
   const forfaits = {};
   for (const [key, f] of Object.entries(currentForfaits)) {
+    // 05/08/2026 -- fix: `parseInt(f.max_positions) || 1` transformait tout
+    // 0 volontaire (ex: forfait Global, entierement automatise, "max
+    // positions" n'a pas de sens) en 1 a chaque sauvegarde -- 0 || 1 vaut 1
+    // en JS (0 est "faux"). Idem `at_global`, jamais envoye du tout jusqu'ici :
+    // chaque sauvegarde remettait donc silencieusement le forfait Global en
+    // forfait AlphaTrade normal cote backend. Trouve par Louis en observant
+    // le site en direct (cartes qui "ne fonctionnent pas").
+    const parsedMaxPositions = parseInt(f.max_positions, 10);
     forfaits[key] = {
       name: f.name || key,
       badge: f.badge || '',
@@ -1121,8 +1129,9 @@ async function saveForfaits() {
       price_weekly: parseFloat(f.price_weekly) || 0,
       capital_min: parseFloat(f.capital_min) || 0,
       lot_max: parseFloat(f.lot_max) || 0,
-      max_positions: parseInt(f.max_positions) || 1,
+      max_positions: Number.isNaN(parsedMaxPositions) ? 1 : parsedMaxPositions,
       available: f.available !== false,
+      at_global: !!f.at_global,
       features: (f.features || []).map(feat => ({ text: feat.text || '', active: !!feat.active })),
     };
   }
