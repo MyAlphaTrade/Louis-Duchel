@@ -1,7 +1,7 @@
 {
   "name": "alphatrade",
-  "version": "5.1.0",
-  "description": "AlphaTrade Gold v5.1.0 - Trading IA MetaTrader 5 (XAU/USD)",
+  "version": "5.1.1",
+  "description": "AlphaTrade Gold v5.1.1 - Trading IA MetaTrader 5 (XAU/USD)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

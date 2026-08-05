@@ -426,6 +426,12 @@ function createWindow() {
 function watchData() {
   let mStatus = 0, mTrades = 0, mLog = 0, mCalendar = 0;
 
+  // v5.1.1 -- 05/08/2026, demande de Louis : alignee sur MONITOR_INTERVAL_MS=100
+  // d'AlphaTrade Global (EA_Bridge/alphatg_bridge.py). Le moteur Python ecrit
+  // status.json toutes les 100ms (voir alphatrade_engine.py) -- ce polling
+  // Electron etait le vrai goulot (500ms), independant de la vitesse d'ecriture
+  // du moteur : le rafraichissement perçu restait plafonne a 500ms quelle que
+  // soit la vitesse cote Python.
   setInterval(() => {
     const sf = path.join(DATA_DIR, 'status.json');
     if (fs.existsSync(sf)) {
@@ -471,7 +477,7 @@ function watchData() {
         win?.webContents.send('log-update', lines);
       }
     }
-  }, 500);
+  }, 100);
 }
 
 /* ── IPC handlers ─────────────────────────────────── */

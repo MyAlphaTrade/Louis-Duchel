@@ -978,7 +978,10 @@ function renderMicrostructurePage() {
   if (!currentStatus) return;
   const micro = currentStatus.microstructure || {};
   const snapshots = micro.snapshots || {};
-  const snapshot = snapshots[`MT5:${activeSymbol}`] || {};
+  // OBI/OFI/Kyle λ/POC XAUUSD retires le 05/08/2026 (carnet d'ordres non
+  // fourni par ce broker, restait N/D en permanence, jamais lu par une
+  // decision) -- remplaces par le bloc Gold Microstructure Engine plus bas.
+  // Hyperliquid (laboratoire crypto separe) reste observe ici.
   const hyperOnline = Object.keys(snapshots).some(key => key.startsWith('HYPERLIQUID:'));
   const decision = currentStatus.simulated_decision || {};
   const now = Date.now();
@@ -993,36 +996,40 @@ function renderMicrostructurePage() {
     blockedDecisionSince = 0;
   }
   const set = (id, value) => { const el = $(id); if (el) el.textContent = value; };
-  const obi = Number(snapshot.obi);
-  const ofi = Number(snapshot.ofi);
-  const domActive = (micro.dom_status || {})[activeSymbol];
-  // OBI/Kyle λ/POC exigent un vrai carnet d'ordres multi-niveaux (Depth of
-  // Market). Sans DOM (dépend du broker/compte), ils sont mathématiquement
-  // à 0 en permanence — afficher "N/D" plutôt qu'un 0.000 qui ressemblerait
-  // à une vraie lecture de marché équilibré. OFI reste valide sans DOM (basé
-  // sur le mouvement de prix bid/ask, pas sur la profondeur).
-  const domDataOk = Boolean(snapshot.source) && Boolean(domActive);
   set('microPageMode', micro.mode === 'OBSERVATION_ONLY' ? 'OBSERVATION UNIQUEMENT' : 'INACTIF');
-  set('microPageSource', snapshot.source ? `${snapshot.source} · ${snapshot.symbol} · ${snapshot.venue}` : 'En attente du flux MT5');
-  set('microPageFreshness', snapshot.timestamp
-    ? `Dernière mise à jour : ${new Date(Number(snapshot.timestamp) * 1000).toLocaleTimeString()}`
-    : 'Dernière mise à jour : -');
-  set('microPageObi', domDataOk && Number.isFinite(obi) ? obi.toFixed(3) : 'N/D');
-  set('microPageOfi', Number.isFinite(ofi) ? ofi.toFixed(3) : '-');
-  set('microPageKyle', domDataOk && snapshot.kyle_lambda != null ? Number(snapshot.kyle_lambda).toExponential(2) : 'N/D');
-  set('microPagePoc', domDataOk && snapshot.poc ? Number(snapshot.poc).toFixed(2) : 'N/D');
-  set('microObiMeaning', !domDataOk ? 'Carnet d\'ordres réel indisponible pour ce broker/compte' : obi > .15 ? 'Pression acheteuse observée' : obi < -.15 ? 'Pression vendeuse observée' : 'Carnet local équilibré');
-  set('microOfiMeaning', !Number.isFinite(ofi) ? 'Variation indéterminée' : ofi > .15 ? 'Flux récent favorable aux acheteurs' : ofi < -.15 ? 'Flux récent favorable aux vendeurs' : 'Flux récent neutre');
-  if ($('microObiMeter')) $('microObiMeter').style.width = `${domDataOk && Number.isFinite(obi) ? Math.max(0, Math.min(100, (obi + 1) * 50)) : 50}%`;
-  if ($('microOfiMeter')) $('microOfiMeter').style.width = `${Number.isFinite(ofi) ? Math.max(0, Math.min(100, (ofi + 1) * 50)) : 50}%`;
   set('microDecisionSignal', `${decision.signal || 'WAIT'} ${decision.confidence != null ? `${Number(decision.confidence).toFixed(1)}%` : ''}`);
   set('microDecisionState', decision.eligible ? 'Entrée autorisée' : 'Entrée bloquée');
   set('microBlockedCount', blockedDecisionCount);
   set('microBlockedDuration', blockedDecisionSince ? formatDuration(Math.floor((now - blockedDecisionSince) / 1000)) : '-');
   set('microDecisionReason', reason || 'Aucune décision disponible.');
-  set('microMt5State', !snapshot.source ? 'En attente' : domActive ? 'Actif (carnet réel)' : 'Actif (approximation, DOM indisponible)');
   set('microHyperState', hyperOnline ? 'Actif' : params?.hyperliquid_observer_enabled ? 'Connexion en attente' : 'Désactivé');
   set('microError', micro.last_error ? `Erreur de collecte : ${micro.last_error}` : 'Aucune erreur de collecte.');
+
+  // Gold Microstructure Engine (v5.1.1, chantier 2) -- alimente reellement
+  // scenario_confidence/evaluate_scalp_opportunity().
+  const gold = micro.gold || {};
+  const goldUnavailable = $('microGoldUnavailable');
+  const goldContent = $('microGoldContent');
+  if (!gold.available) {
+    if (goldUnavailable) { goldUnavailable.style.display = 'block'; goldUnavailable.textContent = gold.reason || 'En attente de bougies XAUUSD récentes.'; }
+    if (goldContent) goldContent.style.display = 'none';
+  } else {
+    if (goldUnavailable) goldUnavailable.style.display = 'none';
+    if (goldContent) goldContent.style.display = 'block';
+    set('microGoldVelocity', `${gold.velocity > 0 ? '+' : ''}${Number(gold.velocity).toFixed(3)}`);
+    set('microGoldAcceleration', `${gold.acceleration > 0 ? '+' : ''}${Number(gold.acceleration).toFixed(3)}`);
+    const sizeTrend = Number(gold.size_trend);
+    set('microGoldSizeTrend', `${sizeTrend.toFixed(2)}× ${sizeTrend < 0.85 ? '(contraction)' : sizeTrend > 1.15 ? '(expansion)' : '(stable)'}`);
+    set('microGoldTimeframe', gold.timeframe || '—');
+    const buy = gold.buy || {};
+    const sell = gold.sell || {};
+    if ($('microGoldBuyScore')) $('microGoldBuyScore').innerHTML = `${Math.round(buy.score || 0)}<small>/100</small>`;
+    if ($('microGoldBuyBar')) $('microGoldBuyBar').style.width = `${Math.max(0, Math.min(100, buy.score || 0))}%`;
+    set('microGoldBuyRejection', `${Math.round(buy.rejection || 0)}/100`);
+    if ($('microGoldSellScore')) $('microGoldSellScore').innerHTML = `${Math.round(sell.score || 0)}<small>/100</small>`;
+    if ($('microGoldSellBar')) $('microGoldSellBar').style.width = `${Math.max(0, Math.min(100, sell.score || 0))}%`;
+    set('microGoldSellRejection', `${Math.round(sell.rejection || 0)}/100`);
+  }
 }
 
 function renderActiveMarket() {
@@ -2410,6 +2417,12 @@ $('goldBrainToggle')?.addEventListener('change', async event => {
 
 function renderGoldBrain(s) {
   if (s?.gold_brain_version && $('goldBrainVersion')) $('goldBrainVersion').textContent = `v${s.gold_brain_version}`;
+  // Scenario Engine / Portfolio Brain sont derriere leurs propres flags,
+  // independants de gold_brain_enabled (voir alphatrade_engine.py) -- doivent
+  // s'actualiser meme si `gb` (snapshot classique) est encore vide au premier cycle.
+  renderScenario(s);
+  renderPortfolioBrain(s);
+
   const gb = s?.auto_trading?.gold_brain;
   const emptyEl = $('gbEmptyState');
   const wrapEl = $('gbDecisionWrap');
@@ -2536,6 +2549,225 @@ function renderGoldBrain(s) {
         : 'Aucun blocage actif';
     }
     if ($('gbEconArgs')) $('gbEconArgs').innerHTML = (econ.arguments || econ.risks || []).map(a => `<li>${a}</li>`).join('');
+  }
+}
+
+// ── Panneau Scénario -- Market Scenario Engine (v5.1.1, chantier 5) ─────────
+// Fidèle à Maquette_ScenarioEngine_v5.1.1.html. Données réelles :
+// s.auto_trading.scenario (Scenario.to_dict(), voir python/scenario.py).
+const SCN_STATUS_CLASS = {
+  CANDIDATE: 'candidate', VALIDATED: 'validated', ACTIVE: 'active', DEGRADED: 'degraded',
+  INVALIDATED: 'invalidated', EXPIRED: 'invalidated', COMPLETED: 'active',
+};
+const SCN_FACTOR_LABELS = {
+  structure: 'Structure', smart_money: 'Smart Money', zone_history: 'Zone historique',
+  volatility: 'Volatilité', momentum: 'Momentum', session: 'Session', microstructure: 'Microstructure',
+};
+const SCN_VOLATILITY_LABEL = { low: 'Basse', medium: 'Moyenne', high: 'Élevée' };
+const SCN_TREND_LABEL = { UPTREND: 'Bullish', DOWNTREND: 'Bearish', RANGE: 'Range', CORRECTION: 'Correction' };
+
+function scnTimeHM(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString(currentLanguage === 'en' ? 'en-US' : 'fr-FR', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
+}
+
+function renderScenario(s) {
+  const scenario = s?.auto_trading?.scenario;
+  const emptyEl = $('scnEmptyState');
+  const sectionEl = $('scnSection');
+  if (!scenario) {
+    if (sectionEl) sectionEl.style.display = 'none';
+    if (emptyEl) {
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = params?.scenario_engine_enabled
+        ? 'Scenario Engine activé — en attente du premier scénario généré (aucune position réelle tant que l’exécution reste en observation).'
+        : 'Scenario Engine désactivé — activez-le dans Paramètres pour observer les scénarios générés en continu (aucune position réelle tant que cette phase reste en observation).';
+    }
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (sectionEl) sectionEl.style.display = 'block';
+
+  const status = scenario.status || 'CANDIDATE';
+  const badge = $('scnStatus');
+  if (badge) {
+    badge.textContent = status;
+    badge.className = `scn-status ${SCN_STATUS_CLASS[status] || 'candidate'}`;
+  }
+
+  const dir = $('scnDir');
+  if (dir) {
+    dir.textContent = scenario.direction || '—';
+    dir.className = `dir ${scenario.direction === 'BUY' ? 'buy' : scenario.direction === 'SELL' ? 'sell' : ''}`;
+  }
+  if ($('scnZone')) {
+    const z = scenario.zone || {};
+    $('scnZone').textContent = (z.low != null && z.high != null) ? `${Number(z.low).toFixed(2)} – ${Number(z.high).toFixed(2)}` : '—';
+  }
+
+  if ($('scnConfVal')) $('scnConfVal').innerHTML = `${Math.round(scenario.scenario_confidence || 0)}<small>/100</small>`;
+  if ($('scnConfBar')) $('scnConfBar').style.width = `${Math.max(0, Math.min(100, scenario.scenario_confidence || 0))}%`;
+
+  const healthBlock = $('scnHealthBlock');
+  const hasHealth = scenario.scenario_health != null;
+  if (healthBlock) healthBlock.style.display = hasHealth ? 'block' : 'none';
+  if (hasHealth) {
+    const health = Number(scenario.scenario_health);
+    if ($('scnHealthVal')) $('scnHealthVal').innerHTML = `${Math.round(health)}<small>/100</small>`;
+    const hb = $('scnHealthBar');
+    if (hb) {
+      hb.style.width = `${Math.max(0, Math.min(100, health))}%`;
+      hb.className = `fill ${health < 45 ? 'crit' : health < 65 ? 'warn' : ''}`.trim();
+    }
+    const entry = scenario.scenario_confidence_at_entry;
+    const curve = scenario.health_curve || [];
+    const tr = $('scnTrend');
+    if (tr) {
+      if (curve.length >= 2 && entry != null) {
+        const delta = Math.round(health - entry);
+        tr.textContent = delta === 0
+          ? `Stable depuis l’activation (${Math.round(entry)}/100)`
+          : `${delta > 0 ? '▲' : '▼'} ${delta > 0 ? '+' : ''}${delta} pts depuis l’activation (${Math.round(entry)} → ${Math.round(health)})`;
+        tr.className = `scn-trend ${delta > 2 ? 'up' : delta < -2 ? 'down' : 'stable'}`;
+      } else {
+        tr.textContent = `Confiance à l’entrée : ${Math.round(entry != null ? entry : health)}/100 — scénario tout juste activé`;
+        tr.className = 'scn-trend stable';
+      }
+    }
+  }
+
+  const factorsEl = $('scnFactors');
+  if (factorsEl) {
+    // Poids actuels SCENARIO_WEIGHTS (v5.1.1 chantier 2, 7 facteurs) -- affichage
+    // informatif ; les poids réellement appliqués peuvent différer une fois
+    // scenario_learned_weights.json chargé (voir load_scenario_weights()).
+    const weights = { structure: 25, smart_money: 25, zone_history: 15, volatility: 15, momentum: 5, session: 5, microstructure: 10 };
+    factorsEl.innerHTML = Object.entries(weights).map(([k, v]) =>
+      `<span class="factor-chip">${SCN_FACTOR_LABELS[k] || k} <b>${v}%</b></span>`
+    ).join('');
+  }
+
+  if ($('scnConfluences')) {
+    $('scnConfluences').innerHTML = (scenario.confluences || []).map(c => `<li>${c}</li>`).join('') || '<li>—</li>';
+  }
+
+  if ($('scnAge')) $('scnAge').textContent = gbTimeAgo(scenario.created_at) || '—';
+  if ($('scnMaxValidity')) $('scnMaxValidity').textContent = `${scenario.maximum_validity_min ?? '—'} min`;
+  if ($('scnExpiry')) $('scnExpiry').textContent = scnTimeHM(scenario.expires_at);
+  if ($('scnValidityBar')) {
+    const created = scenario.created_at ? new Date(scenario.created_at).getTime() : null;
+    const expires = scenario.expires_at ? new Date(scenario.expires_at).getTime() : null;
+    let pct = 0;
+    if (created && expires && expires > created) pct = ((Date.now() - created) / (expires - created)) * 100;
+    $('scnValidityBar').style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  }
+
+  const plan = $('scnPlan');
+  if (plan) {
+    const anchor = scenario.anchor_plan || {};
+    const rows = [
+      `<div class="pr"><span class="k">Entrée</span><span class="v">${anchor.entry != null ? Number(anchor.entry).toFixed(2) : '—'}</span></div>`,
+      `<div class="pr"><span class="k">Invalidation (SL)</span><span class="v inv">${scenario.invalidation_price != null ? Number(scenario.invalidation_price).toFixed(2) : '—'}</span></div>`,
+    ];
+    (scenario.targets || []).forEach((t, i) => {
+      rows.push(`<div class="pr"><span class="k">${t.label || `Target ${i + 1}`}</span><span class="v tgt">${t.price != null ? Number(t.price).toFixed(2) : '—'}</span></div>`);
+    });
+    plan.innerHTML = rows.join('');
+  }
+
+  const ctx = scenario.market_context || {};
+  const ctxGrid = $('scnCtxGrid');
+  if (ctxGrid) {
+    const trendLabel = SCN_TREND_LABEL[ctx.trend] || ctx.trend || '—';
+    const trendColor = ctx.trend === 'UPTREND' ? 'var(--green)' : ctx.trend === 'DOWNTREND' ? 'var(--red)' : 'var(--text)';
+    const tfKey = Object.keys(ctx.timeframe_alignment || {})[0] || '—';
+    ctxGrid.innerHTML = `
+      <div class="ctx-item"><div class="k">Tendance</div><div class="v" style="color:${trendColor}">${trendLabel}</div></div>
+      <div class="ctx-item"><div class="k">Volatilité</div><div class="v">${SCN_VOLATILITY_LABEL[ctx.volatility] || ctx.volatility || '—'}${ctx.atr != null ? ` (ATR ${Number(ctx.atr).toFixed(1)})` : ''}</div></div>
+      <div class="ctx-item"><div class="k">Session</div><div class="v">${ctx.session || '—'}</div></div>
+      <div class="ctx-item"><div class="k">Timeframe</div><div class="v">${tfKey}</div></div>`;
+  }
+  const tfRow = $('scnTfRow');
+  if (tfRow) {
+    const alignment = ctx.timeframe_alignment || {};
+    tfRow.innerHTML = Object.entries(alignment).map(([tf, regime]) => {
+      const cls = regime === 'UPTREND' ? 'bullish' : regime === 'DOWNTREND' ? 'bearish' : 'neutral';
+      return `<span class="tf-chip ${cls}">${tf} ${SCN_TREND_LABEL[regime] || regime || 'neutral'}</span>`;
+    }).join('');
+  }
+
+  const scalpSection = $('scnScalpSection');
+  const showScalp = status === 'ACTIVE' || status === 'DEGRADED' || status === 'COMPLETED';
+  if (scalpSection) scalpSection.style.display = showScalp ? 'block' : 'none';
+  if (showScalp && $('scnGateNote')) {
+    const count = scenario.simulated_scalp_count || 0;
+    const health = scenario.scenario_health;
+    const note = scenario.scalp_allowed
+      ? `<span class="ok">✓</span> Scalp autorisé — scénario ${status}, ${count} opportunité(s) simulée(s) détectée(s) jusqu’ici. Aucune position réelle (observation).`
+      : `<span class="no">✗</span> Scalp refusé — ${health != null ? `scenario_health (${Math.round(health)}) sous le seuil de dégradation` : 'scénario non actif'}. scalp_allowed=false.`;
+    $('scnGateNote').innerHTML = note;
+  }
+
+  // Pipeline -- niveau atteint deduit de l'historique reel (un statut terminal
+  // peut avoir ete atteint sans jamais passer par ACTIVE, ex: CANDIDATE -> EXPIRED).
+  const history = scenario.history || [];
+  const statuses = new Set(history.map(h => h.status));
+  let pipeStep = 'gen';
+  if (statuses.has('ACTIVE') || statuses.has('DEGRADED') || statuses.has('COMPLETED')) pipeStep = 'exec';
+  else if (statuses.has('VALIDATED')) pipeStep = 'val';
+  const order = ['Gen', 'Val', 'Caio', 'Exec'];
+  const upTo = { gen: 0, val: 1, caio: 2, exec: 3 }[pipeStep];
+  order.forEach((step, i) => {
+    const el = $('scnPipe' + step);
+    if (el) el.classList.toggle('on', i <= upTo);
+  });
+
+  const checks = scenario.validation || {};
+  const chkMap = { Zone: 'zone_touched', Reaction: 'reaction', Risk: 'risk_ok', Market: 'market_ok' };
+  Object.entries(chkMap).forEach(([suffix, key]) => {
+    const el = $('scnChk' + suffix);
+    if (!el) return;
+    if (!(key in checks)) { el.textContent = '—'; el.style.color = 'var(--muted)'; return; }
+    const ok = Boolean(checks[key]);
+    el.textContent = ok ? '✓ Oui' : '✗ Non';
+    el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  });
+}
+
+// ── Carte agent Portfolio Brain (v5.1.1, chantier 4) -- s.auto_trading.portfolio ──
+function renderPortfolioBrain(s) {
+  const report = s?.auto_trading?.portfolio;
+  const card = $('gbPortfolioCard');
+  if (!card) return;
+  if (!report) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  if ($('gbPortfolioPrio')) {
+    $('gbPortfolioPrio').textContent = report.priority || 'LOW';
+    $('gbPortfolioPrio').className = `gb-prio ${GB_PRIO_CLASS[report.priority] || 'low'}`;
+  }
+  if ($('gbPortfolioConf')) $('gbPortfolioConf').textContent = `${Math.round(report.confidence || 0)}%`;
+  if ($('gbPortfolioConfBar')) $('gbPortfolioConfBar').style.width = `${Math.max(0, Math.min(100, report.confidence || 0))}%`;
+  const exposure = report.recommendation?.exposure || {};
+  if ($('gbPortfolioLine')) {
+    const action = report.recommendation?.action || 'OK';
+    const label = action === 'OK'
+      ? `Panier dans les limites (${exposure.position_count ?? 0} position(s))`
+      : action === 'LIMIT_NEW_ENTRIES' ? 'Limiter les nouvelles entrées'
+      : action === 'REDUCE_EXPOSURE' ? 'Réduire l’exposition' : action;
+    const color = action === 'OK' ? 'var(--text)' : action === 'REDUCE_EXPOSURE' ? 'var(--red)' : 'var(--orange)';
+    $('gbPortfolioLine').innerHTML = `<span style="color:${color}">${label}</span>`;
+  }
+  if ($('gbPortfolioArgs')) $('gbPortfolioArgs').innerHTML = (report.arguments || []).map(a => `<li>${a}</li>`).join('');
+  if ($('gbPortfolioLot')) $('gbPortfolioLot').textContent = exposure.total_lot != null ? Number(exposure.total_lot).toFixed(2) : '—';
+  if ($('gbPortfolioDir')) $('gbPortfolioDir').textContent = exposure.hedged ? 'Couvert (hedge)' : (exposure.net_direction || '—');
+  if ($('gbPortfolioPnl')) {
+    $('gbPortfolioPnl').textContent = exposure.floating_pnl_pct != null
+      ? `${exposure.floating_pnl_pct > 0 ? '+' : ''}${exposure.floating_pnl_pct}%`
+      : '—';
   }
 }
 

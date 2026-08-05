@@ -375,39 +375,49 @@
       <article class="panel microstructure-hero">
         <div>
           <div class="panel-title">Microstructure du marché</div>
-          <h2>Flux normalisés et pression acheteurs / vendeurs</h2>
-          <p>Module d'observation uniquement. Il enregistre et compare les données, mais ne peut ouvrir, fermer ou modifier aucune position. <span class="info-dot" data-tip="Confirmé par audit technique : aucune fonction de décision du moteur (score, entrée, sortie) ne lit ces valeurs aujourd'hui. Phase 6 étudiera si ça doit changer.">ⓘ</span></p>
+          <h2>Or (bougies) et laboratoire crypto (carnet d'ordres)</h2>
+          <p>Le Gold Microstructure Engine ci-dessous alimente réellement le Scenario Engine. Le bloc Hyperliquid plus bas reste un laboratoire crypto séparé, en observation uniquement (BTC/ETH, sans rapport avec les décisions XAUUSD). <span class="info-dot" data-tip="OBI/Kyle λ/POC XAUUSD retirés le 05/08/2026 : ce carnet d'ordres n'était pas fourni par le broker (toujours N/D) et n'a jamais alimenté de décision — remplacé par le Gold Microstructure Engine, qui lit les bougies (toujours disponibles) et alimente réellement scenario_confidence.">ⓘ</span></p>
         </div>
         <div class="micro-mode-badge">
-          <span>Mode</span>
+          <span>Mode <span class="info-dot" data-tip="Ne veut PAS dire que rien de cette page n'est utilisé : le Gold Microstructure Engine ci-dessous alimente réellement scenario_confidence. Ça veut dire qu'aucun module ici n'ouvre, ne ferme ni ne modifie directement une position — cette page ne fait jamais elle-même de trade.">ⓘ</span></span>
           <b id="microPageMode">OBSERVATION</b>
         </div>
       </article>
-      <div class="micro-overview">
-        <article class="panel">
-          <div class="panel-title">Source active</div>
-          <strong id="microPageSource">En attente du flux MT5</strong>
-          <p id="microPageFreshness">Dernière mise à jour : -</p>
-        </article>
-        <article class="panel">
-          <div class="panel-title">Pression du carnet</div>
-          <div class="micro-metric"><span>OBI <span class="info-dot" data-tip="Order Book Imbalance : déséquilibre entre volume acheteur et vendeur sur les 5 premiers niveaux du carnet.">ⓘ</span></span><b id="microPageObi">-</b></div>
-          <div class="micro-meter"><i id="microObiMeter"></i></div>
-          <small id="microObiMeaning">Équilibre indéterminé</small>
-        </article>
-        <article class="panel">
-          <div class="panel-title">Flux récent</div>
-          <div class="micro-metric"><span>OFI <span class="info-dot" data-tip="Order Flow Imbalance : variation signée du flux d'ordres entre deux instants.">ⓘ</span></span><b id="microPageOfi">-</b></div>
-          <div class="micro-meter"><i id="microOfiMeter"></i></div>
-          <small id="microOfiMeaning">Variation indéterminée</small>
-        </article>
-        <article class="panel">
-          <div class="panel-title">Impact et volume</div>
-          <div class="micro-metric"><span>Kyle λ <span class="info-dot" data-tip="Sensibilité du prix au volume échangé — plus λ est élevé, plus un même volume déplace le prix.">ⓘ</span></span><b id="microPageKyle">-</b></div>
-          <div class="micro-metric"><span>POC <span class="info-dot" data-tip="Point de contrôle : zone de prix la plus active dans l'échantillon local récent.">ⓘ</span></span><b id="microPagePoc">-</b></div>
-          <small>Le POC est la zone de prix la plus active dans l'échantillon local.</small>
-        </article>
-      </div>
+      <!-- Gold Microstructure Engine (v5.1.1, chantier 2) -- lit les bougies
+           XAUUSD elles-mêmes (toujours disponibles, pas de carnet d'ordres
+           requis) et alimente réellement scenario_confidence + la détection
+           de scalp du Scenario Engine (voir market_microstructure_gold.py).
+           Remplace le 05/08/2026 l'ancien bloc OBI/OFI/Kyle λ/POC pour
+           XAUUSD (retiré : carnet d'ordres non fourni par ce broker, restait
+           N/D en permanence, jamais lu par une décision). -->
+      <article class="panel micro-gold" id="microGoldSection">
+        <div class="panel-title">Gold Microstructure Engine <span class="feed-badge">alimente le Scenario Engine</span></div>
+        <p class="mini-help">Vitesse/accélération/taille de bougie/rejet de mèche sur les bougies XAUUSD — alimente réellement <code>scenario_confidence</code> et <code>evaluate_scalp_opportunity()</code> quand le Scenario Engine est activé (Gold Brain → Paramètres).</p>
+        <div id="microGoldUnavailable" class="notice">En attente de bougies XAUUSD récentes.</div>
+        <div id="microGoldContent" style="display:none">
+          <div class="diagnostic-grid">
+            <div><label>Vitesse (derniere bougie)</label><b id="microGoldVelocity">—</b></div>
+            <div><label>Accélération</label><b id="microGoldAcceleration">—</b></div>
+            <div><label>Tendance de taille</label><b id="microGoldSizeTrend">—</b></div>
+            <div><label>Timeframe</label><b id="microGoldTimeframe">—</b></div>
+          </div>
+          <div class="micro-gold-directions">
+            <div class="micro-gold-dir buy">
+              <div class="k">Score pour BUY</div>
+              <div class="v" id="microGoldBuyScore">—<small>/100</small></div>
+              <div class="micro-gold-bar"><div class="fill" id="microGoldBuyBar" style="width:0%"></div></div>
+              <small>Rejet de mèche basse : <span id="microGoldBuyRejection">—</span></small>
+            </div>
+            <div class="micro-gold-dir sell">
+              <div class="k">Score pour SELL</div>
+              <div class="v" id="microGoldSellScore">—<small>/100</small></div>
+              <div class="micro-gold-bar"><div class="fill" id="microGoldSellBar" style="width:0%"></div></div>
+              <small>Rejet de mèche haute : <span id="microGoldSellRejection">—</span></small>
+            </div>
+          </div>
+        </div>
+      </article>
+
       <article class="panel micro-diagnostic">
         <div class="panel-title">Diagnostic de décision</div>
         <div class="diagnostic-grid">
@@ -417,12 +427,11 @@
           <div><label>Durée du blocage actuel</label><b id="microBlockedDuration">-</b></div>
         </div>
         <p id="microDecisionReason">Aucune décision disponible.</p>
-        <p class="mini-help"><span class="info-dot" data-tip="Ce diagnostic provient de la décision locale du moteur (règles EMA/RSI/MACD), pas directement des métriques OBI/OFI/Kyle/POC ci-dessus — elles sont juxtaposées sur cet écran mais restent deux choses séparées aujourd'hui.">ⓘ</span> Ce diagnostic vient de la décision locale du moteur, pas directement des métriques microstructure ci-dessus.</p>
+        <p class="mini-help"><span class="info-dot" data-tip="Ce diagnostic provient de la décision locale du moteur (règles EMA/RSI/MACD), pas directement du Gold Microstructure Engine ci-dessus — deux lectures juxtaposées sur cet écran, pas encore fusionnées.">ⓘ</span> Ce diagnostic vient de la décision locale du moteur, distinct du Gold Microstructure Engine ci-dessus.</p>
       </article>
       <article class="panel micro-sources">
         <div class="panel-title">Sources et séparation des marchés</div>
-        <div class="source-row"><b>MT5 · XAU/USD</b><span id="microMt5State">En attente</span><small>Flux du broker utilisé pour l'actif tradé.</small></div>
-        <div class="source-row"><b>Hyperliquid · BTC / ETH</b><span id="microHyperState">Désactivé</span><small>Laboratoire crypto séparé; ne remplace pas les données Gold.</small></div>
+        <div class="source-row"><b>Hyperliquid · BTC / ETH</b><span id="microHyperState">Désactivé</span><small>Laboratoire crypto séparé; ne remplace pas les données Gold — n'alimente aucune décision XAUUSD.</small></div>
         <p id="microError" class="notice">Aucune erreur de collecte.</p>
       </article>
     </section>
@@ -487,6 +496,87 @@
       <div id="goldBrainContent" style="display:none">
         <div id="gbEmptyState" class="gb-off-notice">En attente du premier cycle d'analyse — le panneau s'actualise en continu (analyse des 4 agents à chaque cycle), même sans tentative d'entrée. La décision finale du CAIO n'est tracée dans l'historique d'apprentissage que lors d'une vraie tentative d'entrée.</div>
 
+        <!-- ===== Panneau Scénario — Market Scenario Engine (v5.1.1, chantier 5) =====
+             Fidèle à Maquette_ScenarioEngine_v5.1.1.html. Données réelles :
+             s.auto_trading.scenario (Scenario.to_dict(), voir scenario.py). -->
+        <div id="scnEmptyState" class="gb-off-notice" style="display:none"></div>
+
+        <div id="scnSection" style="display:none">
+          <div class="pipeline" id="scnPipeline">
+            <div class="pipe-step" id="scnPipeGen"><span class="pn">1</span><div><span class="pt">Scenario Generator</span><span class="ps">zone + confluences</span></div></div>
+            <span class="pipe-arrow">→</span>
+            <div class="pipe-step" id="scnPipeVal"><span class="pn">2</span><div><span class="pt">Scenario Validator</span><span class="ps">4 vérifications</span></div></div>
+            <span class="pipe-arrow">→</span>
+            <div class="pipe-step" id="scnPipeCaio"><span class="pn">3</span><div><span class="pt">CAIO</span><span class="ps">arbitrage</span></div></div>
+            <span class="pipe-arrow">→</span>
+            <div class="pipe-step" id="scnPipeExec"><span class="pn">4</span><div><span class="pt">Execution / Position Manager</span><span class="ps">ancrage + scalps (simulé)</span></div></div>
+          </div>
+
+          <div class="scn-card">
+            <div class="scn-head">
+              <span class="lbl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> Scénario — XAUUSD</span>
+              <span id="scnStatus" class="scn-status candidate">CANDIDATE</span>
+            </div>
+
+            <div class="scn-cols">
+              <div>
+                <div class="scn-zone-row">
+                  <span class="dir" id="scnDir">—</span>
+                  <span class="zone" id="scnZone">—</span>
+                </div>
+
+                <div class="scn-conf-block">
+                  <div class="scn-conf">
+                    <div class="cl">Scenario Confidence <span style="color:var(--muted)">(à la création)</span></div>
+                    <div class="cv" id="scnConfVal">—<small>/100</small></div>
+                    <div class="scn-conf-bar"><div class="fill" id="scnConfBar" style="width:0%"></div></div>
+                  </div>
+                  <div class="scn-conf" id="scnHealthBlock" style="display:none">
+                    <div class="cl">Scenario Health <span style="color:var(--muted)">(en continu)</span></div>
+                    <div class="cv" id="scnHealthVal">—<small>/100</small></div>
+                    <div class="scn-conf-bar scn-health-bar"><div class="fill" id="scnHealthBar" style="width:0%"></div></div>
+                    <div class="scn-trend" id="scnTrend"></div>
+                  </div>
+                </div>
+
+                <div class="factor-row" id="scnFactors"></div>
+
+                <ul class="scn-conf-list" id="scnConfluences"></ul>
+
+                <div class="validity-row">
+                  <span>Créé il y a <b id="scnAge">—</b></span>
+                  <div class="validity-bar"><div class="fill" id="scnValidityBar" style="width:0%"></div></div>
+                  <span>Validité max <b id="scnMaxValidity">—</b> — expire à <b id="scnExpiry">—</b></span>
+                </div>
+              </div>
+
+              <div>
+                <h4 class="gb-mini-title">Plan d'ancrage</h4>
+                <div class="scn-plan" id="scnPlan"></div>
+
+                <h4 class="gb-mini-title" style="margin-top:14px">Contexte marché (figé à la création)</h4>
+                <div class="ctx-grid" id="scnCtxGrid"></div>
+                <div class="tf-row" id="scnTfRow"></div>
+              </div>
+            </div>
+
+            <div id="scnScalpSection" style="display:none">
+              <h4 class="gb-mini-title" style="margin-top:16px">Activité de scalp (simulée — aucune position réelle tant que l'exécution reste en observation)</h4>
+              <div class="gate-note" id="scnGateNote"></div>
+            </div>
+          </div>
+
+          <div class="group-header">
+            <h2><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg> Scenario Validator — 4 vérifications</h2>
+          </div>
+          <div class="scn-plan" id="scnValidatorChecks">
+            <div class="pr"><span class="k">Zone touchée ?</span><span class="v" id="scnChkZone">—</span></div>
+            <div class="pr"><span class="k">Réaction présente ?</span><span class="v" id="scnChkReaction">—</span></div>
+            <div class="pr"><span class="k">Risque panier acceptable ?</span><span class="v" id="scnChkRisk">—</span></div>
+            <div class="pr"><span class="k">Marché compatible ?</span><span class="v" id="scnChkMarket">—</span></div>
+          </div>
+        </div>
+
         <div id="gbDecisionWrap" style="display:none">
           <article class="panel gb-caio-card">
             <div class="gb-caio-head">
@@ -518,7 +608,7 @@
             </article>
 
             <article class="panel gb-agent-card">
-              <div class="gb-agent-title">🗺️ Structure Analyst<span id="gbStructurePrio" class="gb-prio medium">MEDIUM</span></div>
+              <div class="gb-agent-title">🗺️ Structure Analyst<span class="feed-badge">alimente le Scenario Generator</span><span id="gbStructurePrio" class="gb-prio medium">MEDIUM</span></div>
               <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbStructureConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbStructureConf">—</b></div>
               <div class="gb-rec-line" id="gbStructureAction">—</div>
               <ul class="gb-arg-list" id="gbStructureArgs"></ul>
@@ -530,7 +620,7 @@
             </article>
 
             <article class="panel gb-agent-card">
-              <div class="gb-agent-title">🕵️ Smart Money Analyst<span id="gbSmartMoneyPrio" class="gb-prio medium">MEDIUM</span></div>
+              <div class="gb-agent-title">🕵️ Smart Money Analyst<span class="feed-badge">alimente le Scenario Generator</span><span id="gbSmartMoneyPrio" class="gb-prio medium">MEDIUM</span></div>
               <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbSmartMoneyConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbSmartMoneyConf">—</b></div>
               <div class="gb-rec-line" id="gbSmartMoneyAction">—</div>
               <ul class="gb-arg-list" id="gbSmartMoneyArgs"></ul>
@@ -558,6 +648,18 @@
               <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbEconConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbEconConf">—</b></div>
               <div class="gb-rec-line" id="gbEconLine">—</div>
               <ul class="gb-arg-list" id="gbEconArgs"></ul>
+            </article>
+
+            <article class="panel gb-agent-card" id="gbPortfolioCard" style="display:none">
+              <div class="gb-agent-title">📦 Portfolio Brain<span id="gbPortfolioPrio" class="gb-prio low">LOW</span></div>
+              <div class="gb-conf-row">Confiance <div class="gb-conf-bar"><div id="gbPortfolioConfBar" class="gb-fill" style="width:0%"></div></div><b id="gbPortfolioConf">—</b></div>
+              <div class="gb-rec-line" id="gbPortfolioLine">—</div>
+              <ul class="gb-arg-list" id="gbPortfolioArgs"></ul>
+              <div class="gb-meta-row">
+                <span class="gb-meta-chip">Lot total : <span id="gbPortfolioLot">—</span></span>
+                <span class="gb-meta-chip">Biais net : <span id="gbPortfolioDir">—</span></span>
+                <span class="gb-meta-chip">Flottant panier : <span id="gbPortfolioPnl">—</span></span>
+              </div>
             </article>
           </div>
         </div>

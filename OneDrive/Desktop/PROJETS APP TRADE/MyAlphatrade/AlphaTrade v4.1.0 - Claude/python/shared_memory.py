@@ -34,6 +34,14 @@ COMPARTMENT_OWNERS: dict[str, set[str]] = {
     "trading_objectives": {"trading_mission_manager"},
     "performance": {"performance_manager"},
     "learning_history": {"caio", "trading_coach", "learning_manager"},
+    # v5.1.1 Phase 1 (Market Scenario Engine) -- compartiment reserve des
+    # maintenant, meme s'il n'est encore ecrit par personne (le Scenario
+    # Generator arrive en Phase 2). Voir scenario.py.
+    "active_scenarios": {"scenario_generator"},
+    # v5.1.1 chantier 4 -- Portfolio Brain : exposition agregee du panier
+    # XAUUSD (positions BOT ouvertes simultanement -- principale/renfort/
+    # rebond/scalp). Voir portfolio_brain.py.
+    "portfolio": {"portfolio_brain"},
 }
 
 # Compartiments d'etat factuel (pas une opinion d'agent) -- confidence fixee

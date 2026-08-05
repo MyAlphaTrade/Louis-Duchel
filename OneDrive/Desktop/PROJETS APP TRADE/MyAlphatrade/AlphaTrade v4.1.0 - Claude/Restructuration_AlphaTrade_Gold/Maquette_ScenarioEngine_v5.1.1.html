@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Maquette — Panneau Scénario (Gold Brain v5.1.1)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0c130e; --panel2:#0f1811; --line:#2a4433;
+    --muted:#7c9284; --text:#d7e6db; --titlebar-bg:#0e1610;
+    --cyan:#5cc8ff; --blue:#5cc8ff; --green:#39ff88; --red:#ff5c6c; --orange:#ffb454;
+    --gold:#ffd166; --bronze:#c98a4b; --purple:#b79bf0;
+    --card2:#0f1811; --border-strong:#2a4433;
+    font-size:14.5px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+
+  .intro{padding:22px 24px; border-bottom:1px solid var(--line); background:linear-gradient(180deg, rgba(92,200,255,0.06), transparent);}
+  .intro .tag{display:inline-block; padding:4px 12px; border:1px solid #123a4a; border-radius:20px; color:var(--blue); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px; margin-right:6px;}
+  .intro h1{font-size:1.4rem; margin:0 0 8px; color:#fff;}
+  .intro p{color:var(--muted); max-width:940px; line-height:1.6; margin:0 0 6px; font-size:13.5px;}
+  .intro .note{background:var(--panel2); border:1px dashed var(--border-strong); border-radius:8px; padding:10px 14px; margin-top:10px; font-size:12.5px; color:var(--muted); max-width:940px;}
+
+  /* ===== Chrome réel de l'app (reproduit tel quel) ===== */
+  .titlebar{display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--titlebar-bg); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .titlebar .brand{color:var(--green); font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px;}
+  .titlebar .brand small{color:var(--muted); font-weight:600; font-size:10px;}
+  .titlebar .badge{font-size:10px; border:1px solid var(--border-strong); border-radius:10px; padding:2px 8px; color:var(--muted);}
+  .titlebar .badge.demo{color:var(--green); border-color:#1c6e3f; background:rgba(57,255,136,.08);}
+  .titlebar .account{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);}
+  .titlebar .drag{flex:1;}
+  .titlebar .gmt{background:var(--panel2); border-radius:8px; padding:3px 10px; font-size:10.5px; color:var(--muted); text-align:center; line-height:1.3;}
+  .titlebar .gmt strong{display:block; color:var(--text); font-size:11px;}
+  .titlebar .session{font-size:11px; color:var(--muted); padding:0 6px;}
+  .titlebar .session b{color:var(--gold);}
+  .titlebar .clock{background:var(--panel2); border-radius:8px; padding:4px 10px; font-size:11px; color:var(--muted);}
+  .titlebar .srv{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); padding:0 6px;}
+  .titlebar .dot{width:7px; height:7px; border-radius:50%; background:var(--green); flex-shrink:0;}
+  .titlebar .icon-btn{width:26px; height:26px; border-radius:6px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted); display:flex; align-items:center; justify-content:center; font-size:12px;}
+  .titlebar .lang{display:flex; border:1px solid var(--border-strong); border-radius:6px; overflow:hidden;}
+  .titlebar .lang span{padding:3px 8px; font-size:10px; color:var(--muted);}
+  .titlebar .lang span.active{background:var(--panel2); color:var(--green);}
+  .titlebar .winbtns{display:flex; gap:2px; margin-left:4px;}
+  .titlebar .winbtns span{width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;}
+
+  .metrics{display:grid; grid-template-columns:repeat(6,1fr); gap:0; border-bottom:1px solid var(--line); background:var(--panel);}
+  .metrics article{padding:10px 14px; border-right:1px solid var(--line);}
+  .metrics article:last-child{border-right:none;}
+  .metrics label{display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;}
+  .metrics strong{display:block; font-size:15px; color:#fff; margin:2px 0;}
+  .metrics small{display:block; font-size:10px; color:var(--muted);}
+
+  .tabs{display:flex; gap:2px; padding:0 14px; background:var(--panel2); border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tabs button{padding:10px 14px; font-size:12.5px; color:var(--muted); background:none; border:none; white-space:nowrap; cursor:default; font-family:inherit;}
+  .tabs button.active{color:var(--green); border-bottom:2px solid var(--green); font-weight:700;}
+
+  /* ===== Page ===== */
+  .page{max-width:1360px; margin:0 auto; padding:20px 24px 90px;}
+
+  .master-toggle{display:flex; align-items:center; gap:16px; background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin-bottom:20px;}
+  .master-toggle .mt-icon{width:26px; height:26px; color:var(--green); flex-shrink:0;}
+  .master-toggle .mt-text{flex:1;}
+  .master-toggle .mt-text h2{margin:0 0 4px; color:#fff; font-size:15px;}
+  .master-toggle .mt-text p{margin:0; color:var(--muted); font-size:12px; line-height:1.5; max-width:640px;}
+  .mt-state{font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; background:#123a1c; color:var(--green);}
+
+  /* ===== Pipeline strip ===== */
+  .pipeline{display:flex; align-items:center; gap:0; background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:14px 18px; margin-bottom:18px; overflow-x:auto;}
+  .pipe-step{display:flex; align-items:center; gap:9px; padding:8px 14px; border-radius:10px; flex-shrink:0; opacity:.4;}
+  .pipe-step.on{opacity:1; background:rgba(92,200,255,0.09);}
+  .pipe-step .pn{width:22px; height:22px; border-radius:50%; background:var(--panel2); border:1px solid var(--border-strong); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--muted); flex-shrink:0;}
+  .pipe-step.on .pn{background:var(--blue); color:#04202e; border-color:var(--blue);}
+  .pipe-step .pt{font-size:12px; color:var(--text); white-space:nowrap;}
+  .pipe-step .ps{display:block; font-size:10px; color:var(--muted);}
+  .pipe-arrow{color:var(--dim,var(--muted)); font-size:16px; padding:0 6px; flex-shrink:0;}
+
+  .scenario-switch{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .scenario-switch button{font-family:inherit; font-size:11.5px; padding:7px 14px; border-radius:20px; border:1px solid var(--border-strong); background:var(--panel2); color:var(--muted); cursor:pointer;}
+  .scenario-switch button.active{border-color:var(--blue); color:var(--blue); background:rgba(92,200,255,.08); font-weight:700;}
+
+  /* ===== Scenario card ===== */
+  .scn-card{background:linear-gradient(135deg, rgba(92,200,255,0.09), var(--panel)); border:1px solid var(--blue); border-radius:14px; padding:20px 24px; margin-bottom:18px; resize:vertical; overflow:auto; min-height:220px;}
+  .scn-head{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:14px; flex-wrap:wrap;}
+  .scn-head .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--blue); font-weight:700; display:flex; align-items:center; gap:8px;}
+  .scn-status{font-size:12px; font-weight:800; padding:4px 14px; border-radius:20px;}
+  .scn-status.candidate{background:#151f19; color:var(--muted); border:1px dashed var(--border-strong);}
+  .scn-status.active{background:#123a1c; color:var(--green);}
+  .scn-status.degraded{background:#4a2f12; color:var(--orange);}
+  .scn-status.invalidated{background:#4a1a1a; color:var(--red);}
+
+  .scn-cols{display:grid; grid-template-columns:1.3fr 1fr; gap:20px;}
+  @media (max-width:900px){.scn-cols{grid-template-columns:1fr;}}
+
+  .scn-zone-row{display:flex; align-items:baseline; gap:10px; margin-bottom:10px;}
+  .scn-zone-row .dir{font-size:1.05rem; font-weight:800;}
+  .scn-zone-row .dir.buy{color:var(--green);} .scn-zone-row .dir.sell{color:var(--red);}
+  .scn-zone-row .zone{font-family:Consolas,Menlo,monospace; font-size:1.05rem; color:#fff;}
+  .scn-conf-block{display:flex; gap:20px; margin:12px 0; flex-wrap:wrap;}
+  .scn-conf{flex:1; min-width:170px;}
+  .scn-conf .cl{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px;}
+  .scn-conf .cv{font-size:1.4rem; font-weight:800; color:#fff;}
+  .scn-conf .cv small{font-size:.6em; color:var(--muted); font-weight:600;}
+  .scn-conf-bar{height:7px; border-radius:4px; background:var(--border-strong); overflow:hidden; margin-top:5px;}
+  .scn-conf-bar .fill{height:100%; background:var(--blue);}
+  .scn-health-bar .fill{background:var(--green);}
+  .scn-health-bar .fill.warn{background:var(--orange);}
+  .scn-health-bar .fill.crit{background:var(--red);}
+  .scn-trend{font-size:11px; margin-top:3px;}
+  .scn-trend.down{color:var(--red);} .scn-trend.stable{color:var(--muted);} .scn-trend.up{color:var(--green);}
+
+  .factor-row{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0;}
+  .factor-chip{font-size:10.5px; background:var(--panel2); border:1px solid var(--border-strong); border-radius:8px; padding:4px 9px; color:var(--muted);}
+  .factor-chip b{color:var(--text);}
+
+  .scn-conf-list{margin:8px 0; padding-left:18px; font-size:12px; color:var(--muted); line-height:1.65;}
+
+  .scn-plan{background:var(--panel2); border-radius:10px; padding:12px 14px; margin-top:6px;}
+  .scn-plan .pr{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; border-bottom:1px solid var(--line);}
+  .scn-plan .pr:last-child{border-bottom:none;}
+  .scn-plan .pr .k{color:var(--muted);}
+  .scn-plan .pr .v{color:#fff; font-weight:600; font-family:Consolas,Menlo,monospace;}
+  .scn-plan .pr .v.inv{color:var(--red);}
+  .scn-plan .pr .v.tgt{color:var(--green);}
+
+  .ctx-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:8px;}
+  .ctx-item{background:var(--panel2); border-radius:8px; padding:8px 10px;}
+  .ctx-item .k{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.3px;}
+  .ctx-item .v{font-size:12.5px; color:#fff; font-weight:600; margin-top:2px;}
+  .tf-row{display:flex; gap:6px; margin-top:6px;}
+  .tf-chip{font-size:10px; padding:3px 8px; border-radius:6px; background:var(--panel2); border:1px solid var(--border-strong);}
+  .tf-chip.bullish{color:var(--green); border-color:#1c6e3f;}
+  .tf-chip.bearish{color:var(--red); border-color:#5c1c22;}
+  .tf-chip.neutral{color:var(--muted);}
+
+  .validity-row{display:flex; align-items:center; gap:10px; margin-top:12px; font-size:11.5px; color:var(--muted);}
+  .validity-bar{flex:1; height:5px; border-radius:3px; background:var(--border-strong); overflow:hidden;}
+  .validity-bar .fill{height:100%; background:var(--gold);}
+
+  .scalp-list{margin-top:10px;}
+  .scalp-row{display:flex; align-items:center; gap:10px; padding:8px 10px; background:var(--panel2); border-radius:8px; margin-bottom:6px; font-size:12px;}
+  .scalp-row .tag{font-size:9.5px; font-weight:700; padding:2px 7px; border-radius:6px; background:#123a4a; color:var(--blue); flex-shrink:0;}
+  .scalp-row .tag.anchor{background:#4a3417; color:var(--gold);}
+  .scalp-row .d{color:var(--muted); flex-shrink:0; width:70px;}
+  .scalp-row .p{color:#fff; font-family:Consolas,Menlo,monospace; flex:1;}
+  .scalp-row .st{font-size:10.5px; flex-shrink:0;}
+  .scalp-row .st.open{color:var(--green);}
+  .scalp-row .st.securing{color:var(--orange);}
+  .scalp-row .st.closed{color:var(--muted);}
+  .gate-note{font-size:11px; color:var(--muted); margin-top:8px; padding:8px 10px; background:var(--panel2); border-radius:8px;}
+  .gate-note .ok{color:var(--green);} .gate-note .no{color:var(--red);}
+
+  .agents-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:14px; margin-bottom:20px;}
+  .agent-card{background:var(--panel); border:1px solid var(--border-strong); border-radius:12px; padding:14px 16px;}
+  .agent-card h3{margin:0 0 10px; font-size:12.5px; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .agent-card h3 .agent-name{display:flex; align-items:center; gap:6px;}
+  .feed-badge{font-size:9px; font-weight:700; padding:2px 7px; border-radius:20px; background:#123a4a; color:var(--blue);}
+  .prio{font-size:9.5px; font-weight:800; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px;}
+  .prio.medium{background:#123a4a; color:var(--blue);}
+  .prio.low{background:#151f19; color:var(--muted);}
+  .conf-row{display:flex; align-items:center; gap:8px; margin:6px 0 10px; font-size:11px; color:var(--muted);}
+  .conf-bar{flex:1; height:5px; border-radius:3px; background:var(--border-strong); overflow:hidden;}
+  .conf-bar .fill{height:100%; background:var(--green);}
+  .rec-line{background:var(--panel2); border-radius:8px; padding:8px 10px; font-size:12.5px; color:#fff; font-weight:700; margin-bottom:8px;}
+  .rec-line .action-buy{color:var(--green);}
+  .arg-list{margin:0; padding-left:16px; font-size:11.5px; color:var(--muted); line-height:1.6;}
+  .meta-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .meta-chip{font-size:10px; background:var(--panel2); border:1px solid var(--border-strong); border-radius:6px; padding:3px 8px; color:var(--muted);}
+
+  .group-header{display:flex; align-items:center; gap:10px; margin:30px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line);}
+  .group-header h2{font-size:13px; color:var(--blue); text-transform:uppercase; letter-spacing:.6px; margin:0; display:flex; align-items:center; gap:8px;}
+  .scope-badge{font-size:10px; font-weight:700; padding:2px 9px; border-radius:20px; white-space:nowrap; background:#123a4a; color:var(--blue);}
+  .scope-note{color:var(--muted); font-size:11.5px; margin-left:auto;}
+
+  footer{padding:36px 22px; text-align:center; color:#4d6357; font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <div class="tag">Maquette — aucun code touché</div><div class="tag">Reflète l'architecture corrigée du 04/08</div>
+  <h1>Panneau Scénario — Gold AI Brain v5.1.1</h1>
+  <p>Nouvelle carte dans l'onglet Gold Brain existant (chrome réel reproduit ci-dessous), en plus des cartes déjà en production (Mission Manager, Structure Analyst, Smart Money Analyst, Risk Manager, décision CAIO). Toutes les valeurs suivent le contrat <code>Scenario</code> corrigé : <code>scenario_confidence</code> (pas "probability"), <code>scenario_health</code> distincte de la confiance d'entrée, contexte marché, durée de vie, Scenario Validator avant le CAIO.</p>
+  <div class="note">👉 Utilise les 4 boutons d'état pour voir le cycle de vie complet du scénario : Candidat (pas encore exploitable) → Actif (position d'ancrage + scalps) → Dégradé (santé en baisse, avant même que le prix touche l'invalidation) → Invalidé (clôturé).</div>
+</div>
+
+<!-- ============ CHROME RÉEL DE L'APP ============ -->
+<div class="titlebar">
+  <div class="brand">🥇 <strong>AlphaTrade</strong><small>v5.1.1</small></div>
+  <div class="account">
+    <span class="badge demo">DEMO</span>
+    <span class="badge">RÉEL</span>
+    <span>#201660817</span>
+    <span>Deriv-Demo</span>
+  </div>
+  <div class="drag"></div>
+  <div class="gmt" title="Heure universelle GMT">GMT<strong>10:41:02</strong></div>
+  <div class="session">Session <b>Londres</b> — active</div>
+  <div class="clock">12:41:02</div>
+  <div class="srv"><span class="dot"></span>Serveur connecté</div>
+  <button class="icon-btn" title="Thème">◐</button>
+  <div class="lang"><span class="active">FRA</span><span>EN</span></div>
+  <div class="winbtns"><span>—</span><span>□</span><span>×</span></div>
+</div>
+
+<section class="metrics">
+  <article><label>Solde</label><strong>3 899.59$</strong><small>Réalisé MT5</small></article>
+  <article><label>Équité</label><strong>3 906.94$</strong><small>Solde + flottant</small></article>
+  <article><label>Profit net</label><strong style="color:var(--green)">+18.20$</strong><small>Session AlphaTrade</small></article>
+  <article><label>Profit flottant</label><strong style="color:var(--green)">+7.35$</strong><small>Positions AlphaTrade</small></article>
+  <article><label>Précision</label><strong>71.2%</strong><small>22 trades fermés</small></article>
+  <article><label>Espérance</label><strong>+2.01</strong><small>Sur 22 trades</small></article>
+</section>
+
+<nav class="tabs">
+  <button>Tableau de bord</button>
+  <button>Trades</button>
+  <button>Sessions IA</button>
+  <button>Microstructure</button>
+  <button>Sessions marché</button>
+  <button>Calendrier</button>
+  <button class="active">Gold Brain</button>
+  <button>Paramètres</button>
+  <button>Journal</button>
+  <button>Assistant IA</button>
+</nav>
+
+<!-- ============ PAGE GOLD BRAIN — SECTION SCÉNARIO ============ -->
+<div class="page">
+
+  <div class="master-toggle">
+    <svg class="mt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08A3 3 0 0 1 3 13.5a3 3 0 0 1 1.24-2.43A3 3 0 0 1 6 5.5a2.5 2.5 0 0 1 3.5-3Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08A3 3 0 0 0 21 13.5a3 3 0 0 0-1.24-2.43A3 3 0 0 0 18 5.5a2.5 2.5 0 0 0-3.5-3Z"/></svg>
+    <div class="mt-text">
+      <h2>Gold AI Brain</h2>
+      <p>Le CAIO n'arbitre plus des indicateurs bruts : il choisit parmi des scénarios déjà validés par le Scenario Validator, puis délègue la gestion de position à un moteur qui suit la santé du scénario en continu — pas des seuils $ fixes.</p>
+    </div>
+    <span class="mt-state">Activé</span>
+  </div>
+
+  <!-- ===== Pipeline ===== -->
+  <div class="pipeline" id="pipeline">
+    <div class="pipe-step" id="pipeGen"><span class="pn">1</span><div><span class="pt">Scenario Generator</span><span class="ps" id="pipeGenSub">zone + confluences</span></div></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step" id="pipeVal"><span class="pn">2</span><div><span class="pt">Scenario Validator</span><span class="ps" id="pipeValSub">4 vérifications</span></div></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step" id="pipeCaio"><span class="pn">3</span><div><span class="pt">CAIO</span><span class="ps" id="pipeCaioSub">arbitrage</span></div></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-step" id="pipeExec"><span class="pn">4</span><div><span class="pt">Execution / Position Manager</span><span class="ps" id="pipeExecSub">ancrage + scalps</span></div></div>
+  </div>
+
+  <div class="scenario-switch">
+    <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:4px;">État du scénario :</span>
+    <button class="active" data-st="candidate" onclick="setState('candidate')">Candidat</button>
+    <button data-st="active" onclick="setState('active')">Actif</button>
+    <button data-st="degraded" onclick="setState('degraded')">Dégradé</button>
+    <button data-st="invalidated" onclick="setState('invalidated')">Invalidé</button>
+  </div>
+
+  <!-- ===== Carte Scénario ===== -->
+  <div class="scn-card">
+    <div class="scn-head">
+      <span class="lbl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> Scénario actif — XAUUSD</span>
+      <span id="scnStatus" class="scn-status candidate">CANDIDATE</span>
+    </div>
+
+    <div class="scn-cols">
+      <div>
+        <div class="scn-zone-row">
+          <span class="dir buy" id="scnDir">BUY</span>
+          <span class="zone" id="scnZone">4085.0 – 4088.0</span>
+          <span style="color:var(--muted); font-size:11.5px;">— demande</span>
+        </div>
+
+        <div class="scn-conf-block">
+          <div class="scn-conf">
+            <div class="cl">Scenario Confidence <span style="color:var(--dim,var(--muted))">(à la création)</span></div>
+            <div class="cv" id="scnConfVal">68<small>/100</small></div>
+            <div class="scn-conf-bar"><div class="fill" id="scnConfBar" style="width:68%"></div></div>
+          </div>
+          <div class="scn-conf" id="scnHealthBlock" style="display:none">
+            <div class="cl">Scenario Health <span style="color:var(--dim,var(--muted))">(en continu)</span></div>
+            <div class="cv" id="scnHealthVal">79<small>/100</small></div>
+            <div class="scn-conf-bar scn-health-bar"><div class="fill" id="scnHealthBar" style="width:79%"></div></div>
+            <div class="scn-trend" id="scnTrend">— au moment de l'activation</div>
+          </div>
+        </div>
+
+        <div class="factor-row" id="scnFactors">
+          <span class="factor-chip">Structure <b>25%</b></span>
+          <span class="factor-chip">Smart Money <b>25%</b></span>
+          <span class="factor-chip">Zone historique <b>15%</b></span>
+          <span class="factor-chip">Volatilité <b>15%</b></span>
+          <span class="factor-chip">Momentum <b>10%</b></span>
+          <span class="factor-chip">Session <b>10%</b></span>
+        </div>
+
+        <ul class="scn-conf-list" id="scnConfluences">
+          <li>Ancien support (touché 2 fois sur les 5 derniers jours)</li>
+          <li>Liquidity sweep sous 4084 détecté (Smart Money Analyst)</li>
+          <li>RSI M5 en zone de survente (31)</li>
+          <li>Structure haussière M5, alignée M15</li>
+        </ul>
+
+        <div class="validity-row">
+          <span>Créé il y a <b id="scnAge">4 min</b></span>
+          <div class="validity-bar"><div class="fill" id="scnValidityBar" style="width:9%"></div></div>
+          <span>Validité max <b>45 min</b> — expire à <b id="scnExpiry">10:52</b></span>
+        </div>
+      </div>
+
+      <div>
+        <h4 style="margin:0 0 8px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;">Plan d'ancrage</h4>
+        <div class="scn-plan">
+          <div class="pr"><span class="k">Entrée</span><span class="v" id="scnEntry">4 086.50</span></div>
+          <div class="pr"><span class="k">Invalidation (SL)</span><span class="v inv" id="scnInv">4 082.00</span></div>
+          <div class="pr"><span class="k">Target 1 — liquidité proche</span><span class="v tgt" id="scnT1">4 092.00</span></div>
+          <div class="pr"><span class="k">Target 2 — extension</span><span class="v tgt" id="scnT2">4 098.00</span></div>
+        </div>
+
+        <h4 style="margin:14px 0 8px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;">Contexte marché (figé à la création)</h4>
+        <div class="ctx-grid">
+          <div class="ctx-item"><div class="k">Tendance</div><div class="v" style="color:var(--green)">Bullish</div></div>
+          <div class="ctx-item"><div class="k">Volatilité</div><div class="v">Medium (ATR 18.4)</div></div>
+          <div class="ctx-item"><div class="k">Session</div><div class="v">Londres</div></div>
+          <div class="ctx-item"><div class="k">Alignement multi-TF</div><div class="v">2/3 haussier</div></div>
+        </div>
+        <div class="tf-row">
+          <span class="tf-chip bullish">M5 bullish</span>
+          <span class="tf-chip bullish">M15 bullish</span>
+          <span class="tf-chip neutral">H1 neutral</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="scnScalpSection" style="display:none">
+      <h4 style="margin:16px 0 8px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px;">Positions liées à ce scénario</h4>
+      <div class="scalp-list" id="scalpList"></div>
+      <div class="gate-note" id="gateNote"></div>
+    </div>
+  </div>
+
+  <!-- ===== Cartes agents existantes (inchangées, badge d'alimentation ajouté) ===== -->
+  <div class="agents-row">
+    <div class="agent-card">
+      <h3><span class="agent-name">🗺️ Structure Analyst</span><span class="feed-badge">alimente le Scenario Generator</span></h3>
+      <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:82%"></div></div><b>82%</b></div>
+      <div class="rec-line"><span class="action-buy">BUY · zone 4085.40</span></div>
+      <ul class="arg-list"><li>Régime UPTREND, zone demand à 4085.40.</li></ul>
+    </div>
+    <div class="agent-card">
+      <h3><span class="agent-name">🕵️ Smart Money Analyst</span><span class="feed-badge">alimente le Scenario Generator</span></h3>
+      <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:78%"></div></div><b>78%</b></div>
+      <div class="rec-line"><span class="action-buy">BUY · sweep 4084.90</span></div>
+      <ul class="arg-list"><li>Sweep de liquidité (bullish) sur 4084.90 — biais contraire au balayage.</li></ul>
+    </div>
+    <div class="agent-card">
+      <h3><span class="agent-name">🛡️ Risk Manager</span><span class="prio low">LOW</span></h3>
+      <div class="conf-row">Confiance <div class="conf-bar"><div class="fill" style="width:92%"></div></div><b>92%</b></div>
+      <div class="rec-line"><span style="color:var(--text)">Risque panier : 1 position, exposition acceptable</span></div>
+      <ul class="arg-list"><li>Lot effectif 0.05 — dans le plafond de compte.</li></ul>
+    </div>
+  </div>
+
+  <div class="group-header">
+    <h2><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg> Scenario Validator — 4 vérifications</h2>
+    <span class="scope-badge">Nouveau — point 4 de la relecture</span>
+  </div>
+  <div class="scn-plan" id="validatorChecks">
+    <div class="pr"><span class="k">Zone touchée ?</span><span class="v" id="chkZone">—</span></div>
+    <div class="pr"><span class="k">Réaction présente ?</span><span class="v" id="chkReaction">—</span></div>
+    <div class="pr"><span class="k">Risque panier acceptable ?</span><span class="v" id="chkRisk">—</span></div>
+    <div class="pr"><span class="k">Marché compatible ?</span><span class="v" id="chkMarket">—</span></div>
+  </div>
+
+</div>
+
+<footer>Maquette interactive — 04/08/2026 — AlphaTrade Gold v5.1.1 — aucun code de l'application modifié</footer>
+
+<script>
+const STATES = {
+  candidate: {
+    status: {cls:'scn-status candidate', text:'CANDIDATE'},
+    pipe: 'gen',
+    health: false,
+    confVal: 68, confBar: 68,
+    checks: {zone:['—','var(--muted)'], reaction:['—','var(--muted)'], risk:['—','var(--muted)'], market:['—','var(--muted)']},
+    age: 'à l\'instant', validity: 0, expiry: '—',
+    scalpSection: false,
+  },
+  active: {
+    status: {cls:'scn-status active', text:'ACTIVE'},
+    pipe: 'exec',
+    health: true, healthVal: 79, healthBar: 79, healthClass: '', trend: 'Confiance à l\'entrée : 79/100 — scénario tout juste activé', trendClass: 'stable',
+    confVal: 79, confBar: 79,
+    checks: {zone:['✓ Oui','var(--green)'], reaction:['✓ Rejet mèche confirmé','var(--green)'], risk:['✓ 1 position, acceptable','var(--green)'], market:['✓ Londres, ATR normal','var(--green)']},
+    age: '6 min', validity: 13, expiry: '10:52',
+    scalpSection: true,
+    scalps: [
+      {tag:'ANCHOR', tagClass:'anchor', dir:'BUY', price:'4 086.50 → TP 4 092.00', status:'Ouverte', statusClass:'open'},
+      {tag:'SCALP', tagClass:'', dir:'BUY', price:'4 088.00 → TP 4 091.00', status:'Ouverte', statusClass:'open'},
+    ],
+    gate: '<span class="ok">✓</span> Scalp autorisé — scénario ACTIVE, prix dans zone favorable, risque panier acceptable, micro-opportunité détectée à 4088.',
+  },
+  degraded: {
+    status: {cls:'scn-status degraded', text:'DEGRADED'},
+    pipe: 'exec',
+    health: true, healthVal: 45, healthBar: 45, healthClass: 'crit', trend: '▼ -34 pts depuis l\'activation (79 → 45) — momentum ralentit, liquidité absorbée', trendClass: 'down',
+    confVal: 79, confBar: 79,
+    checks: {zone:['✓ Oui','var(--green)'], reaction:['✓ Oui (à l\'origine)','var(--green)'], risk:['✓ Acceptable','var(--green)'], market:['✓ Compatible','var(--green)']},
+    age: '11 min', validity: 24, expiry: '10:52',
+    scalpSection: true,
+    scalps: [
+      {tag:'ANCHOR', tagClass:'anchor', dir:'BUY', price:'4 086.50 — sécurisation SL en cours', status:'Sécurisation', statusClass:'securing'},
+      {tag:'SCALP', tagClass:'', dir:'BUY', price:'4 088.00 → clôturé +2.10$', status:'Fermée', statusClass:'closed'},
+    ],
+    gate: '<span class="no">✗</span> Scalp refusé — scenario_health (45) sous le seuil de dégradation. scalp_allowed=false. Dynamic Position Manager sécurise les positions ouvertes avant que le prix n\'atteigne l\'invalidation (4082).',
+  },
+  invalidated: {
+    status: {cls:'scn-status invalidated', text:'INVALIDATED'},
+    pipe: 'exec',
+    health: true, healthVal: 18, healthBar: 18, healthClass: 'crit', trend: '▼ Scénario invalidé — santé tombée sous le seuil critique avant même que le prix touche 4082', trendClass: 'down',
+    confVal: 79, confBar: 79,
+    checks: {zone:['✓ Oui','var(--green)'], reaction:['✗ Retournement confirmé','var(--red)'], risk:['✓ Acceptable','var(--green)'], market:['✓ Compatible','var(--green)']},
+    age: '17 min', validity: 38, expiry: '10:52',
+    scalpSection: true,
+    scalps: [
+      {tag:'ANCHOR', tagClass:'anchor', dir:'BUY', price:'4 086.50 → clôturé +1.20$ (sécurisé avant invalidation)', status:'Fermée', statusClass:'closed'},
+      {tag:'SCALP', tagClass:'', dir:'BUY', price:'4 088.00 → clôturé +2.10$', status:'Fermée', statusClass:'closed'},
+    ],
+    gate: 'Scénario archivé. Résultat net sur ce scénario : <b style="color:var(--green)">+3.30$</b> — sécurisé par dégradation de santé, sans attendre le giveback $ fixe ni l\'invalidation prix.',
+  },
+};
+
+function setState(name) {
+  document.querySelectorAll('.scenario-switch button').forEach(b => b.classList.toggle('active', b.dataset.st === name));
+  const s = STATES[name];
+
+  const badge = document.getElementById('scnStatus');
+  badge.className = s.status.cls;
+  badge.textContent = s.status.text;
+
+  document.getElementById('scnConfVal').innerHTML = s.confVal + '<small>/100</small>';
+  document.getElementById('scnConfBar').style.width = s.confBar + '%';
+
+  const healthBlock = document.getElementById('scnHealthBlock');
+  healthBlock.style.display = s.health ? 'block' : 'none';
+  if (s.health) {
+    document.getElementById('scnHealthVal').innerHTML = s.healthVal + '<small>/100</small>';
+    const hb = document.getElementById('scnHealthBar');
+    hb.style.width = s.healthBar + '%';
+    hb.className = 'fill' + (s.healthClass ? ' ' + s.healthClass : '');
+    const tr = document.getElementById('scnTrend');
+    tr.textContent = s.trend;
+    tr.className = 'scn-trend ' + s.trendClass;
+  }
+
+  for (const [k, [txt, color]] of Object.entries(s.checks)) {
+    const el = document.getElementById('chk' + k.charAt(0).toUpperCase() + k.slice(1));
+    el.textContent = txt;
+    el.style.color = color;
+  }
+
+  document.getElementById('scnAge').textContent = s.age;
+  document.getElementById('scnValidityBar').style.width = s.validity + '%';
+  document.getElementById('scnExpiry').textContent = s.expiry;
+
+  const scalpSection = document.getElementById('scnScalpSection');
+  scalpSection.style.display = s.scalpSection ? 'block' : 'none';
+  if (s.scalpSection) {
+    document.getElementById('scalpList').innerHTML = s.scalps.map(sc =>
+      `<div class="scalp-row"><span class="tag ${sc.tagClass}">${sc.tag}</span><span class="d">${sc.dir}</span><span class="p">${sc.price}</span><span class="st ${sc.statusClass}">${sc.status}</span></div>`
+    ).join('');
+    document.getElementById('gateNote').innerHTML = s.gate;
+  }
+
+  ['Gen','Val','Caio','Exec'].forEach(step => document.getElementById('pipe' + step).classList.remove('on'));
+  const order = ['gen', 'val', 'caio', 'exec'];
+  const upTo = order.indexOf(s.pipe);
+  order.slice(0, upTo + 1).forEach(step => {
+    document.getElementById('pipe' + step.charAt(0).toUpperCase() + step.slice(1)).classList.add('on');
+  });
+}
+
+setState('candidate');
+</script>
+
+</body>
+</html>

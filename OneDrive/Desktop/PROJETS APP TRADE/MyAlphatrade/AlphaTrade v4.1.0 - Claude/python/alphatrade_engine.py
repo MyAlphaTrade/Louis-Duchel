@@ -23,6 +23,14 @@ import calendar_tracker
 from agent_report import AgentReport, make_agent_report, sort_by_priority, PRIORITY_ORDER
 from economic_calendar import economic_calendar_report
 from shared_memory import SHARED_MEMORY
+from scenario import Scenario, ScenarioEvent, make_scenario, activate_scenario, close_scenario
+from scenario_generator import (
+    generate_scenario, validate_scenario, evaluate_scenario_health, evaluate_scalp_opportunity,
+    scenario_learning_stats, scenario_weight_adjustments, SCENARIO_WEIGHTS, volatility_score,
+)
+from trading_style_engine import recommend_trading_style
+from portfolio_brain import basket_exposure, portfolio_risk_assessment
+from market_microstructure_gold import gold_microstructure_score
 from slack_notifier import notify_slack, blocks_caio_go, blocks_mission_target, blocks_trading_toggle, SLACK_GREEN, SLACK_RED
 # v5.1.0 -- modules purs recuperes depuis l'historique git (commit f5f6403,
 # 15/07/2026, "KB1-KB8"), non touches par le retrait de KB1000 comme moteur
@@ -42,7 +50,7 @@ from market_smart_money import (
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
-VERSION = "5.1.0"
+VERSION = "5.1.1"
 # v5.1.0 -- version propre au "Gold AI Brain" (CAIO/Mission Manager/Structure/
 # Smart Money/Risk), independante de VERSION : premiere version de ce
 # sous-systeme entierement nouveau, ne suit pas le numero de l'application.
@@ -131,6 +139,63 @@ DEFAULT_PARAMS = {
     # reel sans validation demo dediee (voir plan de securite de la
     # Proposition Technique v5.1.0).
     "gold_brain_enabled": False,
+    # v5.1.1 Phase 2 -- Market Scenario Engine, observation uniquement (aucune
+    # decision d'execution ne depend de ce flag tant que le CAIO scenario,
+    # Phase 3, n'existe pas). Defaut False, meme securite que gold_brain_enabled.
+    "scenario_engine_enabled": False,
+    # v5.1.1 Phase 4 -- seuil sous lequel scenario_health (vivant) fait
+    # basculer un scenario ACTIVE en DEGRADED (securisation avant que le prix
+    # n'atteigne invalidation_price). Distinct de caio_min_confidence (seuil
+    # d'activation, une seule fois, a l'entree).
+    "scenario_health_degradation_threshold": 45.0,
+    # Seuil d'activation dedie au CAIO scenario (Phase 3), distinct de
+    # caio_min_confidence (ancien pipeline) -- voir caio_decide_scenario().
+    # Defaut 60, calibre sur la distribution reelle du Scenario Replay du
+    # 04/08/2026 (median 64,4/100 sur 565 scenarios) -- a affiner par la
+    # Phase 5 (Learning) une fois assez de resultats accumules.
+    "scenario_caio_min_confidence": 60.0,
+    # v5.1.1 Phase 4/chantier 2 -- seuil du Gold Microstructure Engine pour
+    # detecter une "micro_opportunity" (scalp) dans evaluate_scalp_opportunity().
+    # Meme echelle 0-100 que gold_microstructure_score(). Voir market_microstructure_gold.py.
+    "scenario_microstructure_min": 60.0,
+    # v5.1.1 -- analyse du Scenario Replay 58j du 05/08/2026 (949 scenarios
+    # resolus) : regime CORRECTION a esperance negative (-0,13R/scenario,
+    # winrate 38,5% BUY comme SELL) -- signature d'un marche indecis (les
+    # pertes mettent PLUS longtemps a se resoudre que les gains, l'inverse du
+    # schema sain vu en UPTREND/DOWNTREND). Defaut True : aucun scenario
+    # genere tant que le regime reste CORRECTION. Voir generate_scenario().
+    "scenario_block_correction_regime": True,
+    # v5.1.1 -- meme analyse (58j, 05/08/2026) : session Londres a un vrai
+    # gradient de winrate selon la confiance (33% sous 65, 47-50% au-dessus
+    # de 70) -- contrairement a CORRECTION, pas bloquee, juste une barre plus
+    # haute que le seuil general. S'applique en plus de scenario_caio_min_confidence
+    # (jamais en dessous). Voir caio_decide_scenario().
+    "scenario_london_min_confidence": 70.0,
+    # v5.1.1 -- 05/08/2026, bug trouve en observation reelle : throttle du
+    # Dynamic Position Manager (evite de recalculer scenario_health depuis
+    # une bougie M1 encore en formation a chaque tick de la boucle
+    # principale -- source du bruit ACTIVE<->DEGRADED observe en direct,
+    # plusieurs fois par seconde). Voir LAST_DPM_EVAL_AT/scenario_engine_step().
+    "scenario_health_reeval_interval_sec": 3.0,
+    # v5.1.1 chantier 3 -- Trading Style Engine (trading_style_engine.py) :
+    # recommande un strategy_mode a partir du regime/volatilite reels,
+    # observation seule (n'ecrit jamais strategy_mode). Defaut False, meme
+    # securite que scenario_engine_enabled -- voir trading_style_engine_step().
+    "trading_style_engine_enabled": False,
+    # v5.1.1 chantier 4 -- Portfolio Brain (portfolio_brain.py) : agrege les
+    # positions BOT ouvertes simultanement sur XAUUSD (principale/renfort/
+    # rebond/scalp) -- biais directionnel net, perte flottante en % de
+    # l'equite, detection hedge. N'ecrit rien, ne bloque rien lui-meme --
+    # observation seule, meme securite que scenario_engine_enabled.
+    "portfolio_brain_enabled": False,
+    # Limites du panier XAUUSD -- distinctes de auto_max_positions/
+    # symbols.XAUUSD.max_positions (comptage "nouvelles entrees", deja
+    # verifie proceduralement, inchange) : ici c'est l'EXPOSITION DEJA
+    # OUVERTE qui est evaluee, tous types de positions confondus.
+    "portfolio_max_positions": 5,
+    "portfolio_max_total_lot": 0.0,  # 0 = pas de plafond de lot total (meme convention que max_floating_loss)
+    "portfolio_floating_loss_warn_pct": 2.0,
+    "portfolio_floating_loss_critical_pct": 5.0,
     "fast_be_enabled": True,
     "profit_protection_enabled": True,
     "profit_drawdown_pct": 30.0,
@@ -273,6 +338,40 @@ def entry_policy_for_mode(mode: str) -> str:
     profile = STRATEGY_PROFILES.get(mode, STRATEGY_PROFILES["scalping_fast"])
     return profile.get("entry_policy", "immediate")
 
+
+def trading_style_engine_step(
+    params: dict, structure_report: AgentReport, candles: list[dict], now: datetime | None = None,
+) -> dict | None:
+    """v5.1.1 chantier 3 -- Trading Style Engine, observation seule (meme
+    garde que Phase 2-5 du Scenario Engine). Calcule ce que `strategy_mode`
+    DEVRAIT etre a partir du regime reel (Structure Analyst) et de la
+    volatilite reelle (meme bucketing que scenario_generator.py), journalise
+    la recommandation dans trading_style_log.jsonl et TRADING_STYLE_STATE
+    pour une future UI (chantier 5) -- mais n'ecrit JAMAIS params["strategy_mode"].
+    Retourne None si desactive (`trading_style_engine_enabled`, defaut False)."""
+    if not bool(params.get("trading_style_engine_enabled", False)):
+        return None
+    now = now or datetime.now(timezone.utc)
+    regime = (structure_report.metadata or {}).get("regime")
+    vol_score = volatility_score(candles)
+    volatility = "high" if vol_score >= 65 else "low" if vol_score <= 35 else "medium"
+    recommendation = recommend_trading_style(regime, volatility)
+    current_mode = str(params.get("strategy_mode") or "scalping_fast")
+    entry = {
+        "at": now.isoformat(),
+        "current_mode": current_mode,
+        "recommended_mode": recommendation["mode"],
+        "matches_current": recommendation["mode"] == current_mode,
+        "regime": recommendation["regime"],
+        "volatility": recommendation["volatility"],
+        "reason": recommendation["reason"],
+    }
+    TRADING_STYLE_STATE.clear()
+    TRADING_STYLE_STATE.update(entry)
+    append_jsonl("trading_style_log.jsonl", entry)
+    return entry
+
+
 AI_SERVER_STATE = {
     "enabled": True,
     "connected": False,
@@ -288,17 +387,6 @@ CLOSE_ATTEMPTS: dict[int, float] = {}
 TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {tp_done, be_applied}}
 FAST_BE_STATE: dict[int, bool] = {}  # {ticket: True} une fois le Break-Even rapide appliqué (fast_breakeven_step)
 
-# Symboles déjà abonnés au vrai carnet d'ordres MT5 (Depth of Market) — évite de
-# rappeler market_book_add() à chaque tick, l'abonnement reste actif tant que
-# l'engine tourne. Alimente microstructure_book_levels() ci-dessous.
-MARKET_BOOK_SUBSCRIBED: set[str] = set()
-# Dernier statut connu (par symbol_key) : True si le broker fournit un vrai
-# carnet multi-niveaux pour ce symbole, False sinon (repli sur l'approximation
-# par tick unique — OBI/Kyle λ restent alors mathématiquement à 0, limite réelle
-# de données que ce booléen permet d'exposer honnêtement plutôt que de la
-# cacher derrière une valeur qui ressemble à une vraie lecture).
-MICROSTRUCTURE_DOM_STATUS: dict[str, bool] = {}
-
 # ── Module Capture Rebond ──────────────────────────────────────────────────────
 # Gère les positions contra-tendance sur rebonds identifiés via zones S&D
 # multi-timeframe. La position principale reste ouverte; seul le rebond est
@@ -310,6 +398,30 @@ REBOND_META: dict = {
     "last_scan": 0.0,         # Dernier scan des zones
     "last_rebond_at": 0.0,    # Dernier rebond ouvert (cooldown)
 }
+
+# v5.1.1 Phase 2 -- Market Scenario Engine. Objet de travail du process
+# (comme REBOND_STATES/TAKE_PROFIT_STATE/FAST_BE_STATE), sa forme serialisee
+# (.to_dict()) est publiee dans SHARED_MEMORY["active_scenarios"] pour les
+# autres lecteurs (UI, futur CAIO scenario). Un seul scenario actif a la
+# fois -- principe mono-actif XAUUSD deja etabli.
+CURRENT_SCENARIO: Scenario | None = None
+# v5.1.1 -- 05/08/2026, bug trouve en observation reelle : sans throttling,
+# dynamic_position_manager_step() se relancait a chaque tick de la boucle
+# principale (0,5s, puis 0,1s -- voir plus bas), recalculant scenario_health
+# depuis des bougies M1 encore en formation. Resultat observe : la sante
+# oscillait entre ~35 et ~68 plusieurs fois par seconde (ACTIVE<->DEGRADED
+# en boucle), pur bruit intra-bougie, pas un vrai changement de marche.
+# Suit le meme domaine temporel que `now` (reel en live, simule en replay) --
+# JAMAIS time.time(), sinon le rejeu (qui tourne en boucle serree sur un
+# temps simule) supprimerait quasiment toutes les reevaluations. Reinitialise
+# a None au debut/fin de run_scenario_replay(), meme principe que CURRENT_SCENARIO.
+LAST_DPM_EVAL_AT: datetime | None = None
+
+# v5.1.1 chantier 3 -- Trading Style Engine. Derniere recommandation connue
+# (meme statut que AI_SERVER_STATE/REBOND_META : instantane de travail du
+# process, pas persiste au-dela du redemarrage). Observation seule -- ne
+# remplace jamais params["strategy_mode"], voir trading_style_engine_step().
+TRADING_STYLE_STATE: dict = {}
 
 try:
     import MetaTrader5 as mt5  # type: ignore
@@ -365,9 +477,71 @@ def log(message: str, level: str = "INFO") -> None:
         handle.write(line + "\n")
 
 
+def log_reason_throttled(state: dict, reason: str, *, min_interval_sec: float = 3.0) -> None:
+    """Journalise `reason` au plus une fois toutes les `min_interval_sec` --
+    05/08/2026, bug de spam trouve en observation reelle : le texte de
+    `reason` embarque souvent un pourcentage qui change legerement a chaque
+    cycle (ex: "confiance 67,6%" -> "67,7%" -> "67,8%"...), ce qui rendait
+    l'ancien garde-fou `if state.get("reason") != reason` inefficace -- il
+    considerait chaque variation comme un nouveau message et journalisait a
+    chaque cycle. Devenu tres visible une fois la boucle principale accelere
+    a 0,1s (voir time.sleep() dans main()). Throttle pur sur le temps, pas
+    sur le texte : la MEME situation bloquee ne doit pas spammer le Journal,
+    peu importe si le chiffre affiche bouge legerement."""
+    now = time.time()
+    last_at = float(state.get("_last_reason_log_at", 0.0))
+    if now - last_at < min_interval_sec:
+        return
+    log(reason, "INFO")
+    state["_last_reason_log_at"] = now
+
+
 def append_jsonl(name: str, payload: dict) -> None:
     with (DATA_DIR / name).open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
+
+
+def load_scenario_weights() -> dict[str, float]:
+    """Branchement Phase 5 (05/08/2026) -- lit scenario_learned_weights.json
+    (ecrit par run_scenario_learning()) et retourne ses `learned_weights` si
+    le fichier existe et est valide (mêmes 6 cles que SCENARIO_WEIGHTS,
+    valeurs numeriques). Retombe sur SCENARIO_WEIGHTS (constante figee) si le
+    fichier est absent, corrompu, ou incomplet -- jamais d'exception propagee
+    jusqu'au cycle de trading pour un probleme de calibration."""
+    try:
+        data = read_json("scenario_learned_weights.json", None)
+        if not data:
+            return SCENARIO_WEIGHTS
+        learned = data.get("learned_weights")
+        if not isinstance(learned, dict) or set(learned) != set(SCENARIO_WEIGHTS):
+            return SCENARIO_WEIGHTS
+        return {k: float(v) for k, v in learned.items()}
+    except Exception as exc:  # noqa: BLE001 -- calibration optionnelle, ne doit jamais casser le cycle
+        log(f"Scenario Learning: lecture scenario_learned_weights.json echouee ({exc}), poids par defaut utilises.", "WARNING")
+        return SCENARIO_WEIGHTS
+
+
+def log_scenario_event(scenario: Scenario, log_name: str = "scenario_log.jsonl") -> None:
+    """Journalise l'etat courant d'un Scenario dans scenario_log.jsonl --
+    correction de Louis du 04/08/2026 : le scenario doit garder trace de
+    pourquoi la zone existe, pourquoi elle etait valide/invalide, combien de
+    fois le prix a reagi dessus, et son resultat final -- sinon "il restera
+    juste un filtre sophistique", jamais exploitable pour l'extension future
+    de calibration statistique (toujours v5.1.1, pas une version separee).
+    Meme convention append-only que caio_decisions.jsonl/learning_events.jsonl.
+
+    Ecrit `scenario.to_dict()` en entier a chaque appel (y compris `history`
+    et l'alias `health_curve`) -- une ligne par changement d'etat, pas
+    seulement a la cloture, pour pouvoir reconstruire toute la trajectoire
+    (scenario_confidence -> scenario_health -> outcome) sans avoir a rejouer
+    les transitions.
+
+    Appele depuis scenario_engine_step() (Phase 2), lui-meme branche dans
+    auto_trade_step() derriere `scenario_engine_enabled` -- observation
+    uniquement, aucune position reelle n'en depend. `log_name` : parametrable
+    pour le Scenario Replay (scenario_replay_log.jsonl, v5.1.1), jamais
+    melange avec les vraies donnees d'observation live."""
+    append_jsonl(log_name, scenario.to_dict())
 
 
 def merge_params() -> dict:
@@ -982,6 +1156,39 @@ def fetch_candles(symbol: str, timeframe: str, limit: int) -> list[dict]:
         {"open": float(r[1]), "high": float(r[2]), "low": float(r[3]), "close": float(r[4])}
         for r in rates
     ]
+
+
+def gold_microstructure_snapshot(symbol_names: dict[str, str], params: dict) -> dict:
+    """v5.1.1 chantier 2 -- instantane du Gold Microstructure Engine
+    (market_microstructure_gold.py) pour l'onglet Microstructure de l'app.
+    Distinct de `microstructure.snapshot()` (OBI/Kyle lambda, market_microstructure.py,
+    carnet d'ordres crypto/DOM -- indisponible sur XAUUSD, voir l'audit du
+    04/08/2026) : ici les bougies XAUUSD elles-memes sont la donnee, toujours
+    disponibles via MT5, deja utilisees reellement par scenario_confidence et
+    evaluate_scalp_opportunity() (chantier 2) -- ce bloc rend ce calcul visible,
+    au lieu de rester invisible derriere le Scenario Engine (demande de Louis,
+    05/08/2026 : l'onglet Microstructure existant n'avait pas ete adapte).
+    Aucune direction de scenario n'existe forcement a cet instant (ce bloc
+    tourne independamment de scenario_engine_enabled) -- calcule donc le score
+    pour BUY et SELL, les deux lectures possibles du meme instantane de marche."""
+    symbol = symbol_names.get("XAUUSD")
+    if not symbol:
+        return {"available": False, "reason": "XAUUSD indisponible."}
+    timeframe = str(params.get("symbols", {}).get("XAUUSD", {}).get("timeframe", "M5"))
+    candles = fetch_candles(symbol, timeframe, 30)
+    if len(candles) < 12:
+        return {"available": False, "reason": "Pas assez de bougies recentes."}
+    buy = gold_microstructure_score(candles, "BUY")
+    sell = gold_microstructure_score(candles, "SELL")
+    return {
+        "available": True,
+        "timeframe": timeframe,
+        "velocity": buy["velocity"],  # direction-agnostique, identique pour BUY/SELL
+        "acceleration": buy["acceleration"],
+        "size_trend": buy["size_trend"],
+        "buy": {"score": buy["score"], "rejection": buy["rejection"]},
+        "sell": {"score": sell["score"], "rejection": sell["rejection"]},
+    }
 
 
 def symbol_analysis(symbol: str, params: dict, symbol_key: str | None = None, learning_state: dict | None = None) -> dict:
@@ -1866,6 +2073,38 @@ def risk_manager_report(
         now=now,
     )
     SHARED_MEMORY.write_report("risk", "risk_manager", report, now=now)
+    return report
+
+
+def portfolio_brain_report(params: dict, positions: list[dict], equity: float, now: datetime | None = None) -> AgentReport:
+    """Portfolio Brain (v5.1.1, chantier 4) -- formalise l'exposition du
+    panier XAUUSD (positions BOT ouvertes simultanement) en AgentReport,
+    meme contrat que risk_manager_report(). `positions` : deja filtrees par
+    l'appelant sur le symbole actif (voir trading_style_engine_step() pour
+    le meme principe de filtrage cote appelant plutot que dans le module pur).
+    Observation seule : ne ferme et ne bloque aucune position elle-meme."""
+    now = now or datetime.now(timezone.utc)
+    exposure = basket_exposure(positions, equity)
+    assessment = portfolio_risk_assessment(
+        exposure,
+        max_positions=int(params.get("portfolio_max_positions", 5)),
+        max_total_lot=float(params.get("portfolio_max_total_lot", 0.0) or 0.0),
+        floating_loss_warn_pct=float(params.get("portfolio_floating_loss_warn_pct", 2.0)),
+        floating_loss_critical_pct=float(params.get("portfolio_floating_loss_critical_pct", 5.0)),
+    )
+    report = make_agent_report(
+        "portfolio_brain",
+        status="OK",
+        confidence=assessment["confidence"],
+        priority=assessment["priority"],
+        recommendation={"action": assessment["action"], "exposure": exposure},
+        arguments=assessment["reasons"] if assessment["reasons"] else [f"Panier XAUUSD dans les limites ({exposure['position_count']} position(s))."],
+        risks=assessment["reasons"],
+        ttl_seconds=30,
+        now=now,
+        metadata={"exposure": exposure},
+    )
+    SHARED_MEMORY.write_report("portfolio", "portfolio_brain", report, now=now)
     return report
 
 
@@ -3542,6 +3781,384 @@ def gold_brain_snapshot(
     }
 
 
+def caio_decide_scenario(scenario: Scenario, params: dict, *, now: datetime | None = None) -> dict:
+    """CAIO -- mode (a), arbitre un scenario deja VALIDATED (v5.1.1 Phase 3,
+    section 4.3 de Architecture_ScenarioEngine_v5.1.1.html). Ne cree pas la
+    validite -- deja faite par le Scenario Validator (Phase 2) -- decide
+    seulement si la confiance justifie l'activation, meme philosophie que
+    caio_decide() : NO_TRADE (ici WAIT) est une decision legitime, pas un
+    defaut par manque d'idee.
+
+    Seuil dedie `scenario_caio_min_confidence`, DISTINCT de `caio_min_confidence`
+    (celui de l'ancien CAIO/pipeline classique) -- bug trouve via le Scenario
+    Replay du 04/08/2026 : reutiliser le meme seuil (75, calibre pour un score
+    a agent unique) bloquait 99,8% des 565 scenarios generes sur 30j (median
+    Scenario Confidence 64,4/100, max observe 75,3). Defaut 60 ici, choisi sur
+    la distribution reelle observee (~82% des scenarios generes l'atteignent) --
+    a affiner par la Phase 5 (Learning) une fois assez de resultats WIN/LOSS
+    accumules.
+
+    Regle d'or absolue (garde d'observation obligatoire posee par Louis,
+    04/08/2026, section 11) : cette fonction transitionne VALIDATED -> ACTIVE
+    (via activate_scenario()) mais N'APPELLE JAMAIS place_order()/
+    open_position(). Aucune position reelle n'est ouverte a partir d'un
+    scenario tant que cette garde n'est pas levee explicitement -- l'activation
+    ici est une decision tracee (scenario_log.jsonl), comparable a la
+    "decision simulee" du mode observation, pas une execution.
+
+    Seuil relève en session Londres (05/08/2026, analyse du Scenario Replay
+    58j) : winrate par tranche de confiance en session londres --
+    [60-65)=33,3% (n=24), [65-70)=35,1% (n=97), [70-75)=47,6% (n=82),
+    [75-80)=50,0% (n=10). Gradient net (contrairement a CORRECTION, ou la
+    confiance ne discriminait pas) : Londres reste exploitable, juste avec
+    une barre plus haute -- `scenario_london_min_confidence` (defaut 70)
+    s'applique en plus de `scenario_caio_min_confidence` (jamais en dessous,
+    voir max() plus bas)."""
+    now = now or datetime.now(timezone.utc)
+    if scenario.status != "VALIDATED":
+        return {"decision": "WAIT", "reason": f"Scenario non VALIDATED (status={scenario.status})."}
+    min_confidence = float(params.get("scenario_caio_min_confidence", 60.0))
+    if (scenario.market_context or {}).get("session") == "london":
+        min_confidence = max(min_confidence, float(params.get("scenario_london_min_confidence", 70.0)))
+    if scenario.scenario_confidence < min_confidence:
+        return {
+            "decision": "WAIT",
+            "reason": (
+                f"Scenario Confidence ({scenario.scenario_confidence:.0f}) sous le seuil "
+                f"({min_confidence:.0f}) -- le meilleur trade est parfois de ne rien faire."
+            ),
+        }
+    activate_scenario(
+        scenario, f"CAIO active le scenario (confiance {scenario.scenario_confidence:.0f}).", now=now,
+    )
+    return {"decision": "GO", "reason": f"Scenario active avec confiance {scenario.scenario_confidence:.0f}."}
+
+
+def dynamic_position_manager_step(
+    scenario: Scenario,
+    params: dict,
+    current_price: float,
+    structure_report: AgentReport,
+    smart_money_report: AgentReport,
+    risk_report: AgentReport,
+    candles: list[dict],
+    analysis: dict,
+    now: datetime | None = None,
+    log_name: str = "scenario_log.jsonl",
+) -> None:
+    """Dynamic Position Manager (v5.1.1, Phase 4, mode b du CAIO -- section 9
+    de Architecture_ScenarioEngine_v5.1.1.html). Pour un scenario ACTIVE/
+    DEGRADED : recalcule scenario_health en continu, fait basculer
+    ACTIVE<->DEGRADED selon `scenario_health_degradation_threshold`, cloture
+    le scenario si invalidation_price est franchi / le dernier target est
+    atteint / le delai de validite expire, et evalue une opportunite de
+    scalp (4 conditions -- ancien renfort directionnel remplace, point 6 de
+    la relecture de Louis).
+
+    Garde d'observation obligatoire inchangee : AUCUN appel a place_order()/
+    open_position() ici. Les clotures produisent un outcome/outcome_profit
+    SIMULES (distance de prix en points, pas un P&L reel) -- 'decision
+    simulee', pour que scenario_log.jsonl accumule des resultats exploitables
+    avant meme l'activation de l'execution reelle."""
+    now = now or datetime.now(timezone.utc)
+    if scenario.status not in ("ACTIVE", "DEGRADED"):
+        return
+
+    points = current_price - float(scenario.anchor_plan.get("entry", current_price))
+    if scenario.direction == "SELL":
+        points = -points
+
+    invalidated = (
+        (scenario.direction == "BUY" and current_price <= scenario.invalidation_price)
+        or (scenario.direction == "SELL" and current_price >= scenario.invalidation_price)
+    )
+    if invalidated:
+        close_scenario(
+            scenario, "INVALIDATED", "LOSS_SIMULATED", profit=round(points, 5),
+            note=f"Invalidation atteinte (prix {current_price}, seuil {scenario.invalidation_price}).", now=now,
+        )
+        log_scenario_event(scenario, log_name)
+        return
+
+    last_target = scenario.targets[-1]["price"] if scenario.targets else None
+    completed = last_target is not None and (
+        (scenario.direction == "BUY" and current_price >= last_target)
+        or (scenario.direction == "SELL" and current_price <= last_target)
+    )
+    if completed:
+        close_scenario(
+            scenario, "COMPLETED", "WIN_SIMULATED", profit=round(points, 5),
+            note=f"Dernier target atteint ({last_target}).", now=now,
+        )
+        log_scenario_event(scenario, log_name)
+        return
+
+    if scenario.is_expired(now):
+        outcome = "WIN_SIMULATED" if points > 0 else "LOSS_SIMULATED" if points < 0 else "BREAKEVEN_SIMULATED"
+        close_scenario(
+            scenario, "EXPIRED", outcome, profit=round(points, 5),
+            note="Duree de validite maximale depassee (scenario actif).", now=now,
+        )
+        log_scenario_event(scenario, log_name)
+        return
+
+    before_status = scenario.status
+    health = evaluate_scenario_health(
+        scenario, structure_report, smart_money_report, candles, analysis, now=now, weights=load_scenario_weights(),
+    )
+    scenario.update_health(health, f"Sante recalculee ({health:.0f}).", now=now)
+    threshold = float(params.get("scenario_health_degradation_threshold", 45.0))
+    if health < threshold and scenario.status == "ACTIVE":
+        scenario.scalp_allowed = False
+        scenario.transition("DEGRADED", f"Sante ({health:.0f}) sous le seuil ({threshold:.0f}).", now=now)
+    elif health >= threshold and scenario.status == "DEGRADED":
+        scenario.scalp_allowed = True
+        scenario.transition("ACTIVE", f"Sante remontee ({health:.0f}) au-dessus du seuil ({threshold:.0f}).", now=now)
+    if scenario.status != before_status:
+        log_scenario_event(scenario, log_name)
+
+    if scenario.status == "ACTIVE":
+        checks = evaluate_scalp_opportunity(
+            scenario, current_price, risk_report, analysis, now=now, candles=candles,
+            microstructure_min=float(params.get("scenario_microstructure_min", 60.0)),
+        )
+        if all(checks.values()):
+            scenario.simulated_scalp_count += 1
+            scenario.history.append(ScenarioEvent(
+                at=now.isoformat(), status=scenario.status,
+                note=f"Opportunite de scalp detectee (#{scenario.simulated_scalp_count}), aucun ordre reel.",
+                scenario_health=scenario.scenario_health,
+            ))
+            log_scenario_event(scenario, log_name)
+
+
+def scenario_engine_step(
+    params: dict,
+    symbol_key: str,
+    candles: list[dict],
+    current_price: float,
+    structure_report: AgentReport,
+    smart_money_report: AgentReport,
+    risk_report: AgentReport,
+    economic_report: AgentReport | None,
+    analysis: dict,
+    now: datetime | None = None,
+    log_name: str = "scenario_log.jsonl",
+) -> Scenario | None:
+    """Market Scenario Engine (v5.1.1, Phase 3) -- orchestre Scenario
+    Generator + Scenario Validator + CAIO scenario a chaque cycle, persiste
+    dans SHARED_MEMORY['active_scenarios'] et scenario_log.jsonl. Observation
+    uniquement : le CAIO peut activer un scenario (VALIDATED -> ACTIVE,
+    caio_decide_scenario) mais aucune position reelle n'est ouverte -- voir
+    la garde d'observation obligatoire documentee sur caio_decide_scenario().
+    Branche depuis auto_trade_step() derriere le flag `scenario_engine_enabled`
+    (regle d'integration de Louis, 04/08/2026 : aucun module ne doit rester
+    isole apres ses tests unitaires). `log_name` : utilise par le Scenario
+    Replay (run_scenario_replay()) pour ecrire dans scenario_replay_log.jsonl
+    plutot que scenario_log.jsonl, sans jamais melanger les deux."""
+    global CURRENT_SCENARIO, LAST_DPM_EVAL_AT
+    now = now or datetime.now(timezone.utc)
+
+    scenario = CURRENT_SCENARIO
+    if scenario is not None and (
+        scenario.symbol_key != symbol_key or scenario.status in ("INVALIDATED", "EXPIRED", "COMPLETED")
+    ):
+        scenario = None  # scenario clos ou d'un autre symbole -- on en cherche un nouveau
+
+    if scenario is None:
+        scenario = generate_scenario(
+            symbol_key, candles, current_price, structure_report, smart_money_report, analysis,
+            now=now, weights=load_scenario_weights(),
+            block_correction_regime=bool(params.get("scenario_block_correction_regime", True)),
+        )
+        if scenario is None:
+            return None
+        log_scenario_event(scenario, log_name)
+
+    if scenario.status in ("CANDIDATE", "VALIDATED"):
+        before_status = scenario.status
+        validate_scenario(scenario, current_price, smart_money_report, risk_report, economic_report, now=now)
+        if scenario.status != before_status:
+            log_scenario_event(scenario, log_name)
+
+    if scenario.status == "VALIDATED":
+        # v5.1.1 Phase 3 -- CAIO arbitre (mode a). Ne place jamais d'ordre
+        # reel (voir caio_decide_scenario()) : seule la transition VALIDATED
+        # -> ACTIVE change, tracee dans scenario_log.jsonl.
+        before_status = scenario.status
+        caio_decide_scenario(scenario, params, now=now)
+        if scenario.status != before_status:
+            log_scenario_event(scenario, log_name)
+
+    if scenario.status in ("ACTIVE", "DEGRADED"):
+        # v5.1.1 Phase 4 -- Dynamic Position Manager (mode b du CAIO). Journalise
+        # deja en interne (log_scenario_event) sur chaque changement pertinent.
+        # Throttle (05/08/2026, voir LAST_DPM_EVAL_AT) : evite de recalculer
+        # scenario_health depuis une bougie encore en formation a chaque tick
+        # de la boucle principale -- source du bruit ACTIVE<->DEGRADED observe
+        # en direct. Base sur `now` (pas time.time()), correct en live comme
+        # en rejeu (temps simule).
+        reeval_interval = max(0.5, float(params.get("scenario_health_reeval_interval_sec", 3.0)))
+        if LAST_DPM_EVAL_AT is None or (now - LAST_DPM_EVAL_AT).total_seconds() >= reeval_interval:
+            dynamic_position_manager_step(
+                scenario, params, current_price, structure_report, smart_money_report, risk_report, candles, analysis,
+                now=now, log_name=log_name,
+            )
+            LAST_DPM_EVAL_AT = now
+
+    CURRENT_SCENARIO = scenario
+    SHARED_MEMORY.write(
+        "active_scenarios", "scenario_generator", scenario.to_dict(), confidence=scenario.scenario_confidence, now=now,
+    )
+    return scenario
+
+
+def fetch_candles_range(symbol: str, timeframe: str, date_from: datetime, date_to: datetime) -> list[dict]:
+    """Bougies historiques sur une plage precise (mt5.copy_rates_range) --
+    distinct de fetch_candles() (les N dernieres bougies relatives a
+    maintenant). Utilise uniquement par le Scenario Replay (v5.1.1)."""
+    if mt5 is None:
+        return []
+    rates = mt5.copy_rates_range(symbol, tf_const(timeframe), date_from, date_to)
+    if rates is None:
+        return []
+    return [
+        {"open": float(r[1]), "high": float(r[2]), "low": float(r[3]), "close": float(r[4]), "time": int(r[0])}
+        for r in rates
+    ]
+
+
+def run_scenario_replay(params: dict, symbol_names: dict[str, str], days: int, step_candles: int = 5) -> None:
+    """Scenario Replay (v5.1.1) -- rejoue l'historique MT5 a travers EXACTEMENT
+    les memes fonctions que le cycle live (generate_scenario/validate_scenario/
+    caio_decide_scenario/dynamic_position_manager_step, via scenario_engine_step),
+    aucune logique de decision dupliquee. Reponse a la question de Louis du
+    04/08/2026 : plutot que d'attendre plusieurs semaines de collecte en
+    direct, rejoue ce qui existe deja.
+
+    Ecrit dans scenario_replay_log.jsonl -- JAMAIS dans scenario_log.jsonl,
+    pour ne jamais melanger donnees rejouees et donnees d'observation reelle.
+
+    Limites assumees et documentees (pas masquees) :
+    - risk_report est un rapport neutre synthetique -- aucun solde de compte
+      historique reconstituable, risk_ok toujours vrai en replay.
+    - economic_report est toujours absent -- l'API du calendrier economique
+      ne sert que la semaine courante, aucun historique disponible ;
+      market_ok toujours vrai en replay. Le Scenario Validator est donc
+      legerement plus permissif qu'en conditions live sur ces deux points.
+    - Comme le reste du Scenario Engine : aucun ordre MT5 reel, quel que
+      soit le resultat (meme garde d'observation que caio_decide_scenario()/
+      dynamic_position_manager_step())."""
+    global CURRENT_SCENARIO, LAST_DPM_EVAL_AT
+    active = str(params.get("active_symbol") or "XAUUSD")
+    symbol = symbol_names.get(active)
+    if not symbol:
+        log(f"Scenario Replay: symbole {active} introuvable dans symbol_names.", "ERROR")
+        return
+    symbol_params = params.get("symbols", {}).get(active, {})
+    timeframe = str(symbol_params.get("timeframe", "M5"))
+
+    date_to = datetime.now(timezone.utc)
+    date_from = date_to - timedelta(days=days)
+    log(f"Scenario Replay: chargement de l'historique {symbol} {timeframe} sur {days}j...", "INFO")
+    all_candles = fetch_candles_range(symbol, timeframe, date_from, date_to)
+    if len(all_candles) < 360:
+        log(f"Scenario Replay: historique insuffisant ({len(all_candles)} bougies) pour {days}j -- abandon.", "ERROR")
+        return
+
+    replay_log = "scenario_replay_log.jsonl"
+    (DATA_DIR / replay_log).unlink(missing_ok=True)  # rejeu propre a chaque lancement, jamais d'accumulation
+    CURRENT_SCENARIO = None
+    LAST_DPM_EVAL_AT = None
+    risk_report_neutral = make_agent_report(
+        "risk_manager", status="OK", confidence=70.0, priority="LOW",
+        recommendation={"action": "WAIT", "any_rejected": False},
+        arguments=["Replay -- pas de solde de compte historique reconstituable, risque suppose acceptable."],
+    )
+
+    window = 300  # meme profondeur d'analyse que le cycle live (fetch_candles(..., 300))
+    n_cycles = 0
+    scenario_ids_seen: set[str] = set()
+    for i in range(window, len(all_candles), max(1, step_candles)):
+        candles_window = all_candles[i - window:i]
+        bar = all_candles[i]
+        now_sim = datetime.fromtimestamp(bar["time"], tz=timezone.utc)
+        current_price = bar["close"]
+
+        structure_report = structure_analyst_report(candles_window, current_price, timeframe=timeframe, now=now_sim)
+        smart_money_report = smart_money_analyst_report(candles_window, current_price, now=now_sim)
+
+        scenario = scenario_engine_step(
+            params, active, candles_window, current_price,
+            structure_report, smart_money_report, risk_report_neutral, None, {},
+            now=now_sim, log_name=replay_log,
+        )
+        n_cycles += 1
+        if scenario is not None:
+            scenario_ids_seen.add(scenario.scenario_id)
+
+    CURRENT_SCENARIO = None  # ne laisse jamais un scenario rejoue fuiter dans l'etat live
+    LAST_DPM_EVAL_AT = None
+    log(
+        f"Scenario Replay termine: {n_cycles} cycles simules sur {days}j, "
+        f"{len(scenario_ids_seen)} scenarios generes -> {replay_log}.",
+        "SUCCESS",
+    )
+
+
+def run_scenario_learning(min_samples: int = 20) -> None:
+    """Scenario Learning (v5.1.1, Phase 5) -- lit scenario_log.jsonl (observation
+    live) + scenario_replay_log.jsonl (rejeu historique), calcule le winrate
+    par facteur categoriel (session/tendance/volatilite/direction) sur les
+    scenarios REELLEMENT resolus (WIN/LOSS simules -- un scenario jamais
+    active n'a rien a apprendre), et persiste des poids alternatifs bornes
+    dans scenario_learned_weights.json.
+
+    Volontairement prudent, meme philosophie que la formalisation
+    learning_manager_apply() pour le pipeline classique : cette fonction ne
+    modifie PAS encore le calcul live de scenario_confidence (SCENARIO_WEIGHTS
+    reste la constante active) -- elle produit et publie une recommandation
+    inspectable. Le branchement de scenario_learned_weights.json dans le
+    calcul reel est la prochaine etape, pas faite ici deliberement (garder
+    une etape ou l'ajustement est visible avant de le laisser influencer une
+    decision, meme simulee)."""
+    entries: list[dict] = []
+    for name in ("scenario_log.jsonl", "scenario_replay_log.jsonl"):
+        path = DATA_DIR / name
+        if not path.exists():
+            continue
+        by_id: dict[str, dict] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            by_id[d["scenario_id"]] = d  # garde le dernier etat connu de chaque scenario (deduplique)
+        entries.extend(by_id.values())
+
+    stats = scenario_learning_stats(entries, min_samples=min_samples)
+    if stats["n_resolved"] < min_samples:
+        log(
+            f"Scenario Learning: {stats['n_resolved']} scenarios resolus, sous le seuil ({min_samples}) -- rien appris.",
+            "INFO",
+        )
+        return
+
+    learned_weights = scenario_weight_adjustments(stats, SCENARIO_WEIGHTS)
+    write_json("scenario_learned_weights.json", {
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "n_resolved": stats["n_resolved"],
+        "overall_winrate": stats["overall_winrate"],
+        "base_weights": SCENARIO_WEIGHTS,
+        "learned_weights": learned_weights,
+        "stats": stats,
+    })
+    log(
+        f"Scenario Learning: {stats['n_resolved']} scenarios resolus, winrate {stats['overall_winrate']}% "
+        f"-> scenario_learned_weights.json mis a jour (pas encore applique au calcul live).",
+        "SUCCESS",
+    )
+
+
 def auto_trade_step(
     params: dict, symbol_names: dict[str, str], payload: dict, positions: list[dict], trades: list[dict] | None = None
 ) -> dict:
@@ -3606,8 +4223,66 @@ def auto_trade_step(
         except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
             log(f"Gold Brain (observation): {exc}", "ERROR")
 
+    # v5.1.1 Phase 2 -- Market Scenario Engine, observation uniquement (regle
+    # d'integration de Louis, 04/08/2026 : le flux doit exister reellement de
+    # auto_trade_step() jusqu'au log, meme si l'execution reste desactivee).
+    # Flag independant de gold_brain_enabled -- les deux peuvent tourner en
+    # parallele sans interference, aucun n'ecrit sur les positions ici.
+    if bool(params.get("scenario_engine_enabled", False)) and symbol:
+        try:
+            se_timeframe = str(symbol_params.get("timeframe", "M5"))
+            se_candles = fetch_candles(symbol, se_timeframe, 300)
+            se_analysis = payload.get("analysis", {}).get(active, {})
+            se_price = se_candles[-1]["close"] if se_candles else float(se_analysis.get("close") or 0)
+            se_structure = structure_analyst_report(se_candles, se_price, timeframe=se_timeframe)
+            se_smart_money = smart_money_analyst_report(se_candles, se_price)
+            se_risk = risk_manager_report(params, account, symbol_names)
+            se_econ = (
+                economic_calendar_report(symbol, block_hours=float(params.get("economic_calendar_block_hours", 2.0) or 2.0))
+                if bool(params.get("economic_calendar_enabled", True))
+                else None
+            )
+            state["scenario"] = None
+            scenario = scenario_engine_step(
+                params, active, se_candles, se_price, se_structure, se_smart_money, se_risk, se_econ, se_analysis,
+            )
+            if scenario is not None:
+                state["scenario"] = scenario.to_dict()
+        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
+            log(f"Scenario Engine (observation): {exc}", "ERROR")
+
+    # v5.1.1 chantier 3 -- Trading Style Engine, observation seule (meme regle
+    # d'integration que le Scenario Engine ci-dessus). Flag independant --
+    # peut tourner seul, avec le Scenario Engine, ou avec Gold Brain, sans
+    # interference (aucun n'ecrit sur les positions ici). Reutilise
+    # se_candles/se_structure du bloc precedent s'ils existent deja (evite un
+    # double fetch MT5 quand les deux moteurs sont actifs), sinon les calcule.
+    if bool(params.get("trading_style_engine_enabled", False)) and symbol:
+        try:
+            ts_candles = se_candles if "se_candles" in locals() else fetch_candles(symbol, str(symbol_params.get("timeframe", "M5")), 300)
+            ts_structure = se_structure if "se_structure" in locals() else structure_analyst_report(
+                ts_candles, ts_candles[-1]["close"] if ts_candles else 0.0, timeframe=str(symbol_params.get("timeframe", "M5")),
+            )
+            state["trading_style"] = trading_style_engine_step(params, ts_structure, ts_candles)
+        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
+            log(f"Trading Style Engine (observation): {exc}", "ERROR")
+
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     contexts = position_contexts()
+
+    # v5.1.1 chantier 4 -- Portfolio Brain, observation seule (meme regle
+    # d'integration que les autres chantiers post-Scenario-Engine). Utilise
+    # TOUTES les positions BOT du symbole actif (y compris rebond/renfort --
+    # contrairement a symbol_main_positions plus bas, qui les exclut
+    # deliberement du comptage "nouvelles entrees") : le panier, c'est bien
+    # l'exposition reelle deja ouverte, tous types confondus.
+    if bool(params.get("portfolio_brain_enabled", False)) and active:
+        try:
+            basket_positions = [p for p in bot_positions if p.get("symbol_key") == active]
+            equity = float(account.equity) if account else 0.0
+            state["portfolio"] = portfolio_brain_report(params, basket_positions, equity).to_dict()
+        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
+            log(f"Portfolio Brain (observation): {exc}", "ERROR")
 
     # Protection portefeuille : perte flottante totale par symbole (max_floating_loss)
     floating_breach: set[str] = set()
@@ -3692,8 +4367,7 @@ def auto_trade_step(
     decision = payload.get("simulated_decision", {})
     if not symbol or not decision.get("eligible"):
         reason = str(decision.get("reason") or "Aucun signal eligible.")
-        if state.get("reason") != reason:
-            log(reason, "INFO")
+        log_reason_throttled(state, reason)
         state["reason"] = reason
         save_trading_state(state)
         return state
@@ -3815,8 +4489,7 @@ def auto_trade_step(
         server_signal = str(server_reply.get("decision") or "WAIT")
         server_confidence = float(server_reply.get("confidence") or 0)
         message = f"Validation IA serveur: {server_signal} {server_confidence:.1f}% - {reason}"
-        if state.get("reason") != message:
-            log(message, "INFO")
+        log_reason_throttled(state, message)
         state["reason"] = message
         save_trading_state(state)
         return state
@@ -3854,18 +4527,48 @@ def auto_trade_step(
             payload, positions, trades, record=True,
         )
         state["gold_brain"] = snapshot
+        # Log persistant (02/08/2026, suite audit statistique complet) --
+        # learning_history (shared_memory.py) n'est qu'un instantane RAM, ecrase
+        # a chaque nouvelle decision et perdu au redemarrage : impossible de savoir
+        # retrospectivement quel trade a ete decide par Gold Brain plutot que par
+        # l'ancien pipeline. caio_decisions.jsonl comble ce trou, meme convention
+        # append-only que learning_events.jsonl/trade_exits.jsonl. Pas de ticket MT5
+        # ici (aucune des deux fonctions d'execution ne le retourne aujourd'hui) --
+        # correlation avec trades.json/alphatrade.db par horodatage + symbole +
+        # direction, a la precision pres du cycle (quelques secondes).
         if snapshot["decision"] != "GO":
             state["reason"] = f"Gold AI Brain: {snapshot['raison']}"
+            append_jsonl("caio_decisions.jsonl", {
+                "timestamp": utc_now(),
+                "symbol_key": active,
+                "decision": "NO_TRADE",
+                "source_agent": snapshot.get("source_agent"),
+                "raison": snapshot.get("raison"),
+                "order_attempted": False,
+            })
             save_trading_state(state)
             return state
         ok, message, _ = place_order(
             active, symbol, snapshot["order_type"], params, lot_info, analysis,
             allow_real_entry, price_hint=snapshot.get("price"), position_type=entry_position_type,
         )
+        winner_confidence = float(
+            (snapshot.get("reports", {}).get(snapshot.get("source_agent"), {}) or {}).get("confidence", 0) or 0
+        )
+        append_jsonl("caio_decisions.jsonl", {
+            "timestamp": utc_now(),
+            "symbol_key": active,
+            "decision": "GO",
+            "order_type": snapshot.get("order_type"),
+            "source_agent": snapshot.get("source_agent"),
+            "raison": snapshot.get("raison"),
+            "price": snapshot.get("price"),
+            "confidence": winner_confidence,
+            "order_attempted": True,
+            "order_ok": ok,
+            "order_message": message,
+        })
         if ok:
-            winner_confidence = float(
-                (snapshot.get("reports", {}).get(snapshot.get("source_agent"), {}) or {}).get("confidence", 0) or 0
-            )
             if winner_confidence >= float(params.get("slack_min_confidence", 70)):
                 notify_slack(
                     params, "caio_go", SLACK_GREEN if str(snapshot["order_type"]).startswith("BUY") else SLACK_RED,
@@ -4227,52 +4930,23 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
     }
 
 
-def microstructure_book_levels(symbol_key: str, mt5_symbol: str) -> tuple[list, list] | None:
-    """Tente de récupérer un vrai carnet d'ordres multi-niveaux (Depth of
-    Market) via MT5 pour ce symbole. C'est le vrai correctif de la limite
-    trouvée en Phase 6 : observe_mt5_tick() ne fournissait qu'une seule
-    cotation bid/ask avec le même volume des deux côtés, ce qui rendait OBI et
-    Kyle λ mathématiquement garantis à 0,0 quel que soit le marché. Les
-    formules elles-mêmes (order_book_imbalance/rolling_kyle_lambda dans
-    market_microstructure.py) sont correctes — il leur manquait juste de
-    vraies données. Si le broker/compte ne fournit pas de DOM pour ce symbole
-    (fréquent en CFD retail), retourne None : on ne doit jamais inventer une
-    valeur de volume qui ressemblerait à une vraie lecture."""
-    global MARKET_BOOK_SUBSCRIBED, MICROSTRUCTURE_DOM_STATUS
-    if mt5 is None:
-        return None
-    if mt5_symbol not in MARKET_BOOK_SUBSCRIBED:
-        if not mt5.market_book_add(mt5_symbol):
-            MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
-            return None
-        MARKET_BOOK_SUBSCRIBED.add(mt5_symbol)
-    book = mt5.market_book_get(mt5_symbol)
-    if not book:
-        MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
-        return None
-    buy_types = {mt5.BOOK_TYPE_BUY, mt5.BOOK_TYPE_BUY_MARKET}
-    sell_types = {mt5.BOOK_TYPE_SELL, mt5.BOOK_TYPE_SELL_MARKET}
-    bids = sorted(
-        ((float(row.price), float(row.volume_real or row.volume)) for row in book if int(row.type) in buy_types),
-        key=lambda level: -level[0],
-    )
-    asks = sorted(
-        ((float(row.price), float(row.volume_real or row.volume)) for row in book if int(row.type) in sell_types),
-        key=lambda level: level[0],
-    )
-    if not bids or not asks:
-        MICROSTRUCTURE_DOM_STATUS[symbol_key] = False
-        return None
-    MICROSTRUCTURE_DOM_STATUS[symbol_key] = True
-    return bids, asks
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="AlphaTrade MT5 monitoring engine")
     parser.add_argument(
         "--once",
         action="store_true",
         help="Write one status/history snapshot, then exit.",
+    )
+    parser.add_argument(
+        "--replay-days",
+        type=int,
+        default=0,
+        help="Scenario Replay (v5.1.1) -- rejoue N jours d'historique MT5 dans scenario_replay_log.jsonl, puis quitte. Aucun ordre reel.",
+    )
+    parser.add_argument(
+        "--learn",
+        action="store_true",
+        help="Scenario Learning (v5.1.1, Phase 5) -- calcule scenario_learned_weights.json depuis les logs existants, puis quitte. Aucun acces MT5 necessaire.",
     )
     return parser.parse_args()
 
@@ -4281,6 +4955,13 @@ def main() -> int:
     args = parse_args()
     log(f"AlphaTrade engine v{VERSION} - data: {DATA_DIR}")
     params = effective_params_for_strategy(merge_params())
+
+    if args.learn:
+        # v5.1.1 Phase 5 -- ne touche jamais MT5, lit uniquement les logs deja
+        # sur disque. Quitte immediatement apres, meme discipline que --replay-days.
+        run_scenario_learning()
+        return 0
+
     conn = db_conn()
     microstructure = MicrostructureObserver(DATA_DIR)
 
@@ -4321,6 +5002,13 @@ def main() -> int:
             log(f"Symbole disponible sur MT5: {key} -> {name}", "SUCCESS")
         else:
             log(f"Symbole introuvable sur MT5: {key}", "WARNING")
+
+    if args.replay_days > 0:
+        # v5.1.1 -- Scenario Replay : mode one-off, ne touche jamais a
+        # trading_state.json ni a la session live, quitte immediatement apres.
+        run_scenario_replay(params, symbol_names, args.replay_days)
+        return 0
+
     if not args.once:
         # Le baseline de session doit inclure le flottant réel des positions
         # bot déjà ouvertes AVANT ce redémarrage, sinon session_max_loss
@@ -4356,6 +5044,7 @@ def main() -> int:
     last_history = 0.0
     last_ai_sync = 0.0
     last_microstructure = 0.0
+    gold_microstructure_snapshot_cache: dict = {"available": False, "reason": "Pas encore calcule."}
     last_hyperliquid = 0.0
     ai_bootstrap_attempted = False
     last_command_timestamp = int((read_json("command.json", {}) or {}).get("timestamp") or 0)
@@ -4454,9 +5143,21 @@ def main() -> int:
             if state_now.get("daily_locked"):
                 log("Nouvelle session refusee: la protection journaliere est verrouillee.", "WARNING")
             else:
+                # 05/08/2026 -- bug trouve en observation reelle : cet appel
+                # passait 0.0 en dur au lieu du flottant bot reel (contrairement
+                # aux 2 autres appels de reset_session_state(), au demarrage et
+                # au changement de symbole, qui calculent deja correctement ce
+                # flottant). Consequence : la session se reverrouillait quasi
+                # immediatement apres "Nouvelle session" des que le profit_live
+                # cumule du jour depassait deja session_target -- meme sans
+                # aucun nouveau trade AlphaTrade -- puisque session_profit
+                # (current - baseline) retombait directement sur `current` brut
+                # (baseline force a 0) au lieu d'une vraie difference depuis
+                # ce redemarrage de session.
+                _new_session_bot_floating = sum(float(p.get("profit") or 0) for p in bot_positions)
                 reset_session_state(
                     account_login,
-                    0.0,
+                    _new_session_bot_floating,
                 )
                 log(
                     "Nouvelle session AlphaTrade demarree; positions externes et historique MT5 conserves.",
@@ -4469,16 +5170,12 @@ def main() -> int:
         if bool(params.get("microstructure_enabled", True)):
             micro_interval = max(1, int(params.get("microstructure_interval_sec", 2)))
             if time.time() - last_microstructure >= micro_interval:
-                for key, name in symbol_names.items():
-                    book_levels = microstructure_book_levels(key, name)
-                    if book_levels:
-                        bids, asks = book_levels
-                        microstructure.observe_book("MT5", "BROKER", "CFD_FOREX", key, bids, asks)
-                    else:
-                        tick = mt5.symbol_info_tick(name)
-                        if tick:
-                            microstructure.observe_mt5_tick(key, tick)
+                # OBI/OFI/Kyle lambda/POC XAUUSD retires le 05/08/2026 (carnet
+                # d'ordres non fourni par ce broker, restait N/D en permanence,
+                # jamais lu par une decision) -- seul le Gold Microstructure
+                # Engine (bougies, toujours disponibles) est calcule ici desormais.
                 last_microstructure = time.time()
+                gold_microstructure_snapshot_cache = gold_microstructure_snapshot(symbol_names, params)
             if (
                 bool(params.get("hyperliquid_observer_enabled", False))
                 and time.time() - last_hyperliquid >= 5
@@ -4510,7 +5207,7 @@ def main() -> int:
         # Conserver l'analyse du premier appel — le deuxième appel (après trades)
         # peut retourner {} vide pour les synthétiques, écrasant les vraies valeurs.
         _first_analysis = dict(payload.get("analysis") or {})
-        payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}
+        payload["microstructure"] = {**microstructure.snapshot(), "gold": dict(gold_microstructure_snapshot_cache)}
         if args.once:
             auto_state = load_trading_state()
             auto_state["allowed"] = is_demo_account(mt5.account_info())
@@ -4521,7 +5218,7 @@ def main() -> int:
             auto_state = auto_trade_step(params, symbol_names, payload, positions, trades)
             positions = live_positions(symbol_names, params)
             payload = status_payload(params, symbol_names, trades, positions)
-            payload["microstructure"] = {**microstructure.snapshot(), "dom_status": dict(MICROSTRUCTURE_DOM_STATUS)}
+            payload["microstructure"] = {**microstructure.snapshot(), "gold": dict(gold_microstructure_snapshot_cache)}
             # Restaurer l'analyse du premier appel pour l'affichage temps réel.
             if _first_analysis:
                 payload["analysis"] = _first_analysis
@@ -4529,7 +5226,15 @@ def main() -> int:
         write_json("status.json", payload)
         if args.once:
             break
-        time.sleep(0.5)
+        # v5.1.1 -- 05/08/2026, demande de Louis : vitesse de synchronisation
+        # MT5 alignee sur AlphaTrade Global (MONITOR_INTERVAL_MS=100 dans
+        # EA_Bridge/alphatg_bridge.py -- ~10 mises a jour/sec). Solde/equite/
+        # positions/status.json se rafraichissent donc 5x plus vite (0,5s ->
+        # 0,1s). Sans danger pour le bruit du Scenario Engine : le Dynamic
+        # Position Manager a son propre throttle independant de cette boucle
+        # (scenario_health_reeval_interval_sec, voir LAST_DPM_EVAL_AT), tout
+        # comme la Microstructure/AI Sync avaient deja le leur.
+        time.sleep(0.1)
 
     mt5.shutdown()
     return 0

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Architecture — Market Scenario Engine (AlphaTrade Gold v5.1.1)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#070a08; --panel:#0b120d; --card:#0c130e; --card2:#0f1811;
+    --border:#1c2e20; --border-strong:#2a4433;
+    --green:#39ff88; --green-dim:#1c6e3f; --green-soft:#8fd8ab;
+    --orange:#ffb454; --red:#ff5c6c; --blue:#5cc8ff; --blue-dim:#123a4a;
+    --gold:#ffd166; --bronze:#c98a4b; --purple:#b79bf0; --dim:#4d6357; --muted:#7c9284; --text:#d7e6db;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px 90px;}
+  header{padding:44px 22px 28px; text-align:center; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(255,209,102,0.07), transparent);}
+  header .tag{display:inline-block; padding:4px 12px; border:1px solid #6e5a1c; border-radius:20px;
+    color:var(--gold); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; margin:0 4px 14px;}
+  header h1{font-size:1.9rem; margin:0 0 8px; color:#fff;}
+  header p{color:var(--muted); max-width:860px; margin:0 auto;}
+  section{margin:34px 0;}
+  h2{color:var(--gold); font-size:1.25rem; border-bottom:1px solid var(--border-strong); padding-bottom:8px; margin-bottom:14px;}
+  h3{color:#fff; font-size:1.05rem; margin:22px 0 8px;}
+  h4{color:var(--green-soft); font-size:0.9rem; margin:14px 0 5px; text-transform:uppercase; letter-spacing:0.4px;}
+  p{line-height:1.68;}
+  code{background:var(--card2); padding:1px 6px; border-radius:4px; color:var(--green-soft); font-family:Consolas,Menlo,monospace; font-size:12.5px;}
+  pre{background:#050805; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:12.3px; line-height:1.55; color:var(--green-soft);}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:13px;}
+  th, td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--border); vertical-align:top;}
+  th{color:var(--green-soft); font-weight:600;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border-strong); border-radius:10px;}
+  .agent-card{background:var(--card); border:1px solid var(--border-strong); border-radius:14px; padding:20px 22px; margin:18px 0;}
+  .agent-card.gold{border-color:var(--gold); background:linear-gradient(135deg, rgba(255,209,102,0.08), transparent);}
+  .agent-card.orange{border-color:var(--orange); background:linear-gradient(135deg, rgba(255,180,84,0.08), transparent);}
+  .agent-card.blue{border-color:var(--blue); background:linear-gradient(135deg, rgba(92,200,255,0.06), transparent);}
+  .agent-card.purple{border-color:var(--purple); background:linear-gradient(135deg, rgba(183,155,240,0.07), transparent);}
+  .agent-card.red{border-color:var(--red); background:linear-gradient(135deg, rgba(255,92,108,0.07), transparent);}
+  .agent-card h3{margin-top:0; display:flex; align-items:center; gap:10px;}
+  .num-badge{display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px;
+    background:var(--card2); border:1px solid var(--border-strong); color:var(--green-soft); font-size:12px; font-weight:700; flex-shrink:0;}
+  .fiche-row{display:grid; grid-template-columns:200px 1fr; gap:4px 16px; margin:4px 0; font-size:13.5px; line-height:1.55;}
+  .fiche-row .k{color:var(--green-soft); font-weight:600; padding-top:1px;}
+  .card{background:var(--card); border:1px solid var(--border-strong); border-radius:12px; padding:16px 20px; margin:14px 0;}
+  .verdict{background:linear-gradient(135deg, rgba(255,209,102,0.09), rgba(57,255,136,0.03)); border:1px solid var(--border-strong); border-radius:14px; padding:22px 26px; margin:20px 0;}
+  .verdict h3{margin-top:0; color:var(--gold);}
+  .badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 9px; border-radius:20px; margin-bottom:8px;}
+  .badge.gold{background:#4a3b12; color:var(--gold);}
+  .badge.orange{background:#4a2f12; color:var(--orange);}
+  .badge.blue{background:var(--blue-dim); color:var(--blue);}
+  .badge.purple{background:#2c2140; color:var(--purple);}
+  .badge.red{background:#4a1a1a; color:var(--red);}
+  .badge.green{background:#123a1c; color:var(--green);}
+  .badge.dim{background:#151f19; color:var(--dim);}
+  .keep{color:var(--green-soft);} .drop{color:var(--red); text-decoration:line-through;} .expert{color:var(--orange);}
+  .toc{background:var(--card); border:1px solid var(--border-strong); border-radius:10px; padding:14px 20px;}
+  .toc a{color:var(--gold); text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .toc ol{margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;}
+  .toc li{break-inside:avoid; margin-bottom:4px;}
+  .flow{background:#050805; border:1px solid var(--border); border-radius:10px; padding:18px 20px; font-family:Consolas,Menlo,monospace; font-size:12.5px; line-height:1.7; color:var(--green-soft); overflow-x:auto;}
+  .flow .lbl{color:var(--gold);}
+  footer{padding:36px 22px; text-align:center; color:var(--dim); font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+  <span class="tag">Proposition d'architecture</span><span class="tag">Aucun code écrit</span>
+  <h1>Market Scenario Engine — AlphaTrade Gold v5.1.1</h1>
+  <p>Étend <code>Architecture_AlphaTrade_AI_Brain_v1.0.html</code> (30/07/2026) et s'appuie sur <code>Audit_Statistique_Complet_v5.1.0.html</code> (04/08/2026). Objectif : faire passer AlphaTrade Gold d'un moteur de signaux avec gestion de risque fixe à un moteur de <b>zones et scénarios probabilistes</b>, exploitées en scalping — conforme à la synthèse validée dans l'échange du 04/08. Audit → conséquences → architecture ci-dessous → validation avant tout code, comme convenu.</p>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <b style="color:#fff">Sommaire</b>
+  <ol>
+    <li><a href="#s1">Rappel du diagnostic qui motive cette architecture</a></li>
+    <li><a href="#s2">Principe directeur — pas un calculateur de TP</a></li>
+    <li><a href="#s3">Ce qui est réutilisé, ce qui est nouveau</a></li>
+    <li><a href="#s4">Quatre nouveaux composants</a></li>
+    <li><a href="#s5">Contrat de données : l'objet Scenario</a></li>
+    <li><a href="#s6">Cycle de vie d'un scénario</a></li>
+    <li><a href="#s7">Flux complet — exemple chiffré</a></li>
+    <li><a href="#s8">Calcul quantitatif de la probabilité (sans LLM)</a></li>
+    <li><a href="#s9">Position management : ancrage + scalps</a></li>
+    <li><a href="#s10">Reclassification des paramètres</a></li>
+    <li><a href="#s11">Séquencement — 5 phases</a></li>
+    <li><a href="#s12">Ce qui ne change pas</a></li>
+    <li><a href="#s13">Limites et risques assumés</a></li>
+    <li><a href="#s14">Prochaine étape</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h2>1. Rappel du diagnostic qui motive cette architecture</h2>
+  <p>L'audit complet (3 077 trades, 63 jours) a établi trois faits qui cadrent toute cette proposition :</p>
+  <ul>
+    <li><b>Le scalping &lt;60s fonctionne déjà</b> (1 943 trades, 89,2% winrate, +4 858 $) — le "Cerveau 1" (lecture directionnelle) n'est pas le problème. On ne cherche pas un nouveau moteur d'entrée.</li>
+    <li><b>71,9% des pertes viennent de positions tenues &gt;45min</b> (4,6% des trades) et <b>65,4% des trades finalement perdants avaient d'abord été gagnants</b> — le "Cerveau 2" (exploitation/gestion) est le vrai maillon faible.</li>
+    <li><b>TP/SL/trailing sont des $ fixes</b>, déconnectés de la structure du marché — confirmé dans <code>params.json</code> et <code>position_exit_reason()</code>.</li>
+  </ul>
+  <p>Conclusion partagée dans l'échange du 04/08 : le chantier n'est pas "améliorer le calcul du TP". C'est transformer AlphaTrade Gold d'un <b>moteur de signaux avec gestion de risque</b> en un <b>moteur de zones et de scénarios, exploité en scalping adaptatif</b> — les TP/SL dynamiques en sont une conséquence, pas le cœur.</p>
+</section>
+
+<section id="s2">
+  <h2>2. Principe directeur — pas un calculateur de TP</h2>
+  <div class="verdict">
+    <h3>Le bon découpage mental</h3>
+    <p><b>Faux problème</b> : « comment calculer un TP intelligent ? »<br>
+    <b>Vrai problème</b> : « où est la zone où le marché va probablement réagir, et comment l'exploiter avec plusieurs petites entrées tant que cette idée reste valable ? »</p>
+    <p>Flux cible : <b>cartographie du marché → identification d'une zone → construction d'un scénario probabiliste sur cette zone → position d'ancrage à l'entrée en zone → scalps additionnels tant que le scénario reste valide → sortie/protection dès que le scénario se dégrade.</b> Le TP n'est jamais entré à la main : il est toujours la conséquence d'une zone/liquidité identifiée par le scénario actif.</p>
+  </div>
+</section>
+
+<section id="s3">
+  <h2>3. Ce qui est réutilisé, ce qui est nouveau</h2>
+  <p>Conforme à la règle du projet (ne pas reconstruire ce qui existe déjà et fonctionne) — l'audit du 04/08 avait déjà établi que la détection de zones/structure existe et est fonctionnelle, seulement pas encore assemblée en scénario.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Composant</th><th>État réel</th><th>Rôle dans cette architecture</th></tr>
+    <tr><td><code>structure_analyst_report()</code> (KB2/KB3)</td><td>Existe, testé, branché au CAIO</td><td>Reste le fournisseur de zones/tendance/S-R — <b>inchangé</b>, simplement lu par le nouveau Scenario Generator en plus du CAIO</td></tr>
+    <tr><td><code>smart_money_analyst_report()</code> (KB5)</td><td>Existe, testé, branché au CAIO</td><td>Reste le fournisseur de liquidité/sweeps/CHoCH — <b>inchangé</b>, même traitement</td></tr>
+    <tr><td><code>risk_manager_report()</code></td><td>Existe, formalisé en <code>AgentReport</code></td><td><b>Inchangé</b> — continue de fixer la contrainte de taille de position (veto CRITICAL prioritaire, déjà la règle du CAIO)</td></tr>
+    <tr><td><code>caio_decide()</code></td><td>Existe, arbitre une liste d'<code>AgentReport</code></td><td><b>Étendu</b>, pas remplacé — voir section 4, gagne un mode "gestion de scénario actif" en plus du mode "arbitrage d'entrée"</td></tr>
+    <tr><td>Renfort (<code>lot_multiplicateur_renfort</code>, cooldown, marge de confiance)</td><td>Existe et fonctionne (mécanisme déjà utilisé pour empiler des positions dans le même sens)</td><td><b>Réutilisé tel quel</b> comme moteur d'exécution des scalps additionnels — juste re-gaté sur "le scénario est-il toujours valide" en plus de "même direction"</td></tr>
+    <tr><td>Microstructure (OBI/Kyle λ)</td><td>Codé mais dashboard-only (confirmé section 4 de l'audit vision produit)</td><td><b>Hors scope de ce document</b> — reste la Phase suivante ("Gold Microstructure Engine" adapté au comportement des bougies XAUUSD, pas l'order book crypto), voir section 11</td></tr>
+    <tr><td><span class="badge gold">Nouveau</span> Scenario Generator</td><td>N'existe pas</td><td>Assemble structure + smart money + risk en objets <code>Scenario</code> avec confiance, zone, invalidation, contexte marché</td></tr>
+    <tr><td><span class="badge gold">Nouveau</span> Scenario Validator</td><td>N'existe pas — ajouté suite à ta relecture du 04/08</td><td>Vérifie qu'un scénario candidat est réellement exploitable (zone touchée, réaction présente, risque panier acceptable, marché compatible) avant que le CAIO ne l'arbitre</td></tr>
+    <tr><td><span class="badge gold">Nouveau</span> compartiment <code>active_scenarios</code></td><td>N'existe pas (prévu dès la conception initiale du 30/07, jamais codé)</td><td>Mémoire partagée du/des scénario(s) en cours pour le symbole actif</td></tr>
+    <tr><td><span class="badge gold">Nouveau</span> Dynamic Position Manager</td><td>N'existe pas — aujourd'hui <code>position_exit_reason()</code> est 100% paramètres fixes</td><td>Ré-évalue la <b>santé</b> du scénario actif à chaque cycle (distincte de sa confiance de départ), décide sécurisation/sortie</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s4">
+  <h2>4. Quatre nouveaux composants</h2>
+  <div class="card" style="border-left:3px solid var(--orange)">
+    <span class="badge orange">Ajout suite à ta relecture</span>
+    <p>Ta correction du point 4 est juste : le CAIO est un arbitre de voix, pas un vérificateur de validité. Un composant intermédiaire s'impose — <b>Scenario Validator</b>, entre le Generator et le CAIO. Le CAIO choisit désormais parmi des scénarios <i>déjà validés</i>, il ne crée plus lui-même leur validité.</p>
+  </div>
+
+  <div class="agent-card gold">
+    <h3><span class="num-badge">1</span> Scenario Generator</h3>
+    <div class="fiche-row"><div class="k">Rôle</div><div>Transforme les rapports Structure/Smart Money/Risk/Economic Calendar (déjà produits chaque cycle) en 0 à 2 objets <code>Scenario</code> candidats — jamais un score nu, toujours une hypothèse complète (zone, direction, confluences, invalidation, plan d'ancrage, contexte marché — section 5).</div></div>
+    <div class="fiche-row"><div class="k">Fréquence</div><div>N'a pas besoin de tourner à la cadence tick-par-tick du CAIO (5s) — la cartographie de zone est stable sur plusieurs minutes. Recalcul toutes les <code>scenario_refresh_sec</code> (nouveau paramètre technique, pas exposé UI, ~60-120s) ou immédiatement si le scénario actif est invalidé.</div></div>
+    <div class="fiche-row"><div class="k">Entrée</div><div>Rapports agents existants + candles multi-TF déjà chargées par <code>fetch_candles()</div></div>
+    <div class="fiche-row"><div class="k">Sortie</div><div>Écrit dans <code>SHARED_MEMORY["active_scenarios"]</code> (nouveau compartiment, propriétaire exclusif <code>scenario_generator</code>), statut <code>CANDIDATE</code></div></div>
+  </div>
+
+  <div class="agent-card blue">
+    <h3><span class="num-badge">2</span> Scenario Validator</h3>
+    <div class="fiche-row"><div class="k">Rôle</div><div>Filtre entre un scénario candidat (idée) et un scénario exploitable (le CAIO peut agir dessus). Le Generator peut avoir raison sur la zone sans que le moment soit venu.</div></div>
+    <div class="fiche-row"><div class="k">4 vérifications (toutes requises)</div><div>
+      <ul class="arg-list" style="margin:6px 0 0; padding-left:18px;">
+        <li><b>Zone touchée ?</b> Le prix courant est dans <code>zone.low</code>-<code>zone.high</code> (ou à une distance ATR-normalisée acceptable)</li>
+        <li><b>Réaction présente ?</b> Smart Money Analyst confirme un signe de réaction réel (rejet de mèche, ralentissement momentum, absorption) — pas seulement "le prix est là"</li>
+        <li><b>Risque panier acceptable ?</b> Risk Manager valide l'exposition totale déjà engagée sur ce symbole (nouveau : vérifie le panier, pas seulement la position individuelle — répond directement au cluster catastrophique de l'audit, section 5 de <code>Audit_Statistique_Complet_v5.1.0.html</code>)</li>
+        <li><b>Marché compatible ?</b> Session/volatilité/calendrier économique cohérents avec le <code>market_context</code> du scénario (pas de scénario Londres exploité en pleine nuit asiatique morte)</li>
+      </ul>
+    </div></div>
+    <div class="fiche-row"><div class="k">Sortie</div><div>Fait passer le scénario de <code>CANDIDATE</code> à <code>VALIDATED</code> (nouveau statut intermédiaire, section 6) — seul un scénario <code>VALIDATED</code> peut être arbitré par le CAIO</div></div>
+  </div>
+
+  <div class="agent-card orange">
+    <h3><span class="num-badge">3</span> CAIO — mode étendu</h3>
+    <div class="fiche-row"><div class="k">Aujourd'hui</div><div>Arbitre une liste d'<code>AgentReport</code>, rend GO/NO_TRADE pour <b>une</b> entrée immédiate.</div></div>
+    <div class="fiche-row"><div class="k">Demain</div><div>Deux modes, choisis selon l'état de <code>active_scenarios</code> :<br>
+    <b>(a) Aucun scénario actif</b> → choisit parmi les scénarios <code>VALIDATED</code> par le Scenario Validator (jamais un <code>CANDIDATE</code> directement) celui dont la confiance dépasse <code>caio_min_confidence</code> (paramètre déjà existant, réutilisé sans changer sa sémantique), déclenche la <b>position d'ancrage</b>.<br>
+    <b>(b) Scénario déjà actif</b> → ne réévalue plus "y a-t-il un signal ?" mais "ce scénario justifie-t-il un scalp de plus ?" (délégué au mécanisme de renfort existant, transformé — section 9) et transmet en continu l'état de santé au Dynamic Position Manager.</div></div>
+    <div class="fiche-row"><div class="k">Règle d'or inchangée</div><div>Seul le CAIO décide, seule <code>place_order()</code> exécute — aucune érosion de la règle posée le 30/07. Le Validator ne décide pas non plus : il élimine, le CAIO choisit.</div></div>
+  </div>
+
+  <div class="agent-card purple">
+    <h3><span class="num-badge">4</span> Dynamic Position Manager (le "Cerveau 2")</h3>
+    <div class="fiche-row"><div class="k">Remplace progressivement</div><div>La partie de <code>position_exit_reason()</code> gérée par <code>profit_target</code>/<code>profit_trailing_giveback</code>/<code>trail_l1_above</code>/<code>trail_l2_above</code> (les paliers $ fixes) — <b>pas</b> les filets de sécurité durs (<code>MAX_POSITION_LOSS</code>, <code>TIME_STOP</code>, stop-loss broker), qui restent tels quels (section 12).</div></div>
+    <div class="fiche-row"><div class="k">Logique</div><div>À chaque cycle, pour toute position liée à un scénario actif : recalcule <code>scenario_health</code> avec les données fraîches (même fonction de score que le Scenario Generator, section 8, mais lue en continu — <b>distincte</b> de <code>scenario_confidence_at_entry</code>, qui ne bouge plus une fois le scénario activé). Si la santé a chuté sous un seuil de dégradation → sécuriser (déplacer SL, fermer partiel) ou sortir, <b>avant</b> que le prix fixe (giveback $) ne soit atteint et <b>avant</b> que <code>invalidation_price</code> ne soit touché — c'est tout l'intérêt de distinguer les deux (point 3 de ta relecture) : le prix peut être encore loin de l'invalidation pendant que l'idée est déjà en train de mourir.</div></div>
+    <div class="fiche-row"><div class="k">TP1/TP2/TP3</div><div>Ne sont plus saisis par l'utilisateur — ce sont les niveaux de zone/liquidité que le Scenario Generator a déjà calculés à la création du scénario (section 5), rafraîchis si la structure évolue.</div></div>
+  </div>
+</section>
+
+<section id="s5">
+  <h2>5. Contrat de données : l'objet Scenario</h2>
+  <p>Même philosophie que <code>AgentReport</code> (contrat unique, champs obligatoires) pour que le CAIO et le Dynamic Position Manager consomment une forme stable.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Champ</th><th>Type</th><th>Rôle</th></tr>
+    <tr><td class="k"><code>scenario_id</code></td><td>str</td><td>Identifiant unique, ancre les positions liées (ticket → scenario_id, nouveau tag dans le commentaire MT5 comme <code>STRATLAB</code> aujourd'hui)</td></tr>
+    <tr><td><code>symbol_key</code></td><td>str</td><td>XAUUSD (seul symbole actif)</td></tr>
+    <tr><td><code>direction</code></td><td>BUY / SELL</td><td>Sens du scénario</td></tr>
+    <tr><td><code>zone</code></td><td>{low, high}</td><td>Zone d'intérêt (demande/offre), source Structure/Smart Money Analyst</td></tr>
+    <tr><td><code>confluences</code></td><td>list[str]</td><td>Ce qui justifie la zone (ex : "ancien support", "liquidity sweep", "RSI survendu") — traçabilité humaine, pas seulement un score</td></tr>
+    <tr><td><span class="badge blue">Renommé</span> <code>scenario_confidence</code></td><td>float 0-100</td><td>Anciennement <code>probability</code> — score composite à la création (section 8). Nom changé sur ta demande : ce n'est pas encore une vraie probabilité statistique tant que <code>scenario_log.jsonl</code> n'a pas assez d'historique</td></tr>
+    <tr><td><code>scenario_confidence_at_entry</code></td><td>float</td><td>Anciennement <code>probability_at_entry</code> — figée au moment de l'activation, ne bouge plus ensuite</td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>scenario_health</code></td><td>float 0-100</td><td>Score <b>vivant</b>, recalculé chaque cycle par le Dynamic Position Manager tant que le scénario est actif — distinct de <code>scenario_confidence</code> qui ne représente que l'instant de la création (point 3 de ta relecture : « le prix est encore à 4086 mais l'idée est déjà mauvaise »)</td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>market_context</code></td><td>{trend, volatility, session, atr, timeframe_alignment}</td><td>Contexte figé à la création (point 2A) — un scénario BUY créé à Londres avec ATR 20 n'a pas la même valeur qu'un scénario identique en session morte avec ATR 5</td></tr>
+    <tr><td><code>invalidation_price</code></td><td>float</td><td>Niveau qui, franchi, détruit l'hypothèse — devient le SL de la position d'ancrage (invalidation "dure", par le prix)</td></tr>
+    <tr><td><code>targets</code></td><td>list[{price, label}]</td><td>Niveaux de zone/liquidité successifs — remplacent TP1/TP2/TP3 fixes</td></tr>
+    <tr><td><code>anchor_plan</code></td><td>{entry, sl, tp}</td><td>Plan de la position d'ancrage, dérivé de <code>zone</code>/<code>invalidation_price</code>/<code>targets</code></td></tr>
+    <tr><td><code>scalp_allowed</code></td><td>bool</td><td>Autorise le scalping d'exploitation (section 9, redéfini) à ouvrir des scalps additionnels tant que <code>status=ACTIVE</code></td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>maximum_validity_min</code> / <code>expires_at</code></td><td>int / datetime</td><td>Point 2C de ta relecture — un scénario n'est pas éternel ; passé ce délai, <code>status</code> passe à <code>EXPIRED</code> même si la zone existe toujours et que le prix n'a pas invalidé</td></tr>
+    <tr><td><code>status</code></td><td>CANDIDATE / VALIDATED / ACTIVE / DEGRADED / INVALIDATED / EXPIRED / COMPLETED</td><td>Cycle de vie, section 6 (2 statuts ajoutés : VALIDATED par le Scenario Validator, EXPIRED par la durée de vie)</td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>reaction_count</code></td><td>int</td><td>Nb de fois où le prix a réellement réagi dans la zone (pas juste "est passé par là") — lu par le Scenario Validator, alimente le futur calibrage (section 8, niveau 2)</td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>outcome</code> / <code>outcome_profit</code></td><td>str / float</td><td>Résultat final rempli à la clôture — sans ça, le scénario "reste juste un filtre sophistiqué" (ta formulation) : c'est ce couple qui rend l'historique exploitable pour apprendre</td></tr>
+    <tr><td><span class="badge blue">Nouveau</span> <code>history</code></td><td>list[{at, status, note, scenario_health}]</td><td>Trace complète de raisonnement — pourquoi la zone existe, pourquoi elle devient valide/invalide, trajectoire de <code>scenario_health</code> (79→55→32, pas seulement la dernière valeur). C'est cette liste qui fait du scénario une <b>mémoire de contexte permanent</b>, pas un objet de préparation de trade jetable (ta correction du point 6)</td></tr>
+    <tr><td><code>created_at</code> / <code>last_evaluated_at</code></td><td>datetime</td><td>Fraîcheur — un scénario non réévalué depuis trop longtemps devient <code>UNAVAILABLE</code>, même logique que <code>AgentReport.expiration</code></td></tr>
+  </table>
+  </div>
+  <p class="card"><b>Implémenté</b> — <code>python/scenario.py</code> (dataclasses <code>Scenario</code>/<code>ScenarioEvent</code>, machine à états avec <code>ALLOWED_TRANSITIONS</code>, fabriques <code>make_scenario()</code>/<code>activate_scenario()</code>/<code>close_scenario()</code>), compartiment <code>active_scenarios</code> ajouté à <code>shared_memory.py</code>, persistance <code>log_scenario_event()</code> → <code>scenario_log.jsonl</code> dans <code>alphatrade_engine.py</code>. 17 tests (<code>test_scenario.py</code>, <code>test_scenario_wiring.py</code>), suite de régression complète (16 fichiers) toujours verte. <b>Rien de tout ceci n'est encore appelé depuis <code>auto_trade_step()</code></b> — module pur, testé isolément, zéro changement de comportement réel, même discipline que <code>agent_report.py</code>/<code>shared_memory.py</code> en 5.1.0.</p>
+</section>
+
+<section id="s6">
+  <h2>6. Cycle de vie d'un scénario</h2>
+  <div class="flow">
+<span class="lbl">CANDIDATE</span>  → Scenario Generator produit une hypothèse (zone+scenario_confidence), pas encore exploitable
+     ↓ (Scenario Validator : zone touchée + réaction + risque panier + marché compatible)
+<span class="lbl">VALIDATED</span>  → scénario exploitable, en attente d'arbitrage CAIO
+     ↓ (CAIO l'active si scenario_confidence ≥ caio_min_confidence)
+<span class="lbl">ACTIVE</span>     → position d'ancrage ouverte, scalps additionnels autorisés (scalp_allowed=true)
+     ↓ (chaque cycle : Dynamic Position Manager recalcule scenario_health)
+<span class="lbl">DEGRADED</span>   → scenario_health a chuté sous le seuil, mais prix pas encore à invalidation_price
+     → action : scalp_allowed=false (plus de nouvelles entrées), sécurisation des positions ouvertes
+     ↓
+<span class="lbl">INVALIDATED</span> → prix a franchi invalidation_price, OU scenario_health tombée trop bas trop vite
+<span class="lbl">EXPIRED</span>     → maximum_validity_min dépassé, même si la zone existe toujours (nouveau, point 2C)
+     → action (les deux cas) : clôture des positions liées au scénario, scénario archivé
+<span class="lbl">COMPLETED</span>  → tous les targets atteints, scénario clos proprement (succès)
+  </div>
+  <p class="card">Un seul scénario <code>ACTIVE</code> à la fois par symbole (cohérent avec le principe "un seul actif, une seule idée à la fois" déjà établi pour XAUUSD) — pas de scénarios concurrents ouverts simultanément en v5.1.1. La génération de scénarios <b>alternatifs</b> non retenus (ex : "Scénario B 28% : cassure baissière") reste en mémoire pour traçabilité/apprentissage, mais un seul pilote l'exécution.</p>
+</section>
+
+<section id="s7">
+  <h2>7. Flux complet — exemple chiffré</h2>
+  <div class="flow">
+<span class="lbl">T0 — Scenario Generator (aucun scénario actif)</span>
+XAUUSD M5/M15 : zone de demande 4085-4088
+Confluences : ancien support, liquidity sweep, RSI survendu, structure haussière M5
+Contexte : trend=bullish, volatility=medium, session=london, atr=18.4,
+  timeframe_alignment={M5:bullish, M15:bullish, H1:neutral}
+→ Scenario CANDIDATE : BUY, zone 4085-4088, scenario_confidence 68%
+  invalidation 4082, targets [4092 (liquidité proche), 4098 (extension)]
+  maximum_validity_min=45
+
+<span class="lbl">T1 — Scenario Validator</span>
+Zone touchée ? Non (prix à 4102) → validation refusée, scénario reste CANDIDATE
+(le CAIO n'est même pas sollicité — pas de VALIDATED, pas d'arbitrage)
+
+<span class="lbl">T2 — Prix entre en zone, réaction confirmée (rejet mèche basse détecté par Smart Money Analyst)</span>
+Scenario Validator : zone touchée ✓, réaction présente ✓, risque panier acceptable ✓,
+  marché compatible ✓ → statut VALIDATED
+Scenario Generator recalcule scenario_confidence : 74% (réaction confirmée = confluence de plus)
+CAIO : 74% < caio_min_confidence (75) → attend confirmation supplémentaire (pas d'entrée forcée)
+
+<span class="lbl">T3 — Confirmation (momentum + volume relatif)</span>
+scenario_confidence 79% ≥ 75 → CAIO active le scénario (ACTIVE)
+scenario_health initialisé = scenario_confidence_at_entry = 79%
+→ Position A (ancrage, tag SCENARIO_ANCHOR) : BUY 4086.5, SL 4082 (invalidation), TP 4092 (target 1)
+
+<span class="lbl">T4 — Prix monte à 4090, léger retracement à 4088</span>
+Scénario toujours ACTIVE, scenario_health 76% (dégradation mineure normale)
+scalp_allowed=true + prix dans zone favorable + risque panier acceptable + micro-opportunité
+  détectée (section 9) → Position B (tag SCENARIO_SCALP) : BUY 4088, TP proche 4091
+
+<span class="lbl">T5 — Liquidité absorbée, momentum ralentit (détecté par Smart Money Analyst)</span>
+Dynamic Position Manager recalcule scenario_health : 45% (chute de 34 points vs T3,
+  scenario_confidence_at_entry=79% reste inchangée pour référence)
+→ status DEGRADED : scalp_allowed=false, sécurisation Position A (déplacement SL,
+  ou clôture partielle) — AVANT que le prix fixe (giveback $) ne soit atteint,
+  AVANT que invalidation_price (4082) ne soit touché
+  </div>
+  <p>C'est exactement l'exemple que tu as donné (rejet à 4064 que le moteur actuel rate parce qu'il attend une confirmation tardive) : ici, le scénario existe <b>avant</b> que le prix atteigne la zone, et la position n'attend que la réaction pour s'activer — pas un score d'indicateur recalculé bougie par bougie sans mémoire.</p>
+</section>
+
+<section id="s8">
+  <h2>8. Calcul quantitatif de la "Scenario Confidence" (sans LLM)</h2>
+  <p>Conforme à ta demande explicite : 100% mathématique, aucun LLM dans la boucle de décision. <b>Renommage adopté</b> (point 3 de ta relecture) : le champ s'appelle <code>scenario_confidence</code>, jamais "probability", tant que le niveau 2 n'existe pas — appeler ça une probabilité aujourd'hui serait le même excès que "BUY 90%" avec un autre nom.</p>
+  <h3>Niveau 1 (v5.1.1) — Scenario Confidence, score analytique pondéré</h3>
+  <p>Répartition des poids par famille de confluence (reprend ta proposition) :</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Famille</th><th>Poids</th><th>Source (déjà existante)</th></tr>
+    <tr><td>Structure</td><td>25%</td><td><code>structure_analyst_report()</code></td></tr>
+    <tr><td>Smart Money</td><td>25%</td><td><code>smart_money_analyst_report()</code></td></tr>
+    <tr><td>Zone historique</td><td>15%</td><td>Réactions passées sur ce niveau (nouveau calcul, sur candles déjà chargées)</td></tr>
+    <tr><td>Volatilité</td><td>15%</td><td>ATR courant vs moyenne (déjà calculé dans <code>analysis</code>)</td></tr>
+    <tr><td>Momentum</td><td>10%</td><td>Pipeline classique existant</td></tr>
+    <tr><td>Session</td><td>10%</td><td><code>market_context.session</code></td></tr>
+  </table>
+  </div>
+  <p>Pas une somme arbitraire : les poids sont bornés et ajustables par le <b>Learning Manager déjà existant</b> (même mécanisme que les poids EMA/RSI/MACD actuels, <code>learning_weights</code>), donc le système apprend déjà quelles confluences sont historiquement fiables sur XAUUSD — infrastructure présente, pas à inventer. Résultat affiché : <code>Scenario Confidence: 72/100</code>, jamais "72% de chances de réussir".</p>
+  <h3>Extension future de calibration statistique, sur la base v5.1.1 (correction de Louis du 04/08 : pas une v5.1.2 séparée)</h3>
+  <p><code>scenario_log.jsonl</code> (créé/validé/activé/dégradé/clos + résultat réel, section 5) collecte les données <b>dès v5.1.1</b> — c'est ça la correction : la collecte n'est pas repoussée à plus tard, seul le modèle statistique qui l'exploiterait l'est. À partir de quelques centaines d'échantillons accumulés, une régression logistique simple (toujours pas de LLM — un modèle statistique classique, quelques paramètres, explicable) pourra répondre à la vraie question que tu poses : « sur les 500 dernières situations similaires, combien ont réussi ? ». Cette capacité fait partie du même Scenario Engine v5.1.1 — elle devient exploitable quand les données existent, sans nouvelle version ni nouveau contrat de données à écrire. C'est seulement à ce stade que le champ pourrait légitimement s'appeler <code>probability</code>.</p>
+</section>
+
+<section id="s9">
+  <h2>9. Position management : ancrage + scalps</h2>
+  <div class="card" style="border-left:3px solid var(--orange)">
+    <span class="badge orange">Correction adoptée — point 6</span>
+    <p>Le renfort actuel se déclenche sur "confiance suffisante + même direction" — exactement le mécanisme qui a produit les clusters catastrophiques de l'audit (empiler parce qu'on croit dans une direction). Il est <b>remplacé</b>, pas juste gaté en plus, par une règle à 4 conditions <b>toutes requises</b> :</p>
+    <ol style="margin:8px 0 0; padding-left:20px; line-height:1.7;">
+      <li>Scénario <code>ACTIVE</code> (pas seulement une direction qui plaît)</li>
+      <li>Prix dans une zone favorable du scénario (pas n'importe où dans la tendance)</li>
+      <li>Risque panier acceptable (même vérification que le Scenario Validator, réévaluée à chaque scalp — l'exposition totale du panier, pas juste la position individuelle)</li>
+      <li>Micro-opportunité détectée (retracement local, pas juste "le prix continue de monter")</li>
+    </ol>
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th></th><th>Position d'ancrage</th><th>Scalps d'exploitation de scénario</th></tr>
+    <tr><td class="k">Déclenchée par</td><td>Activation du scénario (CAIO mode a)</td><td>Les 4 conditions ci-dessus, toutes requises</td></tr>
+    <tr><td class="k">Entrée</td><td><code>anchor_plan.entry</code> (zone)</td><td>Prix courant, seulement si micro-opportunité réelle (pas de renfort "de conviction")</td></tr>
+    <tr><td class="k">SL</td><td><code>invalidation_price</code> du scénario</td><td>Idem, hérité du même scénario (pas de SL indépendant par scalp)</td></tr>
+    <tr><td class="k">TP</td><td>Premier <code>target</code> de la liste (zone/liquidité la plus proche)</td><td>Micro-cible ATR-scaled entre l'entrée du scalp et le prochain <code>target</code></td></tr>
+    <tr><td class="k">Tag position</td><td><code>SCENARIO_ANCHOR</code> (nouveau, même mécanisme que <code>STRATLAB</code>/<code>NORMAL</code> déjà dans le commentaire MT5)</td><td><code>SCENARIO_SCALP</code></td></tr>
+    <tr><td class="k">Sortie</td><td>Dynamic Position Manager (section 4.4) — <code>scenario_health</code>, pas un giveback $ fixe</td><td>Idem, mais fermeture prioritaire dès dégradation (moins de conviction individuelle qu'une position d'ancrage)</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s10">
+  <h2>10. Reclassification des paramètres</h2>
+  <div class="card" style="border-left:3px solid var(--orange)">
+    <span class="badge orange">Correction adoptée — point 5</span>
+    <p>Rien n'est supprimé immédiatement. Deux phases, comme tu l'as demandé :</p>
+    <p><b>Phase 1</b> — les paramètres existants deviennent des <i>fallback</i>, pas des morts : <code>profit_target</code> → utilisé seulement si le Scenario Engine ne parvient pas à produire un scénario exploitable (marché sans structure claire, agents <code>UNAVAILABLE</code>) ; <code>take_profit_levels</code>/<code>trail_l1_above</code>/<code>trail_l2_above</code> idem. Aucune sécurité perdue pendant la transition.<br>
+    <b>Phase 2</b> — après validation en démo du Scenario Engine (section 13) : ces champs disparaissent de l'UI standard, restent en Mode Expert.</p>
+  </div>
+  <p>Reprend ta grille (garder / fallback puis disparaît / mode expert), appliquée aux vrais paramètres actuels de <code>params.json</code> plutôt qu'à des exemples génériques.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Catégorie</th><th>Paramètres réels concernés</th><th>Traitement</th></tr>
+    <tr><td class="keep">Reste manuel — capital/sécurité</td><td><code>risk_pct</code>, <code>real_lot_cap</code>/<code>demo_lot_cap</code>, <code>session_max_loss</code>, <code>daily_target</code>, <code>session_target</code>, <code>giveback</code>, <code>mission_weekly_target</code>/<code>mission_monthly_target</code>, <code>mission_consecutive_loss_defense</code>, <code>capital_min</code>, <code>auto_max_positions</code>, <code>max_position_loss</code>, <code>max_floating_loss</code>, <code>emergency_loss_limit</code>, <code>portfolio_max_positions</code>/<code>portfolio_max_total_lot</code>/<code>portfolio_floating_loss_warn_pct</code>/<code>portfolio_floating_loss_critical_pct</code></td><td>Contraintes du propriétaire du compte — inchangées, c'est déjà leur rôle actuel. Les 4 derniers (chantier 4, Portfolio Brain) sont des limites NOUVELLES, distinctes des gardes procédurales existantes (<code>auto_max_positions</code>/<code>max_floating_loss</code>), pas une reclassification</td></tr>
+    <tr><td class="keep">Reste manuel — autorisation/politique</td><td><code>trading_enabled</code>, <code>demo_only</code>, <code>gold_brain_enabled</code>, <code>active_engine</code>, <code>active_symbol</code>, <code>session_filter_enabled</code>+heures, <code>economic_calendar_enabled</code>/<code>economic_calendar_block_hours</code>, <code>rebond_enabled</code>/<code>rebond_fort_enabled</code>+leurs seuils, <code>reinforcement_enabled</code></td><td>Décisions de politique/autorisation, pas de marché — inchangées quel que soit l'état du Scenario Engine</td></tr>
+    <tr><td class="keep">Reste manuel — technique/infra</td><td><code>mt5_path</code>, <code>external_signals_allow_real</code>/<code>external_signal_max_age_sec</code>, <code>slack_webhooks</code>/<code>slack_min_confidence</code>, <code>ai_server_*</code>, <code>microstructure_enabled</code>/<code>microstructure_interval_sec</code>, <code>hyperliquid_observer_enabled</code>/<code>hyperliquid_symbols</code>, <code>pending_order_expire_min</code></td><td>Configuration de connexion/intégration, aucun rapport avec la logique de décision — jamais concernés par cette reclassification</td></tr>
+    <tr><td class="expert">Phase 1 : fallback / Phase 2 : Mode Expert</td><td><code>profit_target</code>, <code>take_profit_enabled</code>/<code>take_profit_levels</code> (seuil $/pct/trailing par palier)/<code>take_profit_move_be</code>, <code>profit_trailing_giveback</code></td><td>Remplacés en usage courant par <code>targets</code>/<code>invalidation_price</code> calculés par scénario (section 5), jamais supprimés du schéma</td></tr>
+    <tr><td class="expert">Phase 1 : fallback / Phase 2 : Mode Expert</td><td><code>lot_multiplicateur_renfort</code> reste (calcul de taille), mais le <b>déclenchement</b> devient la règle à 4 conditions (section 9), plus <code>reinforcement_min_confidence_margin</code>/<code>reinforcement_min_score_gap</code> seuls</td><td>Ancien déclenchement disponible en fallback/Mode Expert uniquement</td></tr>
+    <tr><td class="expert">Phase 1 : fallback / Phase 2 : Mode Expert <span class="badge blue">Ajouté 05/08</span></td><td><code>strategy_mode</code> (Scalping rapide/prudent, Analyse longue, Mode combiné — choix manuel unique et fixe aujourd'hui)</td><td>Remplacé en usage courant par la recommandation du <b>Trading Style Engine</b> (chantier 3, <code>trading_style_engine.py</code>) — adaptatif au regime/volatilité réels au lieu d'un choix figé. Le champ reste dans le schéma comme préférence/fallback, exactement le même principe que les deux lignes ci-dessus</td></tr>
+    <tr><td class="k" style="color:var(--muted)">Nouveaux — interrupteurs des moteurs eux-mêmes</td><td><code>scenario_engine_enabled</code>, <code>trading_style_engine_enabled</code>, <code>portfolio_brain_enabled</code>, et leurs seuils propres (<code>scenario_health_degradation_threshold</code>, <code>scenario_caio_min_confidence</code>, <code>scenario_microstructure_min</code>)</td><td>Catégorie à part — ce ne sont pas des paramètres que l'automatisation remplace, ce sont ses propres réglages. Restent visibles indéfiniment (interrupteurs + calibration de l'automatisation elle-même, pas candidats au masquage)</td></tr>
+  </table>
+  </div>
+  <div class="card" style="border-left:3px solid var(--green)">
+    <span class="badge green">Audit exhaustif fait 05/08/2026</span>
+    <p>Les 99 paramètres réels de <code>DEFAULT_PARAMS</code> (71 globaux + 28 par symbole) ont été vérifiés un par un contre tout le code de production — <b>aucun paramètre mort/orphelin trouvé</b> (y compris ceux lus via une clé dynamique, ex. <code>real_lot_cap</code>/<code>demo_lot_cap</code> selon démo/réel, <code>rebond_target_pips</code>/<code>rebond_fort_target_pips</code> selon le palier). Rien n'a donc été retiré du schéma : il n'existait aucun candidat "mort" indépendant de la question du Scenario Engine.</p>
+    <p>Le tableau ci-dessus reste donc la classification complète. Rappel du garde-fou de la section 11 (point 6 de ta relecture) : les lignes "Phase 1 : fallback / Phase 2 : Mode Expert" ne passent en Phase 2 (masquage réel dans l'UI) qu'après la preuve d'observation — pas avant. Les 4 chantiers post-noyau (poids appris, Microstructure, Trading Style, Portfolio Brain) viennent d'être activés en observation ce 05/08 : aucune preuve accumulée pour l'instant, donc aucune ligne ci-dessus n'est encore passée en Phase 2.</p>
+  </div>
+</section>
+
+<section id="s11">
+  <h2>11. Séquencement — 5 phases (nommage adopté suite à ta relecture du 04/08)</h2>
+  <div class="card" style="border-left:3px solid var(--orange)">
+    <span class="badge orange">Séquencement révisé</span>
+    <p>Ma première découpe (2a-2d) mettait Generator+Validator+CAIO+Dynamic Position Manager dans un seul chantier. Ta relecture le sépare plus finement, avec un principe explicite qui change l'ordre : <b>le Scenario Object + sa persistance (logs) doivent exister avant même le Generator</b> — pas parce qu'on peut logger sans générer, mais parce que le contrat de données et sa trace de raisonnement (<code>history</code>, <code>reaction_count</code>, <code>outcome</code>) doivent être stables et testés isolément avant qu'un Generator réel ne les remplisse — même discipline que <code>agent_report.py</code>/<code>shared_memory.py</code> en 5.1.0, qui ont précédé les agents qui les utilisent.</p>
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Phase</th><th>Contenu</th><th>État</th></tr>
+    <tr><td>0</td><td>Audit d'attribution (log CAIO)</td><td><span class="badge green">Fait 04/08</span></td></tr>
+    <tr><td><b>1</b></td><td><b>Scenario Object + Logs</b> — <code>scenario.py</code> (contrat, machine à états, fabriques), compartiment <code>active_scenarios</code>, <code>log_scenario_event()</code> → <code>scenario_log.jsonl</code></td><td><span class="badge green">Fait 04/08</span> — 17 tests, régression complète verte, zéro branchement dans <code>auto_trade_step()</code></td></tr>
+    <tr><td><b>2</b></td><td><b>Scenario Generator</b> (zone + Scenario Confidence composite, section 8) <b>+ Scenario Validator</b> (4 vérifications, section 4.2)</td><td><span class="badge green">Fait 04/08</span> — <code>scenario_generator.py</code>, 13 tests + 5 tests de branchement, régression complète verte. <b>Branché en observation dans <code>auto_trade_step()</code></b> derrière <code>scenario_engine_enabled</code> (défaut False) — le flux existe réellement de la boucle de trading jusqu'au log, pas seulement en test isolé</td></tr>
+    <tr><td><b>3</b></td><td><b>CAIO devient arbitre de scénario</b> (mode a, section 4.3) — <code>caio_decide_scenario()</code> arbitre les <code>VALIDATED</code> contre <code>caio_min_confidence</code>, transitionne en <code>ACTIVE</code></td><td><span class="badge green">Fait 04/08</span> — branché dans <code>scenario_engine_step()</code> (même cycle, même flag). <b>Garde de sécurité testée explicitement</b> : <code>place_order()</code>/<code>open_position()</code> empoisonnés en test, confirmés jamais appelés — aucune position réelle n'est ouverte à partir d'un scénario. 10 tests dédiés, régression complète (17 fichiers) verte</td></tr>
+    <tr><td><b>4</b></td><td><b>Dynamic Position Manager</b> (<code>scenario_health</code> vivant, règle à 4 conditions section 9) — mode b du CAIO (opportunités de scalp)</td><td><span class="badge green">Fait 04/08</span> — <code>dynamic_position_manager_step()</code> : santé recalculée en continu (bascule ACTIVE↔DEGRADED via <code>scenario_health_degradation_threshold</code>, nouveau paramètre), clôture sur invalidation/target/expiration avec <code>outcome</code>/<code>outcome_profit</code> <b>simulés</b> (distance de prix en points, pas un P&L réel — aucune position n'existe), détection d'opportunité de scalp journalisée (<code>simulated_scalp_count</code>). <b>Toujours aucun ordre réel</b> — testé explicitement (poison de <code>place_order()</code>/<code>open_position()</code>). 19 tests, régression complète verte</td></tr>
+    <tr><td><b>5</b></td><td><b>Learning sur historique des scénarios</b> — <code>scenario_learning_stats()</code>/<code>scenario_weight_adjustments()</code>, seuil dédié <code>scenario_caio_min_confidence</code></td><td><span class="badge green">Fait 04/08</span> — accéléré via le Scenario Replay (30j rejoués en 30s) au lieu d'attendre les semaines de collecte live. 377 scénarios résolus, winrate simulé 50,9%, <code>scenario_learned_weights.json</code> calculé. <b>Pas encore branché</b> dans le calcul live de <code>scenario_confidence</code> — recommandation inspectable, pas encore appliquée (même prudence que <code>learning_manager_apply()</code> côté classique)</td></tr>
+  </table>
+  </div>
+  <div class="card" style="border-left:3px solid var(--gold)">
+    <span class="badge gold">Garde-fou explicite, point 6 de ta relecture</span>
+    <p>« Ne pas commencer par enlever les paramètres dans l'UI. Il faut d'abord prouver que le cerveau autonome produit les mêmes décisions ou de meilleures décisions en observation. » Donc : entre la Phase 3 (CAIO arbitre) et la reclassification UI (section 10), une étape d'<b>observation obligatoire</b> — les Phases 3-4 tournent avec <code>record</code>/décision réelle désactivés (même principe que le mode observation continue de Gold Brain, <code>record=False</code>), le temps de comparer scénario par scénario ce que le moteur aurait décidé contre ce qui s'est réellement passé, <b>avant</b> de laisser le CAIO exécuter un seul ordre réel basé sur un scénario. La reclassification des paramètres (section 10) n'intervient qu'après cette preuve, jamais avant.</p>
+  </div>
+  <p>Microstructure Gold (bougies XAUUSD, alimente <code>scenario_confidence</code>) et Trading Style Engine restent des chantiers distincts, après le noyau Scenario — non renumérotés dans les 5 phases ci-dessus car ils ne font pas partie du cœur Scenario/CAIO/Position Manager.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Chantier post-noyau</th><th>Contenu</th><th>État</th></tr>
+    <tr><td>1</td><td><b>Branchement des poids appris</b> — <code>load_scenario_weights()</code> lit <code>scenario_learned_weights.json</code>, injecté dans <code>scenario_confidence_score()</code>/<code>evaluate_scenario_health()</code> via <code>scenario_engine_step()</code>/<code>dynamic_position_manager_step()</code>, avec repli sûr sur <code>SCENARIO_WEIGHTS</code> si le fichier est absent/invalide</td><td><span class="badge green">Fait 05/08</span> — preuve end-to-end que l'injection change réellement le calcul (pas juste que le paramètre existe)</td></tr>
+    <tr><td>2</td><td><b>Gold Microstructure Engine</b> (<code>market_microstructure_gold.py</code>) — vitesse/accélération/taille de bougie/rejet de mèche sur XAUUSD, distinct de <code>market_microstructure.py</code> (OBI/Kyle λ, jamais utilisé dans une décision). 7ᵉ facteur de <code>SCENARIO_WEIGHTS</code> (0.10, momentum et session réduits à 0.05 chacun) ; remplace le proxy <code>score_gap</code> dans <code>evaluate_scalp_opportunity()</code> (nouveau seuil dédié <code>scenario_microstructure_min</code>, défaut 60)</td><td><span class="badge green">Fait 05/08</span> — 17 tests dédiés (<code>test_market_microstructure_gold.py</code>) + régression complète (18 fichiers, 169 tests) verte. Replay 30j régénéré avec le score 7 facteurs : 655 scénarios générés, 446 résolus, winrate simulé 51,3%</td></tr>
+    <tr><td>3</td><td><b>Trading Style Engine</b> (<code>trading_style_engine.py</code>) — recommande <code>strategy_mode</code> (scalping rapide/prudent, analyse longue, combiné) a partir du regime reel (Structure Analyst) et de la volatilite reelle (meme bucketing que le Scenario Engine), au lieu du choix manuel fixe actuel dans Paramètres. Observation seule : <code>trading_style_engine_step()</code> journalise dans <code>trading_style_log.jsonl</code> et <code>TRADING_STYLE_STATE</code>, n'ecrit jamais <code>params["strategy_mode"]</code></td><td><span class="badge green">Fait 05/08</span> — 14 tests dédiés (<code>test_trading_style_engine.py</code> + <code>test_trading_style_wiring.py</code>, garde poison incluse) + régression complète (20 fichiers, 190 tests) verte</td></tr>
+    <tr><td>4</td><td><b>Portfolio Brain</b> (<code>portfolio_brain.py</code>) — AlphaTrade reste mono-actif XAUUSD ; "panier" = les positions BOT ouvertes simultanément sur ce seul symbole (principale/renfort/rebond/scalp). Agrège lot total, biais directionnel net (détection hedge BUY+SELL simultanés — signal absent jusqu'ici), perte flottante en % de l'équité réelle (au lieu d'un $ fixe par symbole). Nouveau compartiment SHARED_MEMORY <code>portfolio</code>, contrat AgentReport identique à Risk Manager. Ne duplique pas <code>max_floating_loss</code>/<code>auto_max_positions</code> (gardes procédurales dures, inchangées) — observation seule, <code>portfolio_brain_report()</code> ne ferme/bloque rien elle-même</td><td><span class="badge green">Fait 05/08</span> — 20 tests dédiés (<code>test_portfolio_brain.py</code> + <code>test_portfolio_brain_wiring.py</code>, garde poison incluse) + régression complète (22 fichiers, 210 tests) verte</td></tr>
+    <tr><td>—</td><td><b>Calibration post-rejeu 58j</b> — le rejeu (58j réels, max disponible sur ce terminal MT5) a fait remonter deux problèmes concrets : régime CORRECTION à espérance négative (-0,13R/scénario, 949 résolus) et session Londres sous-performante avec un vrai gradient de confiance (33% sous 65 de confiance, 47-50% au-dessus de 70). Deux corrections ciblées : <code>scenario_block_correction_regime</code> (défaut True, <code>generate_scenario()</code> ne génère plus rien en régime CORRECTION) et <code>scenario_london_min_confidence</code> (défaut 70, s'ajoute — jamais en dessous — à <code>scenario_caio_min_confidence</code> via <code>max()</code> dans <code>caio_decide_scenario()</code>)</td><td><span class="badge green">Fait 05/08</span> — 8 tests dédiés, régression complète verte. Rejeu 58j re-vérifié : winrate global 42,7% → 44,1% (CORRECTION seul) → <b>47,4%</b> (CORRECTION + Londres), Londres 39,6% → 47,4%</td></tr>
+    <tr><td>5</td><td><b>UI Gold Brain — panneau Scénario</b> — codé fidèlement à <code>Maquette_ScenarioEngine_v5.1.1.html</code> dans l'onglet Gold Brain réel : pipeline 4 étapes (déduit de <code>scenario.history</code>, pas seulement du statut courant), carte scénario (zone/direction, Scenario Confidence + Scenario Health avec tendance, 7 facteurs de pondération, confluences, plan d'ancrage, contexte marché, barre de validité), bloc scalp (opportunités <b>simulées</b> uniquement — pas de fausses positions fictives, l'exécution reste en observation), 4 vérifications du Scenario Validator. Nouvelle carte agent Portfolio Brain (lot total/biais net/flottant panier) + badges "alimente le Scenario Generator" sur Structure/Smart Money. Données réelles via <code>s.auto_trading.scenario</code>/<code>.portfolio</code> (déjà exposés par les chantiers 1-4), aucune donnée fictive</td><td><span class="badge green">Fait 05/08</span> — testé en direct dans l'app (état vide correct, badge version corrigé en v5.1.1) ; l'état peuplé (scénario réel) reste à confirmer visuellement une fois le bot démarré par Louis, le moteur restant à l'arrêt (<code>trading_enabled: false</code>) tant qu'il n'a pas cliqué Démarrer</td></tr>
+  </table>
+  </div>
+</section>
+
+<section id="s12">
+  <h2>12. Ce qui ne change pas</h2>
+  <ul>
+    <li><b>Règle d'or</b> : seul le CAIO décide, seule <code>place_order()</code> exécute — inchangée.</li>
+    <li><b>Stop-loss broker systématique</b> (30/07/2026) et <b>Time Stop universel</b> (02/08/2026) restent actifs sans condition, même sur les positions liées à un scénario — filets de sécurité durs, jamais remplacés par une logique probabiliste qui pourrait se tromper.</li>
+    <li><b>Mission Manager / Capital Preservation Mode</b> : totalement inchangés, gardent leur droit de veto au-dessus de tout, y compris un scénario à 90% de probabilité.</li>
+    <li><b>Structure Analyst / Smart Money Analyst / Risk Manager</b> : aucune réécriture, seulement de nouveaux lecteurs de leurs rapports.</li>
+    <li><b>XAUUSD exclusivement</b> — aucun changement du principe mono-actif.</li>
+  </ul>
+</section>
+
+<section id="s13">
+  <h2>13. Limites et risques assumés</h2>
+  <ul>
+    <li><b>Un seul scénario actif à la fois</b> (section 6) — plus simple à auditer et cohérent avec le principe mono-actif, mais renonce pour l'instant à comparer plusieurs hypothèses concurrentes en continu (le vrai "Scenario A 68% / Scenario B 28%" décrit dans ta vision reste calculé et loggé, mais un seul pilote l'exécution en v5.1.1).</li>
+    <li><b>La probabilité composite (section 8) reste un score pondéré, pas une vraie calibration statistique</b> tant que <code>scenario_log.jsonl</code> n'a pas accumulé assez d'historique — honnête dès maintenant pour ne pas sur-promettre.</li>
+    <li><b>Risque de sur-ingénierie</b> : le Dynamic Position Manager pourrait sortir des positions trop tôt sur de fausses dégradations si le seuil de dégradation est mal calibré — à tester d'abord en observation (comme Gold Brain l'a été), jamais activé directement en argent réel.</li>
+    <li><b>Charge de test</b> : ce chantier touche l'exécution (nouveaux tags de position, nouvelle logique de sortie) — même plan de sécurité que Gold Brain (tests unitaires sans MT5, puis session démo observée, puis validation explicite avant tout compte réel).</li>
+  </ul>
+</section>
+
+<section id="s14">
+  <h2>14. Prochaine étape</h2>
+  <div class="verdict">
+    <h3>Rien n'est codé</h3>
+    <p>Ce document est une proposition d'architecture, conforme à la règle « audit → conséquences → architecture → validation avant modification ». En attente de ton retour sur : (1) le contrat <code>Scenario</code> (section 5), (2) la correction de séquencement (section 11 — 2a/2b comme un seul chantier), (3) la méthode de probabilité v5.1.1 (section 8, poids ajustables plutôt que ML dès le départ). Si tu valides, l'étape suivante est une maquette du panneau Gold Brain montrant le scénario actif (zone, probabilité, targets) avant tout code, même processus que pour le panneau Gold Brain actuel.</p>
+  </div>
+</section>
+
+</div>
+<footer>AlphaTrade Gold — proposition d'architecture Market Scenario Engine, 04/08/2026. Aucun code de production modifié.</footer>
+</body>
+</html>
