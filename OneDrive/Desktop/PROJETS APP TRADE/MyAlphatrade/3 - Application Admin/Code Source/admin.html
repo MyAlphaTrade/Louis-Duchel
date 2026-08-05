@@ -137,6 +137,7 @@ tr:hover td { background: rgba(0,200,150,0.03); }
 .plan-pro     { color: var(--green); font-weight: 700; }
 .plan-elite   { color: var(--gold); font-weight: 700; }
 .plan-premium { color: var(--purple2); font-weight: 700; }
+.plan-global  { color: #14b8a6; font-weight: 700; }
 
 /* ── MODAL ─────────────────────────────────────────────────────────────── */
 .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 100;
@@ -169,6 +170,11 @@ tr:hover td { background: rgba(0,200,150,0.03); }
 .asset-tab.active { border-color: #D4AF37; color: #D4AF37; background: rgba(212,175,55,0.1); }
 .asset-tab:hover:not(.active) { color: var(--text); }
 
+.param-card-section { margin-bottom: 24px; }
+.param-card-title {
+  font-size: 12px; font-weight: 700; color: var(--green); text-transform: uppercase;
+  letter-spacing: .5px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
 .param-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .param-row {
   background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
@@ -265,6 +271,7 @@ tr:hover td { background: rgba(0,200,150,0.03); }
         <span id="serverLabel">Vérification...</span>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="loadData()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Actualiser</button>
+      <button class="btn btn-ghost btn-sm" onclick="openChangePasswordModal()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Changer mon mot de passe</button>
     </div>
   </div>
 
@@ -273,7 +280,6 @@ tr:hover td { background: rgba(0,200,150,0.03); }
     <button class="tab-btn active" onclick="switchTab('clients',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clients</button>
     <button class="tab-btn" onclick="switchTab('params',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M12 2v2M12 20v2M20 12h2M2 12h2M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41"/></svg>Paramètres forfaits</button>
     <button class="tab-btn" onclick="switchTab('forfaits',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Forfaits</button>
-    <button class="tab-btn" onclick="switchTab('actifs',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Actifs</button>
     <button class="tab-btn" onclick="switchTab('promo',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Promo & Parrainage</button>
     <button class="tab-btn" onclick="switchTab('stats',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Statistiques</button>
     <button class="tab-btn" onclick="switchTab('journal',this)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>Journal</button>
@@ -344,13 +350,8 @@ tr:hover td { background: rgba(0,200,150,0.03); }
             La sauvegarde applique les valeurs à <strong>tous les clients du forfait correspondant</strong>.
           </p>
 
-          <div class="plan-tabs">
-            <button class="plan-tab active" onclick="showPlanParams('basique',this)">Basique ⚡</button>
-            <button class="plan-tab" onclick="showPlanParams('starter',this)">Starter</button>
-            <button class="plan-tab" onclick="showPlanParams('pro',this)">Pro</button>
-            <button class="plan-tab" onclick="showPlanParams('elite',this)">Élite</button>
-            <button class="plan-tab premium-tab" onclick="showPlanParams('premium',this)">Premium ⭐</button>
-          </div>
+          <!-- Rempli par renderPlanTabs() -- noms synchronisés avec l'onglet Forfaits (17/07/2026) -->
+          <div class="plan-tabs" id="planTabsBar"></div>
 
           <div id="paramsPanel"></div>
         </div>
@@ -375,23 +376,13 @@ tr:hover td { background: rgba(0,200,150,0.03); }
     </div><!-- /tab-forfaits -->
 
     <!-- ══════════════════════ ONGLET ACTIFS ══════════════════════ -->
-    <div class="tab-panel" id="tab-actifs">
-      <div class="section">
-        <div class="section-head">
-          <div class="section-title">Catalogue des actifs</div>
-          <button class="btn btn-primary btn-sm" onclick="loadActifs()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            Rafraîchir
-          </button>
-        </div>
-        <div style="padding:24px">
-          <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
-            Activez/désactivez chaque actif et définissez quels forfaits y ont accès. EURUSD est désactivé. BOOM1000 / CRASH1000 sont des indices synthétiques Deriv.
-          </p>
-          <div id="actifsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px"></div>
-        </div>
-      </div>
-    </div><!-- /tab-actifs -->
+    <!-- Onglet Actifs retiré le 17/07/2026 (demande de Louis) : gérait un accès
+         par forfait à plusieurs symboles (XAUUSD/EURUSD/BOOM1000/CRASH1000),
+         un concept obsolète depuis le pivot XAUUSD-only -- AlphaTrade AI n'a
+         plus qu'un seul symbole, et KB1000 sera géré par le statut
+         disponible/indisponible du forfait (carte Forfaits), pas par un
+         toggle d'actif. Les routes /admin/assets* qu'il appelait n'ont de
+         toute façon jamais existé côté backend.-->
 
     <!-- ══════════════════════ ONGLET PROMO & PARRAINAGE ══════════════════════ -->
     <div class="tab-panel" id="tab-promo">
@@ -421,9 +412,9 @@ tr:hover td { background: rgba(0,200,150,0.03); }
         <div>
           <table>
             <thead><tr>
-              <th>Nouveau client</th><th>Parrainé par</th><th>Forfait souscrit</th><th>Date inscription</th>
+              <th>Parrain</th><th>Filleul</th><th>Code utilisé</th><th>Date</th><th>Statut</th><th>Action</th>
             </tr></thead>
-            <tbody id="referralsTable"><tr><td colspan="4" class="empty">Chargement...</td></tr></tbody>
+            <tbody id="referralsTable"><tr><td colspan="6" class="empty">Chargement...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -613,6 +604,45 @@ tr:hover td { background: rgba(0,200,150,0.03); }
   </div>
 </div>
 
+<div class="modal-bg" id="rewardModal">
+  <div class="modal">
+    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:8px"><path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>Créditer le parrainage</h3>
+    <p id="rewardModalWho" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px"></p>
+    <label>Type de récompense</label>
+    <select id="rewardType">
+      <option value="weeks">Semaines gratuites</option>
+      <option value="months">Mois gratuits</option>
+      <option value="money">Crédit / montant ($)</option>
+      <option value="other">Autre (note libre uniquement)</option>
+    </select>
+    <label>Valeur</label>
+    <input type="number" id="rewardValue" value="1" min="0" step="0.5">
+    <label>Note (facultatif)</label>
+    <input type="text" id="rewardNote" placeholder="Ex: 2 semaines offertes suite au parrainage de Marc T.">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('rewardModal')">Annuler</button>
+      <button class="btn btn-primary" onclick="doRewardReferral()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Créditer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="changePasswordModal">
+  <div class="modal">
+    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:8px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Changer mon mot de passe</h3>
+    <label>Mot de passe actuel</label>
+    <input type="password" id="cpCurrent" placeholder="••••••••" autocomplete="current-password">
+    <label>Nouveau mot de passe</label>
+    <input type="password" id="cpNew" placeholder="Minimum 8 caractères" autocomplete="new-password">
+    <label>Confirmer le nouveau mot de passe</label>
+    <input type="password" id="cpConfirm" placeholder="Retaper le nouveau mot de passe" autocomplete="new-password">
+    <div id="cpError" style="color:var(--red);font-size:12px;min-height:16px;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('changePasswordModal')">Annuler</button>
+      <button class="btn btn-primary" onclick="doChangePassword()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Changer le mot de passe</button>
+    </div>
+  </div>
+</div>
+
 <div id="notif"></div>
 
 <script>
@@ -642,126 +672,261 @@ setInterval(checkServerStatus, 30000);
 // Paramètres majeurs par actif — tous verrouillés sauf Premium (params actif uniquement).
 // signal_reversal_margin = toujours verrouillé (paramètre interne algorithmique).
 
-const TRADEABLE_ASSETS = ['XAUUSD', 'BOOM1000'];
+// Refonte du 17/07/2026 (demande de Louis) : reflète les 9 vraies cartes de
+// la page Paramètres AlphaTrade (77 params) au lieu des ~20 params obsolètes
+// pré-refonte Take Profit/BE. AlphaTrade étant désormais XAUUSD uniquement,
+// plus de sélecteur d'actif ici — un seul jeu de paramètres par forfait,
+// organisé par carte pour rester lisible. Cartes "Connexion & IA" et
+// "Origine des trades" exclues (réglages techniques/compte, pas des
+// fonctionnalités à verrouiller par forfait).
+const ALPHATRADE_PARAM_CARDS = [
+  { title: '🟦 Risque & Compte', params: {
+    risk_pct:            { val: 0.35,  label: 'Risque / trade %',            type: 'number', step: '0.01' },
+    real_lot_cap:         { val: 0.20,  label: 'Lot max compte réel',         type: 'number', step: '0.001' },
+    demo_lot_cap:         { val: 0.20,  label: 'Lot max compte démo',         type: 'number', step: '0.001' },
+    lot_min:               { val: 0.01,  label: 'Lot minimum',                 type: 'number', step: '0.001' },
+    auto_max_positions:    { val: 6,     label: 'Positions auto max',          type: 'number', step: '1' },
+    max_positions:         { val: 6,     label: 'Positions max (symbole)',     type: 'number', step: '1' },
+    cadence_sec:           { val: 30,    label: "Cadence d'analyse (s)",       type: 'number', step: '1' },
+    max_trades_hour:       { val: 120,   label: 'Max trades / heure',          type: 'number', step: '1' },
+  }},
+  { title: '🟦 Session & Protection compte', params: {
+    session_max_loss:         { val: -200,  label: 'Perte max session $',            type: 'number', step: '1' },
+    session_target:            { val: 50,    label: 'Objectif session $',             type: 'number', step: '1' },
+    daily_target:               { val: 500,   label: 'Objectif journalier $',          type: 'number', step: '1' },
+    giveback:                   { val: 100,   label: 'Giveback $',                     type: 'number', step: '1' },
+    session_filter_enabled:     { val: false, label: 'Trader uniquement sur plage horaire', type: 'bool' },
+    session_start_utc:          { val: 8,     label: 'Ouverture UTC',                  type: 'number', step: '1' },
+    session_end_utc:            { val: 17,    label: 'Fermeture UTC',                  type: 'number', step: '1' },
+    stop_before_end_min:        { val: 30,    label: 'Stop avant fin (min)',           type: 'number', step: '1' },
+    profit_protection_enabled:  { val: true,  label: 'Protection du profit active',    type: 'bool' },
+    profit_drawdown_pct:        { val: 30,    label: 'Recul depuis pic %',             type: 'number', step: '1' },
+    profit_warning_ratio:       { val: 0.75,  label: 'Zone avertissement %',           type: 'number', step: '0.05' },
+    max_position_loss:          { val: 15,    label: 'Perte max / position $',         type: 'number', step: '0.1' },
+    max_floating_loss:          { val: 50,    label: 'Flottant max portefeuille $',    type: 'number', step: '0.1' },
+  }},
+  { title: '🟦 Renfort & Rebond', params: {
+    reinforcement_enabled:               { val: true,  label: 'Activer le Renfort de position',      type: 'bool' },
+    reinforcement_min_confidence_margin: { val: 5,     label: 'Écart confiance renfort %',            type: 'number', step: '1' },
+    reinforcement_min_score_gap:         { val: 8,     label: 'Écart score renfort',                  type: 'number', step: '1' },
+    reinforcement_cooldown_sec:          { val: 30,    label: 'Pause entre renforts (s)',             type: 'number', step: '5' },
+    cooldown_after_loss_sec:             { val: 60,    label: 'Pause après perte (s)',                type: 'number', step: '5' },
+    rebond_enabled:                      { val: false, label: 'Activer la stratégie Rebond',           type: 'bool' },
+    rebond_min_signal_pct:               { val: 55,    label: 'Seuil signal contraire min %',         type: 'number', step: '1' },
+    rebond_min_loss_trigger:             { val: 2.0,   label: 'Perte déclenchement $',                type: 'number', step: '0.1' },
+    rebond_target_pips:                  { val: 1.5,   label: 'Cible capture rapide (pts)',           type: 'number', step: '0.1' },
+    rebond_stop_pips:                    { val: 2.0,   label: 'Distance stop rebond (pips)',          type: 'number', step: '0.1' },
+    rebond_max_hold_sec:                 { val: 90,    label: 'Durée max maintien (s)',               type: 'number', step: '10' },
+    rebond_cooldown_sec:                 { val: 120,   label: 'Cooldown rebond (s)',                  type: 'number', step: '30' },
+    lot_multiplicateur_rebond:           { val: 3.0,   label: 'Multiplicateur lot rebond',            type: 'number', step: '0.1' },
+    rebond_max_active:                   { val: 3,     label: 'Rebonds actifs max',                   type: 'number', step: '1' },
+    lot:                                  { val: 0.03,  label: 'Lot fixe',                             type: 'number', step: '0.001' },
+    lot_multiplicateur_renfort:          { val: 1.0,   label: 'Multiplicateur lot renfort',           type: 'number', step: '0.1' },
+  }},
+  { title: '🟦 Stratégie Or', params: {
+    confidence_min:        { val: 70,   label: 'Seuil de confiance min %',    type: 'number', step: '1' },
+    timeframe:              { val: 'M1', label: "Timeframe d'analyse",        type: 'select', options: ['M1','M5','M15','M30','H1'] },
+    anti_top_bottom:        { val: true, label: 'Éviter achat sommet / vente creux', type: 'bool' },
+    lookback_candles:       { val: 200,  label: 'Bougies analysées',           type: 'number', step: '5' },
+    edge_zone_pct:          { val: 20,   label: 'Zone de bord %',              type: 'number', step: '1' },
+    min_score_gap:          { val: 12,   label: 'Écart BUY/SELL minimum',      type: 'number', step: '1' },
+    signal_reversal_margin: { val: 7,    label: 'Marge retournement signal',   type: 'number', step: '1' },
+  }},
+  { title: '🟦 KB1000 Gold AI', params: {
+    kb1000_candles_per_level: { val: 160, label: 'Bougies analysées / niveau', type: 'number', step: '10' },
+    kb1000_coherence_min_pct: { val: 60,  label: 'Seuil de cohérence min %',   type: 'number', step: '1' },
+    kb1000_min_confirmations: { val: 3,   label: 'Confirmations min. requises', type: 'number', step: '1' },
+    kb1000_entry_threshold:   { val: 70,  label: "Score d'entrée min %",       type: 'number', step: '1' },
+  }},
+  { title: '🟦 Take Profit / BE', params: {
+    take_profit_enabled:    { val: false, label: 'Activer la clôture par Take Profit', type: 'bool' },
+    take_profit_max_levels: { val: 3,     label: 'Nombre max de niveaux Take Profit', type: 'number', step: '1' },
+    fast_be_enabled:        { val: true,  label: 'Break-Even rapide (broker)',        type: 'bool' },
+    take_profit_move_be:    { val: true,  label: 'Passer à Break-Even après le 1er TP', type: 'bool' },
+  }},
+  { title: '🟦 Cible profit & Protection', params: {
+    profit_target:        { val: 1.5,  label: 'Cible profit $',            type: 'number', step: '0.05' },
+    max_hold_sec:          { val: 120,  label: 'Max hold (s)',              type: 'number', step: '5' },
+    position_review_sec:   { val: 120,  label: 'Délai de réanalyse (s)',    type: 'number', step: '5' },
+    emergency_loss_limit:  { val: 15,   label: 'Protection catastrophe $',  type: 'number', step: '0.5' },
+    min_positive_exit:     { val: 0.05, label: 'Profit min. sortie $',      type: 'number', step: '0.01' },
+    momentum_exit_score:   { val: 55,   label: 'Score momentum sortie',     type: 'number', step: '1' },
+  }},
+];
 
-const ASSET_PARAM_DEFAULTS = {
-  XAUUSD: {
-    lot:                     { val: 0.05,   label: 'Lot fixe',                    type: 'number', step: '0.001' },
-    lot_min:                 { val: 0.01,   label: 'Lot minimum',                 type: 'number', step: '0.001' },
-    lot_max:                 { val: 0.10,   label: 'Lot maximum',                 type: 'number', step: '0.001' },
-    tp_pips:                 { val: 30,     label: 'TP pips',                     type: 'number', step: '1' },
-    max_positions:           { val: 5,      label: 'Positions max',               type: 'number', step: '1' },
-    max_position_loss:       { val: 20,     label: 'Perte max / position ($)',    type: 'number', step: '0.5' },
-    max_floating_loss:       { val: 50,     label: 'Flottant max ($)',            type: 'number', step: '1' },
-    timeframe:               { val: 'M5',   label: 'Timeframe',                   type: 'select', options: ['M1','M5','M15','H1','H4','D1'] },
-    confidence_min:          { val: 60,     label: 'Seuil confiance (%)',         type: 'number', step: '1' },
-    cadence_sec:             { val: 15,     label: 'Cadence (s)',                 type: 'number', step: '1' },
-    max_trades_hour:         { val: 120,    label: 'Max trades / heure',          type: 'number', step: '1' },
-    max_hold_sec:            { val: 3600,   label: 'Max hold (s)',                type: 'number', step: '30' },
-    position_review_sec:     { val: 300,    label: 'Délai réanalyse (s)',         type: 'number', step: '10' },
-    profit_target:           { val: 5.00,   label: 'Cible profit ($)',            type: 'number', step: '0.5' },
-    profit_lock_trigger:     { val: 0.50,   label: 'Verrou profit dès ($)',       type: 'number', step: '0.1' },
-    profit_lock_drawdown:    { val: 0.20,   label: 'Trailing stop % du pic',     type: 'number', step: '0.01' },
-    emergency_loss_limit:    { val: 50.00,  label: 'Protection catastrophe ($)',  type: 'number', step: '1' },
-    min_positive_exit:       { val: 0.50,   label: 'Profit min. sortie ($)',      type: 'number', step: '0.1' },
-    signal_reversal_margin:  { val: 99,     label: 'Marge retournement signal',  type: 'number', step: '1', alwaysLocked: true },
-    cooldown_after_loss_sec: { val: 30,     label: 'Pause après perte (s)',       type: 'number', step: '5' },
-    session_filter_enabled:  { val: false,  label: 'Filtre session Londres',      type: 'bool' },
-    session_start_utc:       { val: 7,      label: 'Ouverture UTC (h)',           type: 'number', step: '1' },
-    session_end_utc:         { val: 22,     label: 'Fermeture UTC (h)',           type: 'number', step: '1' },
-    stop_before_end_min:     { val: 10,     label: 'Arrêter avant fin (min)',     type: 'number', step: '1' },
-  },
-  BOOM1000: {
-    lot:                     { val: 0.010,  label: 'Lot fixe',                    type: 'number', step: '0.001' },
-    lot_min:                 { val: 0.001,  label: 'Lot minimum',                 type: 'number', step: '0.001' },
-    lot_max:                 { val: 0.020,  label: 'Lot maximum',                 type: 'number', step: '0.001' },
-    tp_pips:                 { val: 15,     label: 'TP pips',                     type: 'number', step: '1' },
-    max_positions:           { val: 2,      label: 'Positions max',               type: 'number', step: '1' },
-    max_position_loss:       { val: 5,      label: 'Perte max / position ($)',    type: 'number', step: '0.5' },
-    max_floating_loss:       { val: 10,     label: 'Flottant max ($)',            type: 'number', step: '1' },
-    timeframe:               { val: 'M1',   label: 'Timeframe',                   type: 'select', options: ['M1','M5','M15','H1','H4','D1'] },
-    confidence_min:          { val: 70,     label: 'Seuil confiance (%)',         type: 'number', step: '1' },
-    cadence_sec:             { val: 30,     label: 'Cadence (s)',                 type: 'number', step: '1' },
-    max_trades_hour:         { val: 60,     label: 'Max trades / heure',          type: 'number', step: '1' },
-    max_hold_sec:            { val: 1800,   label: 'Max hold (s)',                type: 'number', step: '30' },
-    position_review_sec:     { val: 180,    label: 'Délai réanalyse (s)',         type: 'number', step: '10' },
-    profit_target:           { val: 2.00,   label: 'Cible profit ($)',            type: 'number', step: '0.5' },
-    profit_lock_trigger:     { val: 0.30,   label: 'Verrou profit dès ($)',       type: 'number', step: '0.1' },
-    profit_lock_drawdown:    { val: 0.15,   label: 'Trailing stop % du pic',     type: 'number', step: '0.01' },
-    emergency_loss_limit:    { val: 15.00,  label: 'Protection catastrophe ($)',  type: 'number', step: '1' },
-    min_positive_exit:       { val: 0.10,   label: 'Profit min. sortie ($)',      type: 'number', step: '0.1' },
-    signal_reversal_margin:  { val: 99,     label: 'Marge retournement signal',  type: 'number', step: '1', alwaysLocked: true },
-    cooldown_after_loss_sec: { val: 60,     label: 'Pause après perte (s)',       type: 'number', step: '5' },
-    session_filter_enabled:  { val: false,  label: 'Filtre session',              type: 'bool' },
-    session_start_utc:       { val: 0,      label: 'Ouverture UTC (h)',           type: 'number', step: '1' },
-    session_end_utc:         { val: 24,     label: 'Fermeture UTC (h)',           type: 'number', step: '1' },
-    stop_before_end_min:     { val: 5,      label: 'Arrêter avant fin (min)',     type: 'number', step: '1' },
-  },
-};
+// Basique = KB1000 (application séparée, BOOM1000/CRASH1000 uniquement) --
+// jamais les paramètres AlphaTrade. Clés en "section.champ" pour matcher
+// exactement les attributs data-param déjà présents dans ui/index.html côté
+// KB1000 (params.default.json : general / kb_strategies / BOOM1000 / CRASH1000).
+const KB1000_PARAM_CARDS = [
+  { title: '🟩 Général', params: {
+    'general.manual_lot_max':   { val: 5.0,   label: 'Lot manuel maximum',            type: 'number', step: '0.1' },
+    'general.logs_enabled':     { val: true,  label: 'Logs activés',                  type: 'bool' },
+    'general.session_max_loss': { val: 500.0, label: 'Perte max de session $',        type: 'number', step: '10' },
+    'general.session_objective':{ val: 250.0, label: 'Objectif de session $',         type: 'number', step: '10' },
+  }},
+  { title: '🟩 Serveur IA — Validation', params: {
+    'general.ai_server_enabled':        { val: true,  label: "Activer le serveur d'apprentissage", type: 'bool' },
+    'general.ai_sync_interval_sec':     { val: 5,     label: 'Synchronisation (s)',                 type: 'number', step: '1' },
+    'general.ai_retrain_interval_min':  { val: 360,   label: 'Réentraînement (min)',                type: 'number', step: '10' },
+    'general.ai_trade_confirmation':    { val: false, label: 'Valider les entrées avec IA serveur',  type: 'bool' },
+  }},
+  { title: '🟧 BOOM1000 — Extension Index', params: {
+    'BOOM1000.candles_ref':          { val: 40,   label: 'Fenêtre bougies de référence',     type: 'number', step: '5' },
+    'BOOM1000.spike_amplitude_pts':  { val: 150.0,label: 'Amplitude spike de référence (pts)', type: 'number', step: '5' },
+    'BOOM1000.spike_candle_ratio':   { val: 2.5,  label: 'Ratio détection spike',            type: 'number', step: '0.1' },
+    'BOOM1000.level_accumulation':   { val: 35,   label: 'Seuil ACCUMULATION',               type: 'number', step: '1' },
+    'BOOM1000.level_exhaustion':     { val: 55,   label: 'Seuil EXHAUSTION',                 type: 'number', step: '1' },
+    'BOOM1000.level_pre_spike':      { val: 75,   label: 'Seuil PRE_SPIKE',                  type: 'number', step: '1' },
+    'BOOM1000.decel_exhaustion_min': { val: 0.35, label: 'Décélération min. EXHAUSTION',     type: 'number', step: '0.01' },
+    'BOOM1000.decel_pre_spike_min':  { val: 0.55, label: 'Décélération min. PRE_SPIKE',      type: 'number', step: '0.01' },
+  }},
+  { title: '🟪 CRASH1000 — Extension Index', params: {
+    'CRASH1000.candles_ref':          { val: 40,   label: 'Fenêtre bougies de référence',     type: 'number', step: '5' },
+    'CRASH1000.spike_amplitude_pts':  { val: 150.0,label: 'Amplitude crash de référence (pts)', type: 'number', step: '5' },
+    'CRASH1000.spike_candle_ratio':   { val: 2.5,  label: 'Ratio détection crash',            type: 'number', step: '0.1' },
+    'CRASH1000.level_accumulation':   { val: 35,   label: 'Seuil ACCUMULATION',               type: 'number', step: '1' },
+    'CRASH1000.level_exhaustion':     { val: 55,   label: 'Seuil EXHAUSTION',                 type: 'number', step: '1' },
+    'CRASH1000.level_pre_spike':      { val: 75,   label: 'Seuil PRE_SPIKE',                  type: 'number', step: '1' },
+    'CRASH1000.decel_exhaustion_min': { val: 0.35, label: 'Décélération min. EXHAUSTION',     type: 'number', step: '0.01' },
+    'CRASH1000.decel_pre_spike_min':  { val: 0.55, label: 'Décélération min. PRE_SPIKE',      type: 'number', step: '0.01' },
+  }},
+  { title: '🟧 BOOM1000 — Gestion BUY & Risque', params: {
+    'BOOM1000.lot_max':                       { val: 0.50, label: 'Lot maximum',                type: 'number', step: '0.01' },
+    'BOOM1000.sl_ratio':                       { val: 0.5,  label: 'Ratio Stop théorique (Validation)', type: 'number', step: '0.01' },
+    'BOOM1000.lot_ratio_min':                  { val: 0.10, label: 'Lot ratio minimum',           type: 'number', step: '0.01' },
+    'BOOM1000.lot_cap_accumulation':           { val: 0.50, label: 'Plafond lot ACCUMULATION',    type: 'number', step: '0.01' },
+    'BOOM1000.lot_cap_exhaustion':             { val: 0.80, label: 'Plafond lot EXHAUSTION',      type: 'number', step: '0.01' },
+    'BOOM1000.lot_cap_pre_spike':              { val: 1.00, label: 'Plafond lot PRE_SPIKE',       type: 'number', step: '0.01' },
+    'BOOM1000.secondary_lot_ratio':            { val: 0.10, label: 'Lot secondaire SELL',         type: 'number', step: '0.01' },
+    'BOOM1000.max_sell_count_accumulation':    { val: 3,    label: 'Max SELL en ACCUMULATION',    type: 'number', step: '1' },
+    'BOOM1000.max_sell_count_exhaustion':      { val: 2,    label: 'Max SELL en EXHAUSTION',      type: 'number', step: '1' },
+    'BOOM1000.max_sell_count_pre_spike':       { val: 0,    label: 'Max SELL en PRE_SPIKE',       type: 'number', step: '1' },
+    'BOOM1000.max_open_positions':             { val: 6,    label: 'Positions max simultanées',   type: 'number', step: '1' },
+    'BOOM1000.max_exposure_lot':               { val: 3.0,  label: 'Exposition max (lots)',       type: 'number', step: '0.1' },
+  }},
+  { title: '🟪 CRASH1000 — Gestion SELL & Risque', params: {
+    'CRASH1000.lot_max':                      { val: 0.50, label: 'Lot maximum',                type: 'number', step: '0.01' },
+    'CRASH1000.sl_ratio':                      { val: 0.5,  label: 'Ratio Stop théorique (Validation)', type: 'number', step: '0.01' },
+    'CRASH1000.lot_ratio_min':                 { val: 0.10, label: 'Lot ratio minimum',           type: 'number', step: '0.01' },
+    'CRASH1000.lot_cap_accumulation':          { val: 0.50, label: 'Plafond lot ACCUMULATION',    type: 'number', step: '0.01' },
+    'CRASH1000.lot_cap_exhaustion':            { val: 0.80, label: 'Plafond lot EXHAUSTION',      type: 'number', step: '0.01' },
+    'CRASH1000.lot_cap_pre_spike':             { val: 1.00, label: 'Plafond lot PRE_SPIKE',       type: 'number', step: '0.01' },
+    'CRASH1000.secondary_lot_ratio':           { val: 0.10, label: 'Lot secondaire BUY',          type: 'number', step: '0.01' },
+    'CRASH1000.max_buy_count_accumulation':    { val: 3,    label: 'Max BUY en ACCUMULATION',     type: 'number', step: '1' },
+    'CRASH1000.max_buy_count_exhaustion':      { val: 2,    label: 'Max BUY en EXHAUSTION',       type: 'number', step: '1' },
+    'CRASH1000.max_buy_count_pre_spike':       { val: 0,    label: 'Max BUY en PRE_SPIKE',        type: 'number', step: '1' },
+    'CRASH1000.max_open_positions':            { val: 6,    label: 'Positions max simultanées',   type: 'number', step: '1' },
+    'CRASH1000.max_exposure_lot':              { val: 3.0,  label: 'Exposition max (lots)',       type: 'number', step: '0.1' },
+  }},
+  { title: '🟩 Stratégie A — Paliers (haute confiance)', params: {
+    'kb_strategies.tiered_enabled':         { val: false, label: 'Activer la Stratégie A',        type: 'bool' },
+    'kb_strategies.tiered_confidence_min':  { val: 70,    label: 'Confiance minimum (%)',          type: 'number', step: '1' },
+    'kb_strategies.tiered_tp1_profit':      { val: 2.0,   label: 'TP1 — profit déclencheur ($)',   type: 'number', step: '0.1' },
+    'kb_strategies.tiered_tp1_close_pct':   { val: 50,    label: 'TP1 — % du lot initial fermé',   type: 'number', step: '1' },
+    'kb_strategies.tiered_tp2_profit':      { val: 5.0,   label: 'TP2 — profit déclencheur ($)',   type: 'number', step: '0.1' },
+    'kb_strategies.tiered_tp2_close_pct':   { val: 30,    label: 'TP2 — % du lot initial fermé',   type: 'number', step: '1' },
+    'kb_strategies.tiered_tp3_profit':      { val: 8.0,   label: 'TP3 — profit déclencheur ($)',   type: 'number', step: '0.1' },
+  }},
+  { title: '🟩 Amélioration B — Multi-positions par actif', params: {
+    'kb_strategies.multi_enabled':              { val: false, label: "Activer l'Amélioration B",   type: 'bool' },
+    'kb_strategies.multi_positions_per_symbol': { val: 2,     label: 'Positions par actif',          type: 'number', step: '1' },
+    'kb_strategies.multi_tp_target_1':          { val: 0.3,   label: 'Cible position 1 ($)',         type: 'number', step: '0.05' },
+    'kb_strategies.multi_tp_target_2':          { val: 0.6,   label: 'Cible position 2 ($)',         type: 'number', step: '0.05' },
+    'kb_strategies.multi_tp_target_3':          { val: 0.7,   label: 'Cible position 3 ($)',         type: 'number', step: '0.05' },
+  }},
+];
 
-// lot_max plafonnés par forfait (plus restrictif pour les petits plans)
-const ASSET_LOT_MAX_BY_PLAN = {
-  XAUUSD:   { basique: 0.02,  starter: 0.03,  pro: 0.05,  elite: 0.10,  premium: 0.20  },
-  BOOM1000: { basique: 0.002, starter: 0.005, pro: 0.010, elite: 0.020, premium: 0.050 },
-};
+function cardsForPlan(plan) {
+  return plan === 'basique' ? KB1000_PARAM_CARDS : ALPHATRADE_PARAM_CARDS;
+}
 
-function buildAssetParams(asset, plan) {
+function buildPlanParams(plan) {
   const isPremium = plan === 'premium';
   const result = {};
-  for (const [key, d] of Object.entries(ASSET_PARAM_DEFAULTS[asset])) {
-    const locked = d.alwaysLocked === true || !isPremium;
-    const entry = { val: d.val, locked, label: d.label, type: d.type };
-    if (d.step) entry.step = d.step;
-    if (d.options) entry.options = d.options;
-    result[key] = entry;
+  for (const card of cardsForPlan(plan)) {
+    for (const [key, d] of Object.entries(card.params)) {
+      // Basique n'a qu'un seul niveau (pas de "premium" au-dessus) -- tout est
+      // verrouillé par défaut, comme les autres forfaits non-premium.
+      const locked = d.alwaysLocked === true || !isPremium;
+      const entry = { val: d.val, locked, label: d.label, type: d.type, card: card.title };
+      if (d.step) entry.step = d.step;
+      if (d.options) entry.options = d.options;
+      result[key] = entry;
+    }
   }
-  const lotMax = ASSET_LOT_MAX_BY_PLAN[asset]?.[plan];
-  if (lotMax !== undefined) result.lot_max.val = lotMax;
   return result;
 }
 
-const PLAN_PARAMS_ASSET_DEFAULT = {};
+const PLAN_PARAMS_DEFAULT = {};
 for (const plan of ['basique','starter','pro','elite','premium']) {
-  PLAN_PARAMS_ASSET_DEFAULT[plan] = {};
-  for (const asset of TRADEABLE_ASSETS) {
-    PLAN_PARAMS_ASSET_DEFAULT[plan][asset] = buildAssetParams(asset, plan);
-  }
+  PLAN_PARAMS_DEFAULT[plan] = buildPlanParams(plan);
 }
 
-let currentAssetTab = 'XAUUSD';
-let planParamsAssetState = JSON.parse(JSON.stringify(PLAN_PARAMS_ASSET_DEFAULT));
-
-// Catalogue des actifs (miroir local — vérité = backend)
-const ASSETS_CATALOG = [
-  { symbol: 'XAUUSD',   name: 'Or / Dollar US',   category: 'metal',     plans: ['starter','standard','premium','elite'], active: true  },
-  { symbol: 'EURUSD',   name: 'Euro / Dollar US',  category: 'forex',     plans: [],                                       active: false },
-  { symbol: 'BOOM1000', name: 'Boom 1000 Index',   category: 'synthetic', plans: ['premium','elite'],                      active: true  },
-  { symbol: 'CRASH1000',name: 'Crash 1000 Index',  category: 'synthetic', plans: [],                                       active: false },
-];
+let planParamsState = JSON.parse(JSON.stringify(PLAN_PARAMS_DEFAULT));
 
 const FORFAITS_DEFAULT = {
-  basique:  { name: 'Basique',  price_monthly: 14.99,  price_weekly: 4.99,   capital_min: 50,   lot_max: 0.02, max_positions: 2 },
-  starter:  { name: 'Starter',  price_monthly: 29.99,  price_weekly: 9.99,   capital_min: 350,  lot_max: 0.03, max_positions: 2 },
-  pro:      { name: 'Pro',      price_monthly: 79.99,  price_weekly: 24.99,  capital_min: 1000, lot_max: 0.05, max_positions: 4 },
-  elite:    { name: 'Élite',    price_monthly: 299.99, price_weekly: 99.99,  capital_min: 2500, lot_max: 0.10, max_positions: 6 },
-  premium:  { name: 'Premium',  price_monthly: 999.99, price_weekly: 299.99, capital_min: 5000, lot_max: 0.20, max_positions: 8 },
+  basique:  { name: 'Basique',  badge: '⚡ BOOM1000 ONLY', price_monthly: 14.99,  price_weekly: 4.99,   capital_min: 50,   lot_max: 0.02, max_positions: 2, available: true, features: [] },
+  starter:  { name: 'Starter',  badge: '',                 price_monthly: 29.99,  price_weekly: 9.99,   capital_min: 350,  lot_max: 0.03, max_positions: 2, available: true, features: [] },
+  pro:      { name: 'Pro',      badge: '⭐ LE PLUS POPULAIRE', price_monthly: 79.99,  price_weekly: 24.99,  capital_min: 1000, lot_max: 0.05, max_positions: 4, available: true, features: [] },
+  elite:    { name: 'Élite',    badge: '',                 price_monthly: 299.99, price_weekly: 99.99,  capital_min: 2500, lot_max: 0.10, max_positions: 6, available: true, features: [] },
+  premium:  { name: 'Premium',  badge: '⭐ PREMIUM',        price_monthly: 999.99, price_weekly: 299.99, capital_min: 5000, lot_max: 0.20, max_positions: 8, available: true, features: [] },
+  global:   { name: 'Global',   badge: '',                 price_monthly: 999.99, price_weekly: 494.99, capital_min: 1000, lot_max: 0,    max_positions: 0, available: false, at_global: true, features: [] },
 };
+const MAX_FORFAIT_FEATURES = 20;
+let currentForfaits = {};
 
 // Limite de machines par forfait
-const DEVICE_LIMITS = { basique: 1, starter: 1, pro: 1, elite: 2, premium: 2 };
+const DEVICE_LIMITS = { basique: 1, starter: 1, pro: 1, elite: 2, premium: 2, global: 1 };
 
 let currentPlanTab = 'basique';
 
 // ── INIT ─────────────────────────────────────────────────────────────────
-window.onload = () => {
+window.onload = async () => {
   if (token) {
     showAdmin();
     loadData();
   } else {
     document.getElementById('loginPage').style.display = 'flex';
   }
-  showPlanParams('basique', document.querySelector('.plan-tab'));
+  await ensureForfaitsLoaded();
+  renderPlanTabs();
+  showPlanParams(currentPlanTab);
 };
+
+// Refonte du 17/07/2026 (demande de Louis) : les onglets de forfait dans
+// "Paramètres forfaits" affichent désormais le vrai nom édité dans l'onglet
+// Forfaits (au lieu d'un libellé figé "Basique ⚡" etc.) -- renommer un
+// forfait s'y répercute automatiquement.
+async function ensureForfaitsLoaded() {
+  if (Object.keys(currentForfaits).length) return;
+  if (!token) { currentForfaits = JSON.parse(JSON.stringify(FORFAITS_DEFAULT)); return; }
+  try {
+    const r = await fetch(`${API}/admin/forfaits`, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.forfaits && Object.keys(d.forfaits).length) currentForfaits = JSON.parse(JSON.stringify(d.forfaits));
+    }
+  } catch (_) {}
+  if (!Object.keys(currentForfaits).length) currentForfaits = JSON.parse(JSON.stringify(FORFAITS_DEFAULT));
+}
+
+function renderPlanTabs() {
+  const bar = document.getElementById('planTabsBar');
+  if (!bar) return;
+  // 05/08/2026 -- AlphaTrade Global exclu de ce verrouillage : c'est un produit
+  // à part (moteur/app distincts), ses params ne passent pas par ce système de
+  // verrouillage par forfait AlphaTrade (demande explicite de Louis).
+  const keys = Object.entries(currentForfaits).filter(([, f]) => !f.at_global)
+    .sort((a, b) => (a[1].price_monthly || 0) - (b[1].price_monthly || 0)).map(([k]) => k);
+  if (!keys.length) return;
+  if (!keys.includes(currentPlanTab)) currentPlanTab = keys[0];
+  bar.innerHTML = keys.map(key => {
+    const name = currentForfaits[key]?.name || key;
+    if (!planParamsState[key]) planParamsState[key] = buildPlanParams(key);
+    return `<button class="plan-tab ${key === currentPlanTab ? 'active' : ''}" onclick="showPlanParams('${key}',this)">${name}</button>`;
+  }).join('');
+}
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────
 async function doLogin() {
@@ -779,7 +944,10 @@ async function doLogin() {
     if (!data.user.is_admin) throw new Error('Accès administrateur requis');
     token = data.token;
     sessionStorage.setItem('at_admin_token', token);
-    showAdmin(); loadData(); loadPlanParamsFromServer();
+    showAdmin(); loadData();
+    await ensureForfaitsLoaded();
+    renderPlanTabs();
+    loadPlanParamsFromServer();
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';
   }
@@ -806,40 +974,129 @@ function switchTab(name, btn) {
   if (name === 'promo')    loadPromoTab();
   if (name === 'journal')  loadJournal();
   if (name === 'forfaits') loadForfaitsFromServer();
-  if (name === 'actifs')   loadActifs();
+  if (name === 'params')   ensureForfaitsLoaded().then(() => { renderPlanTabs(); loadPlanParamsFromServer(); });
 }
 
 // ── ONGLET FORFAITS ───────────────────────────────────────────────────────
+// Refonte du 17/07/2026 (demande de Louis) : nom, badge, statut disponible/
+// indisponible et liste de fonctionnalités deviennent éditables (avant,
+// seuls prix/capital/lot/positions l'étaient) ; les forfaits ne sont plus
+// une liste figée à 5 clés (ajout/suppression possibles).
 function renderForfaitsGrid(data) {
   const grid = document.getElementById('forfaitsGrid');
   if (!grid) return;
-  const source = data || FORFAITS_DEFAULT;
-  grid.innerHTML = Object.entries(source).map(([key, f]) => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
-      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">${f.name}</div>
+  currentForfaits = data ? JSON.parse(JSON.stringify(data)) : JSON.parse(JSON.stringify(FORFAITS_DEFAULT));
+  const keys = Object.keys(currentForfaits);
+  grid.innerHTML = keys.map(key => {
+    const f = currentForfaits[key];
+    const features = f.features || [];
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;${f.available === false ? 'opacity:.6;border-color:var(--orange)' : ''}">
+      <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Nom du forfait
+        <input type="text" value="${f.name || ''}" oninput="updateForfaitField('${key}','name',this.value)"
+          style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </label>
+      <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Badge (optionnel)
+        <input type="text" value="${f.badge || ''}" placeholder="ex: ⭐ LE PLUS POPULAIRE" oninput="updateForfaitField('${key}','badge',this.value)"
+          style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+      </label>
       <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Prix mensuel ($)
-        <input type="number" step="0.01" value="${f.price_monthly}" id="f_${key}_monthly"
+        <input type="number" step="0.01" value="${f.price_monthly}" oninput="updateForfaitField('${key}','price_monthly',parseFloat(this.value)||0)"
           style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </label>
       <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Prix hebdomadaire ($)
-        <input type="number" step="0.01" value="${f.price_weekly}" id="f_${key}_weekly"
+        <input type="number" step="0.01" value="${f.price_weekly}" oninput="updateForfaitField('${key}','price_weekly',parseFloat(this.value)||0)"
           style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </label>
       <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Capital minimum ($)
-        <input type="number" step="10" value="${f.capital_min}" id="f_${key}_capital"
+        <input type="number" step="10" value="${f.capital_min}" oninput="updateForfaitField('${key}','capital_min',parseFloat(this.value)||0)"
           style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;margin-bottom:12px">
         <label style="font-size:12px;color:var(--muted)">Lot max
-          <input type="number" step="0.01" value="${f.lot_max}" id="f_${key}_lot"
+          <input type="number" step="0.01" value="${f.lot_max}" oninput="updateForfaitField('${key}','lot_max',parseFloat(this.value)||0)"
             style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
         </label>
         <label style="font-size:12px;color:var(--muted)">Positions max
-          <input type="number" step="1" value="${f.max_positions}" id="f_${key}_pos"
+          <input type="number" step="1" value="${f.max_positions}" oninput="updateForfaitField('${key}','max_positions',parseInt(this.value)||1)"
             style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
         </label>
       </div>
-    </div>`).join('');
+
+      <div onclick="toggleForfaitAvailability('${key}')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:12px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${f.available === false ? 'var(--orange)' : 'var(--green)'};flex-shrink:0"></span>
+        <span style="font-size:12.5px;font-weight:600">${f.available === false ? 'Actuellement indisponible' : 'Disponible sur le site'}</span>
+      </div>
+
+      <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--muted)">Fonctionnalités affichées</label>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+        ${features.map((feat, i) => `
+          <div style="display:grid;grid-template-columns:22px 1fr 24px;gap:6px;align-items:center">
+            <input type="checkbox" ${feat.active ? 'checked' : ''} onchange="toggleForfaitFeature('${key}',${i},this.checked)" style="width:16px;height:16px;accent-color:var(--green)">
+            <input type="text" value="${feat.text || ''}" oninput="updateForfaitFeatureText('${key}',${i},this.value)"
+              style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+            <button type="button" onclick="removeForfaitFeature('${key}',${i})" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--red);cursor:pointer;height:26px;font-size:12px">✕</button>
+          </div>`).join('')}
+      </div>
+      <button type="button" onclick="addForfaitFeature('${key}')" ${features.length >= MAX_FORFAIT_FEATURES ? 'disabled' : ''}
+        style="width:100%;background:var(--bg);border:1px dashed var(--green2);color:var(--green);border-radius:6px;padding:6px;font-size:11.5px;cursor:pointer">
+        + Ajouter une ligne
+      </button>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button type="button" onclick="deleteForfait('${key}')" class="btn btn-ghost btn-sm" style="color:var(--red)">🗑 Supprimer ce forfait</button>
+      </div>
+    </div>`;
+  }).join('') + `
+    <div onclick="addForfait()" style="display:flex;align-items:center;justify-content:center;border:2px dashed var(--border);border-radius:12px;min-height:200px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600">
+      + Ajouter un forfait
+    </div>`;
+}
+
+function updateForfaitField(key, field, value) {
+  if (!currentForfaits[key]) return;
+  currentForfaits[key][field] = value;
+  if (field === 'name') renderPlanTabs(); // synchronise le nom dans l'onglet Paramètres forfaits en temps réel
+}
+function toggleForfaitAvailability(key) {
+  if (!currentForfaits[key]) return;
+  currentForfaits[key].available = currentForfaits[key].available === false ? true : false;
+  renderForfaitsGrid(currentForfaits);
+}
+function toggleForfaitFeature(key, i, checked) { if (currentForfaits[key]?.features?.[i]) currentForfaits[key].features[i].active = checked; }
+function updateForfaitFeatureText(key, i, value) { if (currentForfaits[key]?.features?.[i]) currentForfaits[key].features[i].text = value; }
+function removeForfaitFeature(key, i) {
+  if (!currentForfaits[key]?.features) return;
+  currentForfaits[key].features.splice(i, 1);
+  renderForfaitsGrid(currentForfaits);
+}
+function addForfaitFeature(key) {
+  if (!currentForfaits[key]) return;
+  if (!currentForfaits[key].features) currentForfaits[key].features = [];
+  if (currentForfaits[key].features.length >= MAX_FORFAIT_FEATURES) return;
+  currentForfaits[key].features.push({ text: 'Nouvelle fonctionnalité', active: true });
+  renderForfaitsGrid(currentForfaits);
+}
+function addForfait() {
+  const name = prompt('Nom du nouveau forfait :', 'Nouveau forfait');
+  if (!name) return;
+  const key = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || ('forfait_' + Date.now());
+  if (currentForfaits[key]) { notify('Un forfait avec cette clé existe déjà.', 'red'); return; }
+  currentForfaits[key] = { name, badge: '', price_monthly: 0, price_weekly: 0, capital_min: 0, lot_max: 0.01, max_positions: 1, available: false, features: [] };
+  renderForfaitsGrid(currentForfaits);
+  renderPlanTabs();
+}
+async function deleteForfait(key) {
+  if (!confirm(`Supprimer le forfait "${currentForfaits[key]?.name || key}" ? Cette action est irréversible côté serveur après sauvegarde.`)) return;
+  delete currentForfaits[key];
+  delete planParamsState[key];
+  renderForfaitsGrid(currentForfaits);
+  renderPlanTabs();
+  try {
+    const r = await fetch(`${API}/admin/forfaits/${key}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error();
+    notify('Forfait supprimé.', 'green');
+  } catch { notify('Le forfait sera supprimé du serveur à la prochaine sauvegarde.', 'orange'); }
 }
 
 async function loadForfaitsFromServer() {
@@ -855,21 +1112,18 @@ async function loadForfaitsFromServer() {
 }
 
 async function saveForfaits() {
-  const plans = ['basique', 'starter', 'pro', 'elite', 'premium'];
   const forfaits = {};
-  for (const key of plans) {
-    const monthly  = parseFloat(document.getElementById(`f_${key}_monthly`)?.value  || 0);
-    const weekly   = parseFloat(document.getElementById(`f_${key}_weekly`)?.value   || 0);
-    const capital  = parseFloat(document.getElementById(`f_${key}_capital`)?.value  || 0);
-    const lot      = parseFloat(document.getElementById(`f_${key}_lot`)?.value      || 0);
-    const pos      = parseInt(document.getElementById(`f_${key}_pos`)?.value        || 1);
+  for (const [key, f] of Object.entries(currentForfaits)) {
     forfaits[key] = {
-      name: FORFAITS_DEFAULT[key]?.name || key,
-      price_monthly: monthly,
-      price_weekly:  weekly,
-      capital_min:   capital,
-      lot_max:       lot,
-      max_positions: pos,
+      name: f.name || key,
+      badge: f.badge || '',
+      price_monthly: parseFloat(f.price_monthly) || 0,
+      price_weekly: parseFloat(f.price_weekly) || 0,
+      capital_min: parseFloat(f.capital_min) || 0,
+      lot_max: parseFloat(f.lot_max) || 0,
+      max_positions: parseInt(f.max_positions) || 1,
+      available: f.available !== false,
+      features: (f.features || []).map(feat => ({ text: feat.text || '', active: !!feat.active })),
     };
   }
   try {
@@ -886,69 +1140,6 @@ async function saveForfaits() {
   } catch (e) {
     notify('Erreur sauvegarde forfaits : ' + e.message, 'red');
   }
-}
-
-// ── ONGLET ACTIFS ─────────────────────────────────────────────────────────
-async function loadActifs() {
-  const grid = document.getElementById('actifsGrid');
-  if (!grid) return;
-  let assets = ASSETS_CATALOG;
-  try {
-    const r = await fetch(`${API}/admin/assets`, { headers: { Authorization: 'Bearer ' + token } });
-    if (r.ok) { const d = await r.json(); assets = d.assets || assets; }
-  } catch (_) {}
-  const allPlans = ['basique', 'starter', 'pro', 'elite', 'premium'];
-  grid.innerHTML = assets.map(a => {
-    const plansAllowed = Array.isArray(a.plans_allowed) ? a.plans_allowed : (a.plans || []);
-    const planChecks = allPlans.map(p => `
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
-        <input type="checkbox" ${plansAllowed.includes(p) ? 'checked' : ''} data-asset="${a.symbol}" data-plan="${p}">
-        ${p.charAt(0).toUpperCase() + p.slice(1)}
-      </label>`).join('');
-    const catColor = a.category === 'metal' ? '#D4AF37' : a.category === 'synthetic' ? '#7B2FBE' : '#64748b';
-    return `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-          <div>
-            <div style="font-size:14px;font-weight:700;color:var(--text)">${a.symbol}</div>
-            <div style="font-size:11px;color:var(--muted)">${a.name}</div>
-            <span style="font-size:10px;background:${catColor}22;color:${catColor};border:1px solid ${catColor}44;border-radius:4px;padding:1px 6px">${a.category}</span>
-          </div>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:${a.active ? 'var(--green)' : 'var(--muted)'}">
-            <input type="checkbox" id="active_${a.symbol}" ${a.active ? 'checked' : ''} onchange="toggleAssetActive('${a.symbol}',this.checked)">
-            ${a.active ? 'Actif' : 'Inactif'}
-          </label>
-        </div>
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Accès par plan</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${planChecks}</div>
-        <button class="btn btn-sm btn-primary" style="margin-top:14px;width:100%" onclick="saveAsset('${a.symbol}')">Appliquer</button>
-      </div>`;
-  }).join('');
-}
-
-async function toggleAssetActive(symbol, active) {
-  const lbl = document.querySelector(`label:has(#active_${symbol})`);
-  try {
-    await fetch(`${API}/admin/assets/${symbol}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ active })
-    });
-    notify(`${symbol} ${active ? 'activé' : 'désactivé'}`, active ? 'green' : 'red');
-  } catch (e) { notify('Erreur réseau', 'red'); }
-}
-
-async function saveAsset(symbol) {
-  const checks = document.querySelectorAll(`input[data-asset="${symbol}"][data-plan]`);
-  const plans = Array.from(checks).filter(c => c.checked).map(c => c.dataset.plan);
-  const active = document.getElementById(`active_${symbol}`)?.checked;
-  try {
-    const r = await fetch(`${API}/admin/assets/${symbol}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ active, plans_allowed: plans })
-    });
-    if (r.ok) notify(`${symbol} mis à jour`, 'green');
-    else notify('Erreur serveur', 'red');
-  } catch (e) { notify('Erreur réseau', 'red'); }
 }
 
 async function loadJournal() {
@@ -1133,79 +1324,67 @@ function showPlanParams(plan, el) {
   currentPlanTab = plan;
   document.querySelectorAll('.plan-tab').forEach(b => b.classList.remove('active'));
   if (el) el.classList.add('active');
-  renderAssetParamsPanel(plan, currentAssetTab);
+  renderParamsPanel(plan);
 }
 
-function renderAssetParamsPanel(plan, asset) {
+// Refonte du 17/07/2026 : plus de sélecteur d'actif (XAUUSD uniquement) —
+// les paramètres sont regroupés par carte réelle de l'app AlphaTrade.
+function renderParamsPanel(plan) {
   const panel = document.getElementById('paramsPanel');
-  const assetTabsHtml = TRADEABLE_ASSETS.map(a => `
-    <button class="asset-tab ${a === asset ? 'active' : ''}" onclick="switchAsset('${a}',this)">
-      ${a === 'XAUUSD' ? '🥇 XAUUSD' : '📈 BOOM1000'}
-    </button>`).join('');
-  const params = planParamsAssetState[plan][asset];
-  const paramsHtml = Object.entries(params).map(([key, p]) => `
-    <div class="param-row">
-      <div class="param-info">
-        <div class="param-name">${p.label}</div>
-        ${p.desc ? `<div class="param-desc">${p.desc}</div>` : ''}
-      </div>
-      <div class="param-control">
-        ${p.type === 'bool'
-          ? `<label class="toggle-switch">
-               <input type="checkbox" id="ap_${plan}_${asset}_${key}" ${(p.val === 'true' || p.val === true) ? 'checked' : ''} ${p.locked ? 'disabled' : ''} onchange="updateAssetParamVal('${plan}','${asset}','${key}',this.checked)">
-               <span class="toggle-slider"></span>
-             </label>`
-          : p.type === 'select'
-          ? `<select class="param-input" id="ap_${plan}_${asset}_${key}" ${p.locked ? 'disabled' : ''} onchange="updateAssetParamVal('${plan}','${asset}','${key}',this.value)">
-               ${(p.options||[]).map(o => `<option value="${o}" ${String(p.val)===o?'selected':''}>${o}</option>`).join('')}
-             </select>`
-          : `<input class="param-input" type="number" step="${p.step||'1'}" id="ap_${plan}_${asset}_${key}" value="${p.val}" ${p.locked ? 'disabled' : ''} onchange="updateAssetParamVal('${plan}','${asset}','${key}',this.value)">`}
-        <button class="lock-btn ${p.locked ? 'locked' : 'unlocked'}" id="lk_${plan}_${asset}_${key}"
-          title="${p.locked ? 'Verrouillé' : 'Déverrouillé'}" onclick="toggleAssetLock('${plan}','${asset}','${key}')">
-          ${p.locked ? SVG_LOCK : SVG_UNLOCK}
-        </button>
-      </div>
-    </div>`).join('');
-  panel.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-      <span style="font-size:12px;color:var(--muted);margin-right:4px">Actif :</span>
-      ${assetTabsHtml}
-    </div>
-    <div class="param-grid">${paramsHtml}</div>`;
-}
-
-function switchAsset(asset, el) {
-  currentAssetTab = asset;
-  document.querySelectorAll('.asset-tab').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  renderAssetParamsPanel(currentPlanTab, asset);
-}
-
-function updateAssetParamVal(plan, asset, key, val) {
-  planParamsAssetState[plan][asset][key].val = val;
+  const params = planParamsState[plan];
+  const cardsHtml = cardsForPlan(plan).map(card => {
+    const rowsHtml = Object.keys(card.params).map(key => {
+      const p = params[key];
+      if (!p) return '';
+      return `
+      <div class="param-row">
+        <div class="param-info">
+          <div class="param-name">${p.label}</div>
+        </div>
+        <div class="param-control">
+          ${p.type === 'bool'
+            ? `<label class="toggle-switch">
+                 <input type="checkbox" id="ap_${plan}_${key}" ${(p.val === 'true' || p.val === true) ? 'checked' : ''} ${p.locked ? 'disabled' : ''} onchange="updateParamVal('${plan}','${key}',this.checked)">
+                 <span class="toggle-slider"></span>
+               </label>`
+            : p.type === 'select'
+            ? `<select class="param-input" id="ap_${plan}_${key}" ${p.locked ? 'disabled' : ''} onchange="updateParamVal('${plan}','${key}',this.value)">
+                 ${(p.options||[]).map(o => `<option value="${o}" ${String(p.val)===o?'selected':''}>${o}</option>`).join('')}
+               </select>`
+            : `<input class="param-input" type="number" step="${p.step||'1'}" id="ap_${plan}_${key}" value="${p.val}" ${p.locked ? 'disabled' : ''} onchange="updateParamVal('${plan}','${key}',this.value)">`}
+          <button class="lock-btn ${p.locked ? 'locked' : 'unlocked'}" id="lk_${plan}_${key}"
+            title="${p.locked ? 'Verrouillé' : 'Déverrouillé'}" onclick="toggleLock('${plan}','${key}')">
+            ${p.locked ? SVG_LOCK : SVG_UNLOCK}
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+    return `
+      <div class="param-card-section">
+        <div class="param-card-title">${card.title}</div>
+        <div class="param-grid">${rowsHtml}</div>
+      </div>`;
+  }).join('');
+  panel.innerHTML = cardsHtml;
 }
 
 function updateParamVal(plan, key, val) {
-  if (planParamsAssetState[plan]?.[currentAssetTab]?.[key]) planParamsAssetState[plan][currentAssetTab][key].val = val;
+  if (planParamsState[plan]?.[key]) planParamsState[plan][key].val = val;
 }
 
 const SVG_LOCK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
 const SVG_UNLOCK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
 
-function toggleAssetLock(plan, asset, key) {
-  const p = planParamsAssetState[plan][asset][key];
+function toggleLock(plan, key) {
+  const p = planParamsState[plan][key];
   p.locked = !p.locked;
-  const btn = document.getElementById(`lk_${plan}_${asset}_${key}`);
+  const btn = document.getElementById(`lk_${plan}_${key}`);
   if (!btn) return;
   btn.className = `lock-btn ${p.locked ? 'locked' : 'unlocked'}`;
   btn.innerHTML = p.locked ? SVG_LOCK : SVG_UNLOCK;
   btn.title = p.locked ? 'Verrouillé (client ne peut pas modifier)' : 'Déverrouillé (client peut modifier)';
-  const inp = document.getElementById(`ap_${plan}_${asset}_${key}`);
+  const inp = document.getElementById(`ap_${plan}_${key}`);
   if (inp) inp.disabled = p.locked;
-}
-
-function toggleLock(plan, key) {
-  toggleAssetLock(plan, currentAssetTab, key);
 }
 
 async function loadPlanParamsFromServer() {
@@ -1215,33 +1394,25 @@ async function loadPlanParamsFromServer() {
     const data = await r.json();
     if (data && data.params) {
       for (const [plan, planData] of Object.entries(data.params)) {
-        if (!planParamsAssetState[plan]) continue;
-        for (const [rawKey, p] of Object.entries(planData)) {
-          // Expect format ASSET_paramkey (e.g. XAUUSD_lot_max)
-          const sep = rawKey.indexOf('_');
-          if (sep < 0) continue;
-          const asset = rawKey.slice(0, sep);
-          const key   = rawKey.slice(sep + 1);
-          if (planParamsAssetState[plan][asset]?.[key] !== undefined) {
-            planParamsAssetState[plan][asset][key].val    = p.val ?? p;
-            planParamsAssetState[plan][asset][key].locked = p.locked ?? planParamsAssetState[plan][asset][key].locked;
+        if (!planParamsState[plan]) continue;
+        for (const [key, p] of Object.entries(planData)) {
+          if (planParamsState[plan][key] !== undefined) {
+            planParamsState[plan][key].val    = p.val ?? p;
+            planParamsState[plan][key].locked = p.locked ?? planParamsState[plan][key].locked;
           }
         }
       }
-      renderAssetParamsPanel(currentPlanTab, currentAssetTab);
+      renderParamsPanel(currentPlanTab);
     }
   } catch(e) { console.warn('Chargement params serveur échoué:', e); }
 }
 
 async function saveAllParams() {
-  // Flatten {plan}{asset}{key} → {plan}{ASSET_key} for backend storage
   const params = {};
-  for (const [plan, assets] of Object.entries(planParamsAssetState)) {
+  for (const [plan, planParams] of Object.entries(planParamsState)) {
     params[plan] = {};
-    for (const [asset, assetParams] of Object.entries(assets)) {
-      for (const [key, p] of Object.entries(assetParams)) {
-        params[plan][`${asset}_${key}`] = { val: String(p.val), locked: p.locked };
-      }
+    for (const [key, p] of Object.entries(planParams)) {
+      params[plan][key] = { val: String(p.val), locked: p.locked };
     }
   }
   try {
@@ -1251,7 +1422,7 @@ async function saveAllParams() {
       body: JSON.stringify({ params })
     });
     if (r.ok) {
-      notify(`Paramètres ${currentPlanTab.toUpperCase()} / ${currentAssetTab} sauvegardés`, 'green');
+      notify(`Paramètres ${currentPlanTab.toUpperCase()} sauvegardés`, 'green');
     } else {
       const d = await r.json();
       throw new Error(d.detail || 'Erreur');
@@ -1491,31 +1662,83 @@ async function loadPromoCodes() {
   }
 }
 
+let currentReferrals = [];
+const REWARD_LABELS = { weeks: 'semaine(s) créditée(s)', months: 'mois crédité(s)', money: '$ crédité(s)', other: 'crédité (note)' };
+
 async function loadReferrals() {
   const tbody = document.getElementById('referralsTable');
   try {
     const r = await fetch(`${API}/admin/referrals`, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) throw new Error();
     const d = await r.json();
-    const refs = d.referrals || [];
-    if (!refs.length) {
-      tbody.innerHTML = `<tr><td colspan="4" class="empty">Aucun parrainage enregistré</td></tr>`; return;
+    currentReferrals = d.referrals || [];
+    if (!currentReferrals.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">Aucun parrainage enregistré</td></tr>`; return;
     }
-    tbody.innerHTML = refs.map(ref => `<tr>
-      <td>
-        <div style="font-weight:600">${ref.new_client_name || '—'}</div>
-        <div style="color:var(--muted);font-size:12px">${ref.new_client_email}</div>
-      </td>
-      <td>
-        <div style="font-weight:600;color:var(--green)">${ref.referrer_name || '—'}</div>
-        <div style="color:var(--muted);font-size:12px">${ref.referrer_email}</div>
-      </td>
-      <td><span class="plan-${ref.plan||'starter'}">${(ref.plan||'starter').toUpperCase()}</span></td>
-      <td style="color:var(--muted);font-size:12px">${ref.created_at ? ref.created_at.slice(0,10) : '—'}</td>
-    </tr>`).join('');
+    tbody.innerHTML = currentReferrals.map(ref => {
+      let statusHtml, actionHtml;
+      if (ref.reward_applied_at) {
+        const label = ref.reward_type === 'other' ? '✓ Crédité' : `✓ ${ref.reward_value} ${REWARD_LABELS[ref.reward_type] || ''}`;
+        statusHtml = `<span class="badge badge-green">${label}</span>`;
+        actionHtml = `<button class="btn btn-ghost btn-sm" disabled>Déjà crédité</button>`;
+      } else if (ref.first_payment_at) {
+        statusHtml = `<span class="badge badge-orange">En attente</span>`;
+        actionHtml = `<button class="btn btn-primary btn-sm" onclick="openRewardModal(${ref.id})">🎁 Créditer</button>`;
+      } else {
+        statusHtml = `<span class="badge" style="background:rgba(100,116,139,.15);color:var(--muted)">Inscrit (sans paiement)</span>`;
+        actionHtml = `<button class="btn btn-ghost btn-sm" disabled title="Le filleul n'a pas encore payé">—</button>`;
+      }
+      return `<tr>
+        <td>
+          <div style="font-weight:600;color:var(--green)">${ref.referrer_name || '—'}</div>
+          <div style="color:var(--muted);font-size:12px">${ref.referrer_email || ''}</div>
+        </td>
+        <td>
+          <div style="font-weight:600">${ref.referred_name || '—'}</div>
+          <div style="color:var(--muted);font-size:12px">${ref.referred_email || ''}</div>
+        </td>
+        <td><code>${ref.code}</code></td>
+        <td style="color:var(--muted);font-size:12px">${ref.signed_up_at ? ref.signed_up_at.slice(0,10) : '—'}</td>
+        <td>${statusHtml}</td>
+        <td>${actionHtml}</td>
+      </tr>`;
+    }).join('');
   } catch {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty" style="color:var(--orange)">API non disponible — fonctionnalité à configurer</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty" style="color:var(--orange)">API non disponible — fonctionnalité à configurer</td></tr>`;
   }
+}
+
+let rewardTargetId = null;
+
+function openRewardModal(id) {
+  const ref = currentReferrals.find(r => r.id === id);
+  if (!ref) return;
+  rewardTargetId = id;
+  document.getElementById('rewardModalWho').textContent =
+    `${ref.referrer_name || ref.referrer_email} parraine ${ref.referred_name || ref.referred_email} (code ${ref.code})`;
+  document.getElementById('rewardType').value = 'weeks';
+  document.getElementById('rewardValue').value = '1';
+  document.getElementById('rewardNote').value = '';
+  document.getElementById('rewardModal').classList.add('open');
+}
+
+async function doRewardReferral() {
+  if (rewardTargetId == null) return;
+  const reward_type = document.getElementById('rewardType').value;
+  const reward_value = parseFloat(document.getElementById('rewardValue').value) || 0;
+  const reward_note = document.getElementById('rewardNote').value.trim();
+  try {
+    const r = await fetch(`${API}/admin/referrals/${rewardTargetId}/reward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reward_type, reward_value, reward_note })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Erreur');
+    notify('Récompense créditée', 'green');
+    closeModal('rewardModal');
+    loadReferrals();
+  } catch(e) { notify(e.message, 'red'); }
 }
 
 function openCreatePromoCode() {
@@ -1561,6 +1784,36 @@ async function togglePromoCode(code, active) {
 
 function copyCode(code) {
   navigator.clipboard.writeText(code).then(() => notify(`Code ${code} copié !`, 'green'));
+}
+
+function openChangePasswordModal() {
+  document.getElementById('cpCurrent').value = '';
+  document.getElementById('cpNew').value = '';
+  document.getElementById('cpConfirm').value = '';
+  document.getElementById('cpError').textContent = '';
+  document.getElementById('changePasswordModal').classList.add('open');
+}
+
+async function doChangePassword() {
+  const current = document.getElementById('cpCurrent').value;
+  const next    = document.getElementById('cpNew').value;
+  const confirm = document.getElementById('cpConfirm').value;
+  const errEl   = document.getElementById('cpError');
+  errEl.textContent = '';
+  if (!current || !next) { errEl.textContent = 'Remplis tous les champs.'; return; }
+  if (next.length < 8) { errEl.textContent = 'Le nouveau mot de passe doit faire au moins 8 caractères.'; return; }
+  if (next !== confirm) { errEl.textContent = 'Les nouveaux mots de passe ne correspondent pas.'; return; }
+  try {
+    const r = await fetch(`${API}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ current_password: current, new_password: next })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Erreur');
+    notify('Mot de passe changé avec succès', 'green');
+    closeModal('changePasswordModal');
+  } catch(e) { errEl.textContent = e.message; }
 }
 
 // ── NOTIFICATION ──────────────────────────────────────────────────────────

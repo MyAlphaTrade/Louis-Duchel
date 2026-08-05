@@ -260,27 +260,56 @@ def evaluate_scalp_opportunity(
     }
 
 
+def _confidence_band(value: float | None) -> str | None:
+    """Tranches de 10 points [50-60) ... [90-100] -- meme largeur que les
+    autres facteurs categoriels pour rester coherent visuellement dans l'UI."""
+    if value is None:
+        return None
+    v = max(0.0, min(100.0, float(value)))
+    lo = min(90, int(v // 10) * 10)
+    return f"{lo}-{lo + 10}"
+
+
 def scenario_learning_stats(entries: list[dict[str, Any]], min_samples: int = 20) -> dict[str, Any]:
-    """Phase 5 (Learning). Agrege le winrate par facteur categoriel a partir
-    de scenarios deja RESOLUS (outcome WIN_SIMULATED/LOSS_SIMULATED
-    uniquement -- un scenario EXPIRED sans avoir jamais ete active n'a jamais
-    ete mis a l'epreuve, rien a en apprendre). Meme discipline que
-    trading_coach_observe() : jamais de constat sur un echantillon trop
-    petit -- chaque case (session/tendance/volatilite) doit atteindre
-    `min_samples` pour apparaitre dans le resultat."""
+    """Phase 5 (Learning). Agrege le winrate (et le profit moyen quand
+    disponible) par facteur categoriel a partir de scenarios deja RESOLUS
+    (outcome WIN_SIMULATED/LOSS_SIMULATED uniquement -- un scenario EXPIRED
+    sans avoir jamais ete active n'a jamais ete mis a l'epreuve, rien a en
+    apprendre). Meme discipline que trading_coach_observe() : jamais de
+    constat sur un echantillon trop petit -- chaque case (session/tendance/
+    volatilite/confiance/sante) doit atteindre `min_samples` pour apparaitre
+    dans le resultat.
+
+    05/08/2026 -- extension pour la calibration reelle des seuils Scenario
+    Engine (demande explicite de Louis : "des valeurs qui doivent s'ajuster,
+    pas un message statique") : ajoute by_confidence_band (seuils CAIO/
+    Londres) et by_min_health_band (seuil de degradation), et enrichit chaque
+    case d'un avg_profit calcule depuis outcome_profit (deja trace par
+    close_scenario() depuis l'origine, pour cet usage exact -- voir son
+    docstring)."""
     resolved = [e for e in entries if e.get("outcome") in ("WIN_SIMULATED", "LOSS_SIMULATED")]
 
     def _bucket(key_fn) -> dict[str, dict[str, Any]]:
-        groups: dict[str, list[bool]] = {}
+        groups: dict[str, list[dict[str, Any]]] = {}
         for e in resolved:
             key = key_fn(e)
             if key is None:
                 continue
-            groups.setdefault(str(key), []).append(e["outcome"] == "WIN_SIMULATED")
-        return {
-            k: {"samples": len(v), "winrate": round(sum(v) / len(v) * 100, 1)}
-            for k, v in groups.items() if len(v) >= min_samples
-        }
+            groups.setdefault(str(key), []).append(e)
+        out: dict[str, dict[str, Any]] = {}
+        for k, group in groups.items():
+            if len(group) < min_samples:
+                continue
+            wins = sum(1 for e in group if e["outcome"] == "WIN_SIMULATED")
+            profits = [float(e["outcome_profit"]) for e in group if e.get("outcome_profit") is not None]
+            out[k] = {
+                "samples": len(group),
+                "winrate": round(wins / len(group) * 100, 1),
+                # None si outcome_profit jamais renseigne sur ce lot (donnees
+                # anciennes avant l'ajout du champ) -- jamais une fausse moyenne a 0.
+                "avg_profit": round(sum(profits) / len(profits), 3) if profits else None,
+            }
+        return out
 
     overall_winrate = (
         round(sum(1 for e in resolved if e["outcome"] == "WIN_SIMULATED") / len(resolved) * 100, 1)
@@ -293,7 +322,93 @@ def scenario_learning_stats(entries: list[dict[str, Any]], min_samples: int = 20
         "by_trend": _bucket(lambda e: (e.get("market_context") or {}).get("trend")),
         "by_volatility": _bucket(lambda e: (e.get("market_context") or {}).get("volatility")),
         "by_direction": _bucket(lambda e: e.get("direction")),
+        "by_confidence_band": _bucket(lambda e: _confidence_band(e.get("scenario_confidence_at_entry"))),
+        "by_confidence_band_london": _bucket(
+            lambda e: _confidence_band(e.get("scenario_confidence_at_entry"))
+            # valeur exacte produite par session_label() -- voir scenario_caio_decide()
+            if (e.get("market_context") or {}).get("session") == "london" else None
+        ),
+        "by_min_health_band": _bucket(
+            lambda e: _confidence_band(min(e["health_curve"]) if e.get("health_curve") else None)
+        ),
     }
+
+
+def scenario_threshold_adjustments(
+    stats: dict[str, Any], current: dict[str, Any], *,
+    max_confidence_step: float = 5.0, max_health_step: float = 5.0, min_edge: float = 10.0,
+) -> dict[str, Any]:
+    """05/08/2026 -- calibration reelle des seuils Scenario Engine (demande
+    explicite de Louis : "des valeurs qui doivent s'ajuster, pas un message
+    statique"). Meme discipline que scenario_weight_adjustments() : bornee
+    (+/- max_*_step par cycle, jamais un saut brutal), reversible (ne modifie
+    jamais SANS preuve -- pas de signal net = valeur inchangee), et honnete
+    sur ce qui manque encore (cooldown/max/lot scalp et seuils Portfolio
+    Brain ne sont PAS calibres ici : aucune donnee de resultat par scalp/
+    panier n'existe encore pour les justifier -- voir DEFAULT_PARAMS).
+
+    Ne renvoie QUE les cles pour lesquelles une preuve suffisante existe --
+    l'appelant (calibrate_scenario_thresholds(), alphatrade_engine.py) ne
+    touche que celles-la, jamais les autres."""
+    adjustments: dict[str, Any] = {}
+
+    def _band_floor(band: str) -> int:
+        return int(band.split("-")[0])
+
+    def _calibrated_threshold(bucket: dict[str, dict[str, Any]], baseline_winrate: float,
+                               current_value: float, max_step: float) -> float | None:
+        # Plus petite tranche (donc seuil le plus permissif) dont le winrate
+        # depasse la reference d'au moins `min_edge` points, avec assez
+        # d'echantillons (deja filtre par scenario_learning_stats). Si aucune
+        # tranche ne se distingue nettement, aucun signal -- ne rien changer.
+        for band, info in sorted(bucket.items(), key=lambda kv: _band_floor(kv[0])):
+            if info["winrate"] - baseline_winrate >= min_edge:
+                target = float(_band_floor(band))
+                step = max(-max_step, min(max_step, target - current_value))
+                return round(current_value + step, 1)
+        return None
+
+    if stats.get("by_confidence_band"):
+        new_value = _calibrated_threshold(
+            stats["by_confidence_band"], stats.get("overall_winrate", 0.0),
+            float(current.get("scenario_caio_min_confidence", 60.0)), max_confidence_step,
+        )
+        if new_value is not None:
+            adjustments["scenario_caio_min_confidence"] = new_value
+
+    london_bucket = stats.get("by_confidence_band_london")
+    if london_bucket:
+        # Reference = winrate global DU SOUS-ENSEMBLE londres, pas toutes
+        # sessions confondues -- comparer une tranche londres au taux global
+        # toutes sessions fausserait le signal (Londres a son propre regime).
+        london_samples = sum(v["samples"] for v in london_bucket.values())
+        london_wins = sum(v["samples"] * v["winrate"] / 100 for v in london_bucket.values())
+        london_baseline = round(london_wins / london_samples * 100, 1) if london_samples else 0.0
+        new_value = _calibrated_threshold(
+            london_bucket, london_baseline,
+            float(current.get("scenario_london_min_confidence", 70.0)), max_confidence_step,
+        )
+        if new_value is not None:
+            adjustments["scenario_london_min_confidence"] = new_value
+
+    if stats.get("by_min_health_band"):
+        new_value = _calibrated_threshold(
+            stats["by_min_health_band"], stats.get("overall_winrate", 0.0),
+            float(current.get("scenario_health_degradation_threshold", 45.0)), max_health_step,
+        )
+        if new_value is not None:
+            adjustments["scenario_health_degradation_threshold"] = new_value
+
+    # Regime CORRECTION : reprend la methode d'origine (esperance en $ via
+    # outcome_profit, pas un proxy de winrate) -- close_scenario() trace
+    # outcome_profit depuis l'origine explicitement pour cet usage. Positive
+    # -> autorise ; negative ou nulle -> reste bloque ; pas assez
+    # d'echantillons (deja filtre par scenario_learning_stats) -> inchange.
+    correction = (stats.get("by_trend") or {}).get("CORRECTION")
+    if correction and correction.get("avg_profit") is not None:
+        adjustments["scenario_block_correction_regime"] = correction["avg_profit"] <= 0
+
+    return adjustments
 
 
 def scenario_weight_adjustments(

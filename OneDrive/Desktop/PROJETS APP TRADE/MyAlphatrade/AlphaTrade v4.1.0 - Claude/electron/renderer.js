@@ -900,6 +900,7 @@ function maybeShowWhatsNew(version) {
 function renderStatus(s) {
   if (!s) return;
   currentStatus = s;
+  renderIntelCardFooters(); // reflete les nouvelles adaptations sans attendre un reload du formulaire
   if (s.version) maybeShowWhatsNew(s.version);
   if (s.version) {
     const vStr = `v${s.version}`;
@@ -2030,6 +2031,40 @@ function fillSettings(values) {
 // refonte Paramètres demandée par Louis). Valeurs REELLES lues dans params
 // (defauts DEFAULT_PARAMS cote Python, ou override utilisateur si present) --
 // jamais de valeur inventee cote UI.
+// 05/08/2026 -- footers "Défaut / Jamais ajusté" branchés sur les VRAIES
+// adaptations (currentStatus.ai_adaptations, alimenté par
+// calibrate_scenario_thresholds() cote Python) au lieu du texte statique
+// d'origine (bug releve par Louis : "ça ne doit pas être un message
+// statique"). Ne couvre que les 4 seuils reellement calibres aujourd'hui --
+// les autres cartes restent honnetement "Réglage fixe" (voir
+// scenario_threshold_adjustments() pour pourquoi).
+const IC_CALIBRATED_FOOTERS = {
+  icCaioConfidenceFoot: 'scenario_caio_min_confidence',
+  icLondonConfidenceFoot: 'scenario_london_min_confidence',
+  icHealthThresholdFoot: 'scenario_health_degradation_threshold',
+  icCorrectionBlockedFoot: 'scenario_block_correction_regime',
+};
+
+function renderIntelCardFooters() {
+  const adaptations = currentStatus?.ai_adaptations || [];
+  Object.entries(IC_CALIBRATED_FOOTERS).forEach(([footId, paramKey]) => {
+    const foot = $(footId);
+    if (!foot) return;
+    // Le plus recent en dernier dans le tableau -- on cherche a partir de la fin.
+    let last = null;
+    for (let i = adaptations.length - 1; i >= 0; i--) {
+      if (adaptations[i]?.parameter === paramKey) { last = adaptations[i]; break; }
+    }
+    if (last) {
+      const d = new Date(last.at);
+      const dateStr = isNaN(d) ? last.at : d.toLocaleDateString(currentLanguage === 'en' ? 'en-US' : 'fr-FR');
+      foot.innerHTML = `<span>Calibré (58j réels)</span><span title="${escapeHtml(last.reason || '')}">${dateStr}</span>`;
+    } else {
+      foot.innerHTML = `<span>Défaut</span><span>Jamais ajusté</span>`;
+    }
+  });
+}
+
 function renderIntelCards() {
   if (!params) return;
   const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
@@ -2042,6 +2077,7 @@ function renderIntelCards() {
   set('icCorrectionBlocked', params.scenario_block_correction_regime === false ? 'Autorisé' : 'Bloqué');
   set('icPortfolioWarn', `${Number(params.portfolio_floating_loss_warn_pct ?? 2.0).toFixed(1)} %`);
   set('icPortfolioCritical', `${Number(params.portfolio_floating_loss_critical_pct ?? 5.0).toFixed(1)} %`);
+  renderIntelCardFooters();
 
   const execOn = params.scenario_engine_execution_enabled !== false && params.scenario_engine_enabled === true;
   const dot = $('scenarioExecDot');
@@ -2455,10 +2491,14 @@ $('settingsForm').addEventListener('submit', async event => {
   saveButton.disabled = true;
   saveButton.textContent = currentLanguage === 'en' ? 'Saving...' : 'Enregistrement...';
   const form = event.currentTarget;
-  const next = collectSettings(form);
-  params = next;
-  activeSymbol = next.active_symbol;
   try {
+    // collectSettings() deplace a l'interieur du try (05/08/2026) : si elle
+    // levait une exception (DOM inattendu), le bouton restait bloque sur
+    // "Enregistrement..." sans aucun message d'erreur -- exactement le
+    // symptome "je clique, rien ne se passe" remonte par Louis.
+    const next = collectSettings(form);
+    params = next;
+    activeSymbol = next.active_symbol;
     await alpha.saveParams(next);
     saveButton.classList.remove('saving');
     saveButton.classList.add('saved');

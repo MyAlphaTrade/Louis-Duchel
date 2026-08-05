@@ -27,7 +27,8 @@ from shared_memory import SHARED_MEMORY
 from scenario import Scenario, ScenarioEvent, make_scenario, activate_scenario, close_scenario
 from scenario_generator import (
     generate_scenario, validate_scenario, evaluate_scenario_health, evaluate_scalp_opportunity,
-    scenario_learning_stats, scenario_weight_adjustments, SCENARIO_WEIGHTS, volatility_score,
+    scenario_learning_stats, scenario_weight_adjustments, scenario_threshold_adjustments,
+    SCENARIO_WEIGHTS, volatility_score,
 )
 from trading_style_engine import recommend_trading_style
 from portfolio_brain import basket_exposure, portfolio_risk_assessment
@@ -468,6 +469,7 @@ AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
 TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {tp_done, be_applied}}
 FAST_BE_STATE: dict[int, bool] = {}  # {ticket: True} une fois le Break-Even rapide appliqué (fast_breakeven_step)
+PROFIT_TRAIL_RATCHET_STATE: dict[int, float] = {}  # {ticket: dernier SL appliqué} par profit_trailing_ratchet_step
 
 # ── Module Capture Rebond ──────────────────────────────────────────────────────
 # Gère les positions contra-tendance sur rebonds identifiés via zones S&D
@@ -3413,6 +3415,118 @@ def fast_breakeven_step(positions: list[dict], params: dict, symbol_names: dict[
             log(f"[BE RAPIDE] Break-Even refusé sur ticket {ticket} ({retcode}) — {symbol_key}", "WARNING")
 
 
+def profit_trailing_ratchet_step(positions: list[dict], params: dict, symbol_names: dict[str, str]) -> None:
+    """05/08/2026 -- demande explicite de Louis, en reaction a un incident
+    observe en direct : une position en profit fermee par PROFIT_TRAILING
+    (position_exit_reason()) s'est retrouvee negative, parce que la decision
+    ET l'ordre de fermeture passent tous deux par ce process Python -- entre
+    l'instant ou le giveback est detecte et celui ou l'ordre atteint
+    reellement MT5, le prix peut deja avoir bouge davantage, surtout avec un
+    profit_trailing_giveback tres serre (ex: 0,10$). La boucle principale
+    tourne deja a 100ms (voir commentaire au-dessus de time.sleep(0.1),
+    deja abaisse ce jour depuis 500ms) -- la reponse n'est pas une boucle
+    encore plus rapide, mais de deplacer la protection cote broker.
+
+    Meme principe que fast_breakeven_step() (deja en prod, meme fichier) :
+    des que le pic de profit progresse, on remonte le SL reel de la position
+    (TRADE_ACTION_SLTP) pour verrouiller `peak - profit_trailing_giveback`
+    directement chez le broker -- son execution ne depend plus d'aucun
+    aller-retour reseau vers ce process. PROFIT_TRAILING dans
+    position_exit_reason() reste actif en filet de securite (ex: gap de prix
+    plus rapide que le SL broker lui-meme), jamais retire ni affaibli.
+
+    Ratchet strict : le SL ne recule jamais (PROFIT_TRAIL_RATCHET_STATE
+    memorise le dernier prix applique par ticket), et ne descend jamais sous
+    le prix d'entree -- ce mecanisme ne peut jamais transformer un gain
+    deja acquis en perte, seulement le securiser plus tot."""
+    global PROFIT_TRAIL_RATCHET_STATE
+    if mt5 is None:
+        return
+    bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
+    open_tickets = {int(p.get("ticket", 0)) for p in bot_positions}
+    for t in list(PROFIT_TRAIL_RATCHET_STATE.keys()):
+        if t not in open_tickets:
+            del PROFIT_TRAIL_RATCHET_STATE[t]
+    for position in bot_positions:
+        symbol_key = position.get("symbol_key", "")
+        pos_params = params.get("symbols", {}).get(symbol_key, {})
+        # Meme condition d'activation que PROFIT_TRAILING dans
+        # position_exit_reason() -- inerte si Take Profit gere deja la sortie.
+        if bool(pos_params.get("take_profit_enabled", False)):
+            continue
+        trailing_giveback = max(0.0, float(pos_params.get("profit_trailing_giveback", 0) or 0))
+        if trailing_giveback <= 0:
+            continue
+        min_positive_exit = max(0.0, float(pos_params.get("min_positive_exit", 0.05)))
+        ticket = int(position.get("ticket", 0))
+        profit = float(position.get("profit") or 0)
+        if not ticket or profit < min_positive_exit:
+            continue
+        symbol = symbol_names.get(symbol_key)
+        entry_price = float(position.get("open_price") or 0)
+        volume = float(position.get("lot") or 0)
+        direction = position.get("direction")
+        if not symbol or entry_price <= 0 or volume <= 0 or direction not in ("BUY", "SELL"):
+            continue
+        info = mt5.symbol_info(symbol)
+        tick = mt5.symbol_info_tick(symbol)
+        if info is None or tick is None:
+            continue
+        is_buy = direction == "BUY"
+        current_price = float(tick.bid if is_buy else tick.ask)
+        point = float(info.point)
+        # Distance de prix equivalente a "trailing_giveback" $ pour ce volume
+        # -- meme technique de sonde que fast_breakeven_step() (order_calc_profit
+        # plutot qu'un calcul tick_value/tick_size manuel, pour rester coherent
+        # avec le reste du fichier).
+        probe_distance = 100 * point
+        order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        probe_price = current_price + probe_distance if is_buy else current_price - probe_distance
+        probe_profit = mt5.order_calc_profit(order_type, symbol, volume, current_price, probe_price)
+        if not probe_profit:
+            continue
+        price_per_dollar = probe_distance / abs(float(probe_profit))
+        lock_price = (
+            current_price - (trailing_giveback * price_per_dollar) if is_buy
+            else current_price + (trailing_giveback * price_per_dollar)
+        )
+        # Ne verrouille jamais en dessous du prix d'entree (ce mecanisme ne
+        # doit jamais transformer un gain acquis en perte, seulement le
+        # securiser) et ne recule jamais par rapport a un SL deja pousse.
+        lock_price = max(lock_price, entry_price) if is_buy else min(lock_price, entry_price)
+        last_applied = PROFIT_TRAIL_RATCHET_STATE.get(ticket)
+        if last_applied is not None:
+            if is_buy and lock_price <= last_applied + point:
+                continue
+            if not is_buy and lock_price >= last_applied - point:
+                continue
+        raw_pos = mt5.positions_get(ticket=ticket)
+        if not raw_pos:
+            continue
+        current_sl = float(raw_pos[0].sl or 0)
+        current_tp = float(raw_pos[0].tp or 0)
+        if current_sl > 0:
+            if is_buy and lock_price <= current_sl + point:
+                continue
+            if not is_buy and lock_price >= current_sl - point:
+                continue
+        sl_req = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": ticket,
+            "symbol": symbol,
+            "sl": round(lock_price, int(info.digits)),
+            "tp": current_tp,
+        }
+        sl_res = mt5.order_send(sl_req)
+        if sl_res is not None and int(sl_res.retcode) in {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED}:
+            PROFIT_TRAIL_RATCHET_STATE[ticket] = lock_price
+            log(
+                f"[TRAILING SL] Stop remonté à {lock_price:.5g} sur ticket {ticket} "
+                f"(profit {profit:.2f}$, giveback protégé {trailing_giveback}$) — {symbol_key}",
+                "SUCCESS",
+            )
+
+
 def position_exit_reason(
     position: dict,
     pos_params: dict,
@@ -4634,6 +4748,75 @@ def run_scenario_learning(min_samples: int = 20) -> None:
     )
 
 
+def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: datetime | None = None) -> None:
+    """05/08/2026 -- calibration REELLE des seuils Scenario Engine (demande
+    explicite de Louis : "des valeurs qui doivent s'ajuster... et non
+    statiques", en reaction directe aux cartes "Piloté par l'intelligence"
+    qui affichaient un texte fige "Jamais ajuste" sans aucun mecanisme
+    derriere). Meme source de donnees et meme discipline que
+    run_scenario_learning() (rejouable independamment, jamais couplee a
+    l'application) mais ECRIT DIRECTEMENT dans params.json -- ces seuils sont
+    lus par params.get(...) partout dans le moteur, contrairement aux poids
+    de score qui passent par un fichier "appris" separe.
+
+    Ne touche QUE scenario_caio_min_confidence / scenario_london_min_confidence
+    / scenario_health_degradation_threshold / scenario_block_correction_regime
+    -- voir scenario_threshold_adjustments() pour pourquoi les seuils
+    scalp/Portfolio Brain n'y figurent pas encore (donnees de resultat
+    manquantes, pas une omission)."""
+    now = now or datetime.now(timezone.utc)
+    entries: list[dict] = []
+    for name in ("scenario_log.jsonl", "scenario_replay_log.jsonl"):
+        path = DATA_DIR / name
+        if not path.exists():
+            continue
+        by_id: dict[str, dict] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            by_id[d["scenario_id"]] = d
+        entries.extend(by_id.values())
+
+    stats = scenario_learning_stats(entries, min_samples=min_samples)
+    if stats["n_resolved"] < min_samples:
+        return  # deja journalise par run_scenario_learning() juste avant -- pas la peine de repeter
+
+    current = {
+        "scenario_caio_min_confidence": params.get("scenario_caio_min_confidence", 60.0),
+        "scenario_london_min_confidence": params.get("scenario_london_min_confidence", 70.0),
+        "scenario_health_degradation_threshold": params.get("scenario_health_degradation_threshold", 45.0),
+        "scenario_block_correction_regime": params.get("scenario_block_correction_regime", True),
+    }
+    adjustments = scenario_threshold_adjustments(stats, current)
+    if not adjustments:
+        return
+
+    saved = read_json("params.json", {}) or {}
+    changed = False
+    for key, new_value in adjustments.items():
+        old_value = current[key]
+        if isinstance(new_value, bool):
+            differs = bool(new_value) != bool(old_value)
+        else:
+            differs = abs(float(new_value) - float(old_value)) > 0.01
+        if not differs:
+            continue
+        saved[key] = new_value
+        changed = True
+        log_ai_adaptation(
+            "scenario_threshold_calibration", key,
+            old_value if not isinstance(old_value, bool) else bool(old_value),
+            new_value if not isinstance(new_value, bool) else bool(new_value),
+            f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%).",
+            now=now,
+        )
+    if changed:
+        write_json("params.json", saved)
+        log(f"Calibration des seuils Scenario Engine: {len(adjustments)} valeur(s) evaluee(s), "
+            f"params.json mis a jour.", "SUCCESS")
+
+
 def run_auto_backtest_if_due(params: dict, symbol_names: dict[str, str], *, now: datetime | None = None) -> None:
     """Backtest automatique intelligent (v5.1.1, 05/08/2026, section 7 de la
     demande de Louis). Reutilise le Scenario Replay (run_scenario_replay())
@@ -4666,6 +4849,7 @@ def run_auto_backtest_if_due(params: dict, symbol_names: dict[str, str], *, now:
     run_scenario_replay(params, symbol_names, days=days)
     write_json("auto_backtest_state.json", {"last_run_at": now.isoformat()})
     run_scenario_learning(min_samples=int(params.get("scenario_learning_min_samples", 20)))
+    calibrate_scenario_thresholds(params, min_samples=int(params.get("scenario_learning_min_samples", 20)), now=now)
 
     replay_path = DATA_DIR / "scenario_replay_log.jsonl"
     if not replay_path.exists():
@@ -5852,6 +6036,7 @@ def main() -> int:
         else:
             fast_breakeven_step(positions, params, symbol_names)
             take_profit_step(positions, params, symbol_names)
+            profit_trailing_ratchet_step(positions, params, symbol_names)
             auto_state = auto_trade_step(params, symbol_names, payload, positions, trades)
             positions = live_positions(symbol_names, params)
             payload = status_payload(params, symbol_names, trades, positions)

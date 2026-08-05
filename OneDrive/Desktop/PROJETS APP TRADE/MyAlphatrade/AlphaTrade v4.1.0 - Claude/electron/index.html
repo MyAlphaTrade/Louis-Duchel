@@ -679,7 +679,7 @@
     </section>
 
     <section id="settings" class="page">
-      <form id="settingsForm" class="settings-grid">
+      <form id="settingsForm" class="settings-grid" novalidate>
         <div class="settings-scroll">
         <div class="settings-header-row">
           <p class="mini-help settings-header-note">Chaque champ visible est lu par le moteur et modifie réellement son comportement.</p>
@@ -725,55 +725,55 @@
             <div class="ic-head"><span class="ic-name">Confiance minimum d'activation</span><span class="ic-source src-caio">CAIO</span></div>
             <div class="ic-value" id="icCaioConfidence">—</div>
             <p class="ic-why">Seuil au-dessous duquel le CAIO refuse d'activer un scénario, même valide.</p>
-            <div class="ic-foot"><span>Défaut calibré (58j réels)</span><span id="icCaioConfidenceChanged">Jamais ajusté</span></div>
+            <div class="ic-foot" id="icCaioConfidenceFoot"><span>Défaut</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Confiance minimum — session Londres</span><span class="ic-source src-caio">CAIO</span></div>
             <div class="ic-value" id="icLondonConfidence">—</div>
             <p class="ic-why">Barre relevée pendant Londres : winrate net plus bas sous 65 de confiance sur 58 jours réels.</p>
-            <div class="ic-foot"><span>Défaut calibré (58j réels)</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot" id="icLondonConfidenceFoot"><span>Défaut</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Seuil de dégradation de santé</span><span class="ic-source src-dpm">Dynamic Position Manager</span></div>
             <div class="ic-value" id="icHealthThreshold">—</div>
             <p class="ic-why">Sous ce score, un scénario ACTIF bascule en DÉGRADÉ : les scalps s'arrêtent.</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot" id="icHealthThresholdFoot"><span>Défaut</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Cooldown entre scalps</span><span class="ic-source src-dpm">Dynamic Position Manager</span></div>
             <div class="ic-value" id="icScalpCooldown">—</div>
             <p class="ic-why">Empêche d'empiler des scalps tant que les 4 conditions restent vraies.</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot"><span>Réglage fixe</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Scalps maximum par scénario</span><span class="ic-source src-dpm">Dynamic Position Manager</span></div>
             <div class="ic-value" id="icScalpMax">—</div>
             <p class="ic-why">Plafond de sécurité indépendant du cooldown.</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot"><span>Réglage fixe</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Taille de lot — scalp</span><span class="ic-source src-dpm">Dynamic Position Manager</span></div>
             <div class="ic-value" id="icScalpLot">—</div>
             <p class="ic-why">Fraction du lot normal : plus petit que la position d'ancrage.</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot"><span>Réglage fixe</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Régime CORRECTION</span><span class="ic-source src-scenario">Scenario Generator</span></div>
             <div class="ic-value" id="icCorrectionBlocked" style="color:var(--red)">—</div>
-            <p class="ic-why">Espérance négative confirmée (-0,13R/scénario sur 949 scénarios résolus).</p>
-            <div class="ic-foot"><span>Calibré (58j réels)</span><span>05/08/2026</span></div>
+            <p class="ic-why">Espérance négative confirmée à l'origine (-0,13R/scénario sur 949 scénarios résolus) — recalibré depuis sur le profit moyen réel par scénario.</p>
+            <div class="ic-foot" id="icCorrectionBlockedFoot"><span>Calibré (58j réels)</span><span>05/08/2026</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Perte flottante panier — avertissement</span><span class="ic-source src-portfolio">Portfolio Brain</span></div>
             <div class="ic-value" id="icPortfolioWarn">—</div>
             <p class="ic-why">% de l'équité en flottant négatif sur le panier XAUUSD à partir duquel une alerte se déclenche.</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot"><span>Réglage fixe</span><span>Jamais ajusté</span></div>
           </article>
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Perte flottante panier — critique</span><span class="ic-source src-portfolio">Portfolio Brain</span></div>
             <div class="ic-value" id="icPortfolioCritical">—</div>
             <p class="ic-why">Seuil critique — au-delà, les nouvelles entrées sont bloquées (classique et Scenario Engine).</p>
-            <div class="ic-foot"><span>Défaut</span><span>Jamais ajusté</span></div>
+            <div class="ic-foot"><span>Réglage fixe</span><span>Jamais ajusté</span></div>
           </article>
         </div>
 
