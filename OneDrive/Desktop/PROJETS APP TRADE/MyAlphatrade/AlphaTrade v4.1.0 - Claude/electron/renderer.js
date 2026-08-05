@@ -971,7 +971,78 @@ function renderStatus(s) {
   renderActiveMarket();
   renderMicrostructurePage();
   renderGoldBrain(s);
+  renderAiAdaptations(s);
+  renderAutoBacktest(s);
   if (currentLanguage === 'en') translateStatic('en');
+}
+
+// v5.1.1, 05/08/2026 -- Backtest automatique intelligent (section 7 de la
+// refonte Paramètres). `s.auto_backtest` vient de auto_backtest_result.json
+// cote Python -- reutilise le Scenario Replay/Learning deja existants et
+// testes, pas de resultat invente cote UI.
+const SESSION_LABELS_BT = { london: 'Londres', new_york: 'New York', asian: 'Asiatique', london_ny_overlap: 'Chevauchement Londres/NY' };
+const TREND_LABELS_BT = { UPTREND: 'Haussière', DOWNTREND: 'Baissière', RANGE: 'Range', CORRECTION: 'Correction' };
+function renderAutoBacktest(s) {
+  const body = $('autoBacktestBody');
+  if (!body) return;
+  const bt = s?.auto_backtest;
+  if (!bt) {
+    body.innerHTML = '<div class="history-empty"><span class="he-icon">⏳</span><span>Premier rejeu pas encore terminé — se déclenche automatiquement au démarrage puis toutes les 24h.</span></div>';
+    return;
+  }
+  const fmtLabel = (map, key) => key ? (map[key] || key) : '—';
+  body.innerHTML = `
+    <div class="backtest-period">Période testée : ${bt.period_from || '—'} → ${bt.period_to || '—'} (${bt.period_days || '—'} j) · calculé le ${bt.computed_at ? new Date(bt.computed_at).toLocaleString('fr-FR') : '—'}</div>
+    <div class="backtest-stats">
+      <div class="bs-item"><label>Trades résolus</label><strong>${bt.n_trades ?? '—'}</strong></div>
+      <div class="bs-item"><label>Winrate</label><strong>${bt.winrate != null ? bt.winrate + ' %' : '—'}</strong></div>
+      <div class="bs-item"><label>Profit (pts)</label><strong style="color:${(bt.total_profit_points || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${bt.total_profit_points ?? '—'}</strong></div>
+      <div class="bs-item"><label>Drawdown max (pts)</label><strong style="color:var(--red)">${bt.max_drawdown_points ?? '—'}</strong></div>
+    </div>
+    <div class="backtest-conditions">
+      <span>Meilleure session : <b>${fmtLabel(SESSION_LABELS_BT, bt.best_session)}</b></span>
+      <span>Pire session : <b>${fmtLabel(SESSION_LABELS_BT, bt.worst_session)}</b></span>
+      <span>Meilleure tendance : <b>${fmtLabel(TREND_LABELS_BT, bt.best_trend)}</b></span>
+      <span>Pire tendance : <b>${fmtLabel(TREND_LABELS_BT, bt.worst_trend)}</b></span>
+    </div>`;
+}
+
+// v5.1.1, 05/08/2026 -- Historique reel des adaptations IA (section 6 de la
+// refonte Parametres demandee par Louis). `s.ai_adaptations` vient de
+// recent_ai_adaptations() cote Python -- jamais fabrique, uniquement des
+// evenements reellement journalises (log_ai_adaptation()).
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function renderAiAdaptations(s) {
+  const list = $('aiAdaptationsList');
+  if (!list) return;
+  const entries = Array.isArray(s?.ai_adaptations) ? s.ai_adaptations : [];
+  if (!entries.length) {
+    list.innerHTML = '<div class="history-empty"><span class="he-icon">📭</span><span>Aucun ajustement automatique appliqué pour l\'instant.</span></div>';
+    return;
+  }
+  const moduleLabels = {
+    trading_style_engine: 'Trading Style Engine',
+    scenario_learning: 'Scenario Learning',
+  };
+  list.innerHTML = entries.map(e => {
+    const at = e.at ? new Date(e.at) : null;
+    const dateStr = at ? at.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : '--';
+    const timeStr = at ? at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+    return `
+      <div class="history-row">
+        <span class="hr-date">${dateStr}<br>${timeStr}</span>
+        <div class="hr-body">
+          <strong>${escapeHtml(e.parameter || '')}</strong>
+          <span class="arrow">→</span>
+          <strong>${escapeHtml(String(e.old_value))} → ${escapeHtml(String(e.new_value))}</strong>
+          <p>${escapeHtml(e.reason || '')}</p>
+        </div>
+        <span class="hr-source">${escapeHtml(moduleLabels[e.module] || e.module || '')}</span>
+      </div>`;
+  }).join('');
 }
 
 function renderMicrostructurePage() {
@@ -1899,7 +1970,56 @@ function fillSettings(values) {
   renderTakeProfitLevels();
   applyParamLocksToUI();
   syncGoldBrainToggle();
+  renderIntelCards();
+  initLegacyLocks();
 }
+
+// v5.1.1, 05/08/2026 -- carte "Piloté par l'intelligence" (section 5 de la
+// refonte Paramètres demandée par Louis). Valeurs REELLES lues dans params
+// (defauts DEFAULT_PARAMS cote Python, ou override utilisateur si present) --
+// jamais de valeur inventee cote UI.
+function renderIntelCards() {
+  if (!params) return;
+  const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+  set('icCaioConfidence', `${Number(params.scenario_caio_min_confidence ?? 60).toFixed(1)}`);
+  set('icLondonConfidence', `${Number(params.scenario_london_min_confidence ?? 70).toFixed(1)}`);
+  set('icHealthThreshold', `${Number(params.scenario_health_degradation_threshold ?? 45).toFixed(1)}`);
+  set('icScalpCooldown', `${Number(params.scenario_scalp_cooldown_sec ?? 45)} sec`);
+  set('icScalpMax', `${Number(params.scenario_scalp_max_count ?? 3)}`);
+  set('icScalpLot', `${Math.round(Number(params.scenario_scalp_lot_ratio ?? 0.5) * 100)} %`);
+  set('icCorrectionBlocked', params.scenario_block_correction_regime === false ? 'Autorisé' : 'Bloqué');
+  set('icPortfolioWarn', `${Number(params.portfolio_floating_loss_warn_pct ?? 2.0).toFixed(1)} %`);
+  set('icPortfolioCritical', `${Number(params.portfolio_floating_loss_critical_pct ?? 5.0).toFixed(1)} %`);
+
+  const execOn = params.scenario_engine_execution_enabled !== false && params.scenario_engine_enabled === true;
+  const dot = $('scenarioExecDot');
+  const pill = $('scenarioExecPill');
+  const detail = $('scenarioExecDetail');
+  if (dot) dot.classList.toggle('off', !execOn);
+  if (pill) {
+    pill.classList.toggle('off', !execOn);
+    pill.textContent = execOn ? 'Active' : 'Inactive';
+  }
+  if (detail) {
+    detail.textContent = execOn
+      ? 'Un scénario validé par le CAIO peut ouvrir une vraie position MT5.'
+      : (params.scenario_engine_enabled ? 'Génère et journalise des scénarios, mais n\'exécute aucun ordre réel.' : 'Scenario Engine désactivé.');
+  }
+}
+
+// v5.1.1, 05/08/2026 -- verrouillage manuel/auto (proposition de Louis) pour
+// Renfort/Rebond et Take Profit : verrouille par defaut au demarrage de
+// chaque session app (jamais persiste -- un choix reflechi a chaque fois,
+// pas un etat oublie).
+function initLegacyLocks() {
+  document.querySelectorAll('.legacy-lock-wrap').forEach(wrap => wrap.classList.remove('unlocked'));
+}
+document.addEventListener('click', event => {
+  const unlockId = event.target.closest('[data-unlock]')?.dataset.unlock;
+  if (unlockId) { document.getElementById(unlockId)?.classList.add('unlocked'); return; }
+  const relockId = event.target.closest('[data-relock]')?.dataset.relock;
+  if (relockId) { document.getElementById(relockId)?.classList.remove('unlocked'); }
+});
 
 const ORIGIN_TYPE_LABELS = {
   INTERNAL_BOT: 'BOT INTERNE', EXTERNAL_AI: 'IA EXTERNE', EXTERNAL_EA: 'EA EXTERNE', MANUAL: 'MANUEL'

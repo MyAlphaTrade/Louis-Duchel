@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import sqlite3
@@ -143,6 +144,39 @@ DEFAULT_PARAMS = {
     # decision d'execution ne depend de ce flag tant que le CAIO scenario,
     # Phase 3, n'existe pas). Defaut False, meme securite que gold_brain_enabled.
     "scenario_engine_enabled": False,
+    # v5.1.1 -- 05/08/2026, activation reelle demandee explicitement par
+    # Louis (section 4 : "le systeme doit devenir actif"). Coupe-circuit
+    # DEDIE et INDEPENDANT de scenario_engine_enabled ci-dessus : celui-ci ne
+    # controle que la generation/journalisation (peut rester actif seul en
+    # observation pure) ; celui-la controle si un scenario ACTIVE peut
+    # reellement ouvrir une position MT5 (execute_scenario_anchor()). Mettre
+    # a False redescend en observation pure instantanement, sans desactiver
+    # scenario_engine_enabled ni perdre l'historique/apprentissage.
+    "scenario_engine_execution_enabled": True,
+    # v5.1.1 -- 05/08/2026, execution reelle des scalps (execute_scenario_scalp()).
+    # Sans cooldown, evaluate_scalp_opportunity() redetecterait la meme
+    # opportunite a chaque reevaluation DPM (par defaut toutes les 3s) tant
+    # que les 4 conditions restent vraies -- empilement d'ordres sans fin.
+    # Valeur reprise de l'exemple donne par Louis lui-meme (section 5 de sa
+    # demande du 05/08/2026 : "Scalp cooldown | 45 sec | IA").
+    "scenario_scalp_cooldown_sec": 45.0,
+    # Plafond de securite par scenario, independant du cooldown -- meme
+    # philosophie que auto_max_positions/portfolio_max_positions : jamais de
+    # limite "infinie" meme improbable en pratique.
+    "scenario_scalp_max_count": 3,
+    # Fraction du lot normal pour un scalp -- plus petit que la position
+    # d'ancrage (renfort d'opportunite, pas une deuxieme position principale).
+    "scenario_scalp_lot_ratio": 0.5,
+    # v5.1.1 -- 05/08/2026, backtest automatique intelligent (section 7 de la
+    # demande de Louis). Reutilise le Scenario Replay/Learning existants --
+    # voir run_auto_backtest_if_due(). Defaut True (activation demandee).
+    "scenario_auto_backtest_enabled": True,
+    "scenario_backtest_interval_hours": 24.0,
+    # 58j : plafond reel de retention M1 du terminal MT5 observe (90j -> 0
+    # bougies, confirme par sondage direct le 04/08/2026) -- au-dela, aucune
+    # donnee supplementaire n'existe de toute facon.
+    "scenario_backtest_days": 58,
+    "scenario_learning_min_samples": 20,
     # v5.1.1 Phase 4 -- seuil sous lequel scenario_health (vivant) fait
     # basculer un scenario ACTIVE en DEGRADED (securisation avant que le prix
     # n'atteigne invalidation_price). Distinct de caio_min_confidence (seuil
@@ -181,13 +215,30 @@ DEFAULT_PARAMS = {
     # recommande un strategy_mode a partir du regime/volatilite reels,
     # observation seule (n'ecrit jamais strategy_mode). Defaut False, meme
     # securite que scenario_engine_enabled -- voir trading_style_engine_step().
-    "trading_style_engine_enabled": False,
+    # Defaut passe a True le 05/08/2026 (demande explicite de Louis : "plus
+    # rien ne doit rester en simulation, active tout").
+    "trading_style_engine_enabled": True,
+    # v5.1.1 -- 05/08/2026, activation reelle demandee explicitement par
+    # Louis (section 2/3 : "plus rien ne doit rester en simulation"). Quand
+    # actif, une recommandation qui diverge du mode courant est vraiment
+    # appliquee (ecrite dans params.json, meme mecanisme que le selecteur
+    # manuel) -- pas seulement journalisee. Coupe-circuit dedie, independant
+    # de trading_style_engine_enabled (qui ne fait que calculer/journaliser).
+    "trading_style_auto_apply_enabled": True,
+    # Anti-oscillation : delai minimum entre deux changements automatiques de
+    # mode -- sans lui, un regime a la frontiere entre deux buckets de
+    # volatilite ferait changer de mode a chaque cycle.
+    "trading_style_switch_cooldown_sec": 300.0,
     # v5.1.1 chantier 4 -- Portfolio Brain (portfolio_brain.py) : agrege les
     # positions BOT ouvertes simultanement sur XAUUSD (principale/renfort/
     # rebond/scalp) -- biais directionnel net, perte flottante en % de
     # l'equite, detection hedge. N'ecrit rien, ne bloque rien lui-meme --
-    # observation seule, meme securite que scenario_engine_enabled.
-    "portfolio_brain_enabled": False,
+    # Defaut passe a True le 05/08/2026 (demande explicite de Louis : "plus
+    # rien ne doit rester en simulation, active tout") -- bloque desormais
+    # reellement les nouvelles entrees (classique ET Scenario Engine) quand
+    # l'evaluation panier est LIMIT_NEW_ENTRIES/REDUCE_EXPOSURE, voir
+    # status_payload() et execute_scenario_anchor()/execute_scenario_scalp().
+    "portfolio_brain_enabled": True,
     # Limites du panier XAUUSD -- distinctes de auto_max_positions/
     # symbols.XAUUSD.max_positions (comptage "nouvelles entrees", deja
     # verifie proceduralement, inchange) : ici c'est l'EXPOSITION DEJA
@@ -372,6 +423,37 @@ def trading_style_engine_step(
     return entry
 
 
+def apply_trading_style_recommendation(entry: dict, params: dict, *, now: datetime | None = None) -> bool:
+    """Applique reellement la recommandation du Trading Style Engine (v5.1.1,
+    05/08/2026, activation demandee explicitement par Louis : "plus rien ne
+    doit rester en simulation"). Ecrit params["strategy_mode"] dans
+    params.json -- meme cle que le selecteur manuel de l'UI, aucun chemin
+    special -- le prochain merge_params() du cycle suivant le lit
+    normalement. Throttle (trading_style_switch_cooldown_sec) pour eviter
+    l'oscillation si le regime reste a la frontiere entre deux buckets de
+    volatilite. Retourne True seulement si un changement reel a eu lieu
+    (journalise via log_ai_adaptation() -- alimente l'historique, section 6)."""
+    global LAST_TRADING_STYLE_SWITCH_AT
+    now = now or datetime.now(timezone.utc)
+    if not bool(params.get("trading_style_auto_apply_enabled", True)):
+        return False
+    if entry.get("matches_current"):
+        return False
+    cooldown = max(0.0, float(params.get("trading_style_switch_cooldown_sec", 300.0)))
+    if LAST_TRADING_STYLE_SWITCH_AT is not None and (now - LAST_TRADING_STYLE_SWITCH_AT).total_seconds() < cooldown:
+        return False
+    new_mode = str(entry.get("recommended_mode") or "")
+    old_mode = str(entry.get("current_mode") or "")
+    if new_mode not in STRATEGY_PROFILES or new_mode == old_mode:
+        return False
+    saved = read_json("params.json", {}) or {}
+    saved["strategy_mode"] = new_mode
+    write_json("params.json", saved)
+    LAST_TRADING_STYLE_SWITCH_AT = now
+    log_ai_adaptation("trading_style_engine", "strategy_mode", old_mode, new_mode, str(entry.get("reason") or ""), now=now)
+    return True
+
+
 AI_SERVER_STATE = {
     "enabled": True,
     "connected": False,
@@ -422,6 +504,11 @@ LAST_DPM_EVAL_AT: datetime | None = None
 # process, pas persiste au-dela du redemarrage). Observation seule -- ne
 # remplace jamais params["strategy_mode"], voir trading_style_engine_step().
 TRADING_STYLE_STATE: dict = {}
+# v5.1.1 -- 05/08/2026, throttle de apply_trading_style_recommendation()
+# (meme principe que LAST_DPM_EVAL_AT) : empeche un changement automatique de
+# strategy_mode a chaque cycle si le regime oscille a la frontiere entre deux
+# buckets de volatilite.
+LAST_TRADING_STYLE_SWITCH_AT: datetime | None = None
 
 try:
     import MetaTrader5 as mt5  # type: ignore
@@ -477,7 +564,33 @@ def log(message: str, level: str = "INFO") -> None:
         handle.write(line + "\n")
 
 
-def log_reason_throttled(state: dict, reason: str, *, min_interval_sec: float = 3.0) -> None:
+class _StdlibLogBridge(logging.Handler):
+    """Redirige les modules utilisant `logging` standard (ex: slack_notifier,
+    qui journalise ses echecs d'envoi via logging.getLogger) vers le meme
+    alphatrade.log / Journal visible dans l'app que le reste du moteur --
+    05/08/2026, audit Slack : sans ce pont, `logging` n'a aucun handler
+    configure nulle part dans l'app, donc un echec d'envoi Slack (mauvaise
+    URL, timeout, etc.) ne laissait absolument AUCUNE trace visible pour
+    Louis -- ni dans le Journal, ni dans la console Electron. Erreur
+    silencieuse confirmee, exactement le symptome remonte."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = "ERROR" if record.levelno >= logging.ERROR else "WARNING" if record.levelno >= logging.WARNING else "INFO"
+            log(f"[{record.name}] {record.getMessage()}", level)
+        except Exception:
+            pass
+
+
+logging.getLogger("slack_notifier").addHandler(_StdlibLogBridge())
+logging.getLogger("slack_notifier").setLevel(logging.WARNING)
+logging.getLogger("slack_notifier").propagate = False
+
+
+_REASON_LOG_THROTTLE: dict[str, float] = {}
+
+
+def log_reason_throttled(key: str, reason: str, *, min_interval_sec: float = 3.0) -> None:
     """Journalise `reason` au plus une fois toutes les `min_interval_sec` --
     05/08/2026, bug de spam trouve en observation reelle : le texte de
     `reason` embarque souvent un pourcentage qui change legerement a chaque
@@ -487,18 +600,72 @@ def log_reason_throttled(state: dict, reason: str, *, min_interval_sec: float = 
     chaque cycle. Devenu tres visible une fois la boucle principale accelere
     a 0,1s (voir time.sleep() dans main()). Throttle pur sur le temps, pas
     sur le texte : la MEME situation bloquee ne doit pas spammer le Journal,
-    peu importe si le chiffre affiche bouge legerement."""
+    peu importe si le chiffre affiche bouge legerement.
+
+    05/08/2026 (bis) -- premiere version stockait l'horodatage dans le dict
+    `trading_state` passe par l'appelant, mais `load_trading_state()`
+    RECONSTRUIT ce dict a un schema fixe (10 cles nommees) a chaque lecture
+    et jette silencieusement toute cle inconnue -- l'horodatage etait donc
+    perdu a chaque cycle et le throttle ne freinait jamais rien en pratique
+    (spam confirme en observation reelle malgre ce garde-fou). Corrige en
+    gardant l'horodatage dans une variable de module en memoire, cle par
+    `key` (un identifiant fixe par site d'appel), plutot que dans un fichier
+    dont le schema est round-trippe a chaque tick."""
     now = time.time()
-    last_at = float(state.get("_last_reason_log_at", 0.0))
+    last_at = _REASON_LOG_THROTTLE.get(key, 0.0)
     if now - last_at < min_interval_sec:
         return
     log(reason, "INFO")
-    state["_last_reason_log_at"] = now
+    _REASON_LOG_THROTTLE[key] = now
 
 
 def append_jsonl(name: str, payload: dict) -> None:
     with (DATA_DIR / name).open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n")
+
+
+def log_ai_adaptation(
+    module: str, parameter: str, old_value, new_value, reason: str, *, now: datetime | None = None,
+) -> None:
+    """Historique des adaptations IA (v5.1.1, 05/08/2026, section 6 de la
+    demande de Louis : "je veux voir en temps reel l'evolution du systeme").
+    Un seul point d'entree, append-only -- appele UNIQUEMENT quand un
+    parametre est REELLEMENT modifie automatiquement (jamais fabrique/simule) :
+    aujourd'hui, le Trading Style Engine (apply_trading_style_recommendation())
+    et le Scenario Learning (run_scenario_learning(), quand les poids appris
+    different reellement des precedents). Persiste dans ai_adaptations_log.jsonl,
+    lu par le futur onglet Historique (chantier UI)."""
+    now = now or datetime.now(timezone.utc)
+    append_jsonl("ai_adaptations_log.jsonl", {
+        "at": now.isoformat(),
+        "module": module,
+        "parameter": parameter,
+        "old_value": old_value,
+        "new_value": new_value,
+        "reason": reason,
+    })
+    log(f"Adaptation IA [{module}]: {parameter} {old_value} -> {new_value} -- {reason}", "SUCCESS")
+
+
+def recent_ai_adaptations(limit: int = 30) -> list[dict]:
+    """Lit les `limit` dernieres adaptations reelles (les plus recentes en
+    premier) pour l'onglet Historique (section 6) -- lecture seule, jamais
+    aucun impact sur le cycle de trading si le fichier est absent/corrompu."""
+    path = DATA_DIR / "ai_adaptations_log.jsonl"
+    if not path.exists():
+        return []
+    try:
+        lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    except Exception:
+        return []
+    out = []
+    for line in lines[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except (json.JSONDecodeError, ValueError):
+            continue
+    out.reverse()
+    return out
 
 
 def load_scenario_weights() -> dict[str, float]:
@@ -2082,7 +2249,11 @@ def portfolio_brain_report(params: dict, positions: list[dict], equity: float, n
     meme contrat que risk_manager_report(). `positions` : deja filtrees par
     l'appelant sur le symbole actif (voir trading_style_engine_step() pour
     le meme principe de filtrage cote appelant plutot que dans le module pur).
-    Observation seule : ne ferme et ne bloque aucune position elle-meme."""
+    Ce rapport lui-meme ne ferme et ne bloque rien -- le blocage reel des
+    nouvelles entrees (05/08/2026, demande explicite de Louis) est applique
+    par status_payload() (pipeline classique) et execute_scenario_anchor()/
+    execute_scenario_scalp() (Scenario Engine), tous deux lisant
+    protection["portfolio_blocks"]."""
     now = now or datetime.now(timezone.utc)
     exposure = basket_exposure(positions, equity)
     assessment = portfolio_risk_assessment(
@@ -2672,7 +2843,18 @@ def send_deal(request: dict):
     return last_result
 
 
-def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool, position_type: str = "NORMAL"):
+def open_position(
+    symbol_key: str, symbol: str, direction: str, params: dict, lot_info: dict, analysis: dict, allow_real: bool,
+    position_type: str = "NORMAL", sl_price: float | None = None, tp_price: float | None = None,
+):
+    """`sl_price`/`tp_price` (05/08/2026, activation execution reelle du
+    Scenario Engine, demande explicite de Louis) : override optionnel pour un
+    appelant qui a deja calcule ses propres niveaux (ex: invalidation_price /
+    dernier target d'un Scenario) -- le TP fixe du profil classique
+    (profit_target/take_profit_levels) n'a pas de sens pour une position dont
+    le plan de sortie est deja celui du scenario. None (defaut) preserve tel
+    quel le comportement existant du moteur classique -- rien ne change pour
+    ses appels."""
     account = mt5.account_info()
     if not account:
         return False, "Compte MT5 indisponible.", None
@@ -2692,38 +2874,45 @@ def open_position(symbol_key: str, symbol: str, direction: str, params: dict, lo
     spread_distance = max(0.0, float(tick.ask) - float(tick.bid))
     broker_stop_distance = float(getattr(info, "trade_stops_level", 0)) * point
     min_distance = max(point, broker_stop_distance + spread_distance + (5 * point))
-    if bool(symbol_params.get("take_profit_enabled", False)) and symbol_params.get("take_profit_levels"):
-        raw_target = float(symbol_params["take_profit_levels"][-1].get("threshold", 0) or 0)
+    if sl_price is not None and tp_price is not None:
+        # Niveaux fournis par l'appelant (Scenario Engine) -- on respecte
+        # quand meme la distance minimale broker pour eviter un rejet MT5,
+        # sans recalculer quoi que ce soit d'autre.
+        tp = price + max(tp_price - price, min_distance) if direction == "BUY" else price - max(price - tp_price, min_distance)
+        sl = price - max(price - sl_price, min_distance) if direction == "BUY" else price + max(sl_price - price, min_distance)
     else:
-        raw_target = float(symbol_params.get("profit_target", 0.50))
-    if raw_target <= 0:
-        raw_target = float(symbol_params.get("profit_target", 0.50))
-    if "confidence" in analysis:
-        confidence_ratio = min(1.0, max(0.5, float(analysis["confidence"]) / 100))
-        effective_target = raw_target * confidence_ratio
-    else:
-        effective_target = raw_target
-    tp_distance = max(
-        min_distance,
-        money_price_distance(symbol, direction, volume, price, info, effective_target),
-    )
-    tp = price + tp_distance if direction == "BUY" else price - tp_distance
-    # v5.1.0 — filet de sécurité broker obligatoire (lacune critique de l'audit
-    # stratégique du 30/07/2026 : aucun stop-loss n'était jamais posé côté broker).
-    # Ancré sur le pire cas déjà toléré par la logique de sortie logicielle
-    # (max_position_loss, sinon emergency_loss_limit — voir position_exit_reason())
-    # avec une marge de sécurité, pour ne jamais se déclencher avant elle en
-    # fonctionnement normal : il ne sert que de dernier recours (crash du process,
-    # coupure MT5, gap de prix) là où la protection logicielle n'a pas pu agir.
-    protective_limit = abs(float(symbol_params.get("max_position_loss", 0) or 0))
-    if protective_limit <= 0:
-        protective_limit = abs(float(symbol_params.get("emergency_loss_limit", 50.0)))
-    broker_sl_safety_margin = 1.25
-    sl_distance = max(
-        min_distance,
-        money_price_distance(symbol, direction, volume, price, info, protective_limit * broker_sl_safety_margin),
-    )
-    sl = price - sl_distance if direction == "BUY" else price + sl_distance
+        if bool(symbol_params.get("take_profit_enabled", False)) and symbol_params.get("take_profit_levels"):
+            raw_target = float(symbol_params["take_profit_levels"][-1].get("threshold", 0) or 0)
+        else:
+            raw_target = float(symbol_params.get("profit_target", 0.50))
+        if raw_target <= 0:
+            raw_target = float(symbol_params.get("profit_target", 0.50))
+        if "confidence" in analysis:
+            confidence_ratio = min(1.0, max(0.5, float(analysis["confidence"]) / 100))
+            effective_target = raw_target * confidence_ratio
+        else:
+            effective_target = raw_target
+        tp_distance = max(
+            min_distance,
+            money_price_distance(symbol, direction, volume, price, info, effective_target),
+        )
+        tp = price + tp_distance if direction == "BUY" else price - tp_distance
+        # v5.1.0 — filet de sécurité broker obligatoire (lacune critique de l'audit
+        # stratégique du 30/07/2026 : aucun stop-loss n'était jamais posé côté broker).
+        # Ancré sur le pire cas déjà toléré par la logique de sortie logicielle
+        # (max_position_loss, sinon emergency_loss_limit — voir position_exit_reason())
+        # avec une marge de sécurité, pour ne jamais se déclencher avant elle en
+        # fonctionnement normal : il ne sert que de dernier recours (crash du process,
+        # coupure MT5, gap de prix) là où la protection logicielle n'a pas pu agir.
+        protective_limit = abs(float(symbol_params.get("max_position_loss", 0) or 0))
+        if protective_limit <= 0:
+            protective_limit = abs(float(symbol_params.get("emergency_loss_limit", 50.0)))
+        broker_sl_safety_margin = 1.25
+        sl_distance = max(
+            min_distance,
+            money_price_distance(symbol, direction, volume, price, info, protective_limit * broker_sl_safety_margin),
+        )
+        sl = price - sl_distance if direction == "BUY" else price + sl_distance
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": symbol,
@@ -3798,13 +3987,15 @@ def caio_decide_scenario(scenario: Scenario, params: dict, *, now: datetime | No
     a affiner par la Phase 5 (Learning) une fois assez de resultats WIN/LOSS
     accumules.
 
-    Regle d'or absolue (garde d'observation obligatoire posee par Louis,
-    04/08/2026, section 11) : cette fonction transitionne VALIDATED -> ACTIVE
-    (via activate_scenario()) mais N'APPELLE JAMAIS place_order()/
-    open_position(). Aucune position reelle n'est ouverte a partir d'un
-    scenario tant que cette garde n'est pas levee explicitement -- l'activation
-    ici est une decision tracee (scenario_log.jsonl), comparable a la
-    "decision simulee" du mode observation, pas une execution.
+    Cette fonction transitionne VALIDATED -> ACTIVE (via activate_scenario())
+    mais N'APPELLE ELLE-MEME JAMAIS place_order()/open_position() -- elle
+    reste une decision d'arbitrage pure, tracee (scenario_log.jsonl).
+    L'execution reelle (activee le 05/08/2026, demande explicite de Louis,
+    leve la garde d'observation posee le 04/08/2026 section 11) se fait
+    ensuite, separement, par execute_scenario_anchor() appelee depuis
+    auto_trade_step() -- separation deliberee : le CAIO decide QUOI activer,
+    execute_scenario_anchor() decide SI/COMMENT l'executer reellement (gates
+    Demarrer/protection/flag scenario_engine_execution_enabled).
 
     Seuil relève en session Londres (05/08/2026, analyse du Scenario Replay
     58j) : winrate par tranche de confiance en session londres --
@@ -3855,11 +4046,16 @@ def dynamic_position_manager_step(
     scalp (4 conditions -- ancien renfort directionnel remplace, point 6 de
     la relecture de Louis).
 
-    Garde d'observation obligatoire inchangee : AUCUN appel a place_order()/
-    open_position() ici. Les clotures produisent un outcome/outcome_profit
-    SIMULES (distance de prix en points, pas un P&L reel) -- 'decision
-    simulee', pour que scenario_log.jsonl accumule des resultats exploitables
-    avant meme l'activation de l'execution reelle."""
+    Cette fonction-ci n'appelle elle-meme jamais place_order()/open_position()/
+    close_bot_position() -- elle reste l'evaluation pure (sante, transitions,
+    cloture logique). Les clotures produisent un outcome/outcome_profit
+    SIMULES (distance de prix en points, pas un P&L reel) tel quel, MEME
+    depuis l'activation de l'execution reelle (05/08/2026) -- c'est un calcul
+    de reference constant, comparable d'un scenario a l'autre, independant
+    du slippage/spread reels de la position d'ancrage. La fermeture REELLE de
+    cette position, elle, est geree separement par l'appelant
+    (close_scenario_anchor_if_needed(), auto_trade_step()) juste apres cette
+    fonction, des qu'un statut terminal est atteint."""
     now = now or datetime.now(timezone.utc)
     if scenario.status not in ("ACTIVE", "DEGRADED"):
         return
@@ -3947,15 +4143,22 @@ def scenario_engine_step(
 ) -> Scenario | None:
     """Market Scenario Engine (v5.1.1, Phase 3) -- orchestre Scenario
     Generator + Scenario Validator + CAIO scenario a chaque cycle, persiste
-    dans SHARED_MEMORY['active_scenarios'] et scenario_log.jsonl. Observation
-    uniquement : le CAIO peut activer un scenario (VALIDATED -> ACTIVE,
-    caio_decide_scenario) mais aucune position reelle n'est ouverte -- voir
-    la garde d'observation obligatoire documentee sur caio_decide_scenario().
-    Branche depuis auto_trade_step() derriere le flag `scenario_engine_enabled`
-    (regle d'integration de Louis, 04/08/2026 : aucun module ne doit rester
-    isole apres ses tests unitaires). `log_name` : utilise par le Scenario
-    Replay (run_scenario_replay()) pour ecrire dans scenario_replay_log.jsonl
-    plutot que scenario_log.jsonl, sans jamais melanger les deux."""
+    dans SHARED_MEMORY['active_scenarios'] et scenario_log.jsonl. Le CAIO peut
+    activer un scenario (VALIDATED -> ACTIVE, caio_decide_scenario) -- CETTE
+    fonction-ci ne place jamais d'ordre elle-meme, mais l'appelant
+    (auto_trade_step()) appelle execute_scenario_anchor() juste apres avec le
+    scenario retourne : depuis l'activation de l'execution reelle (05/08/2026,
+    demande explicite de Louis, section 4), un scenario ACTIVE peut donc bel
+    et bien ouvrir une vraie position MT5 -- voir execute_scenario_anchor()
+    pour tous les garde-fous (bouton Demarrer, protection de session, flag
+    scenario_engine_execution_enabled). Branche depuis auto_trade_step()
+    derriere le flag `scenario_engine_enabled` (regle d'integration de Louis,
+    04/08/2026 : aucun module ne doit rester isole apres ses tests unitaires).
+    `log_name` : utilise par le Scenario Replay (run_scenario_replay()) pour
+    ecrire dans scenario_replay_log.jsonl plutot que scenario_log.jsonl, sans
+    jamais melanger les deux -- le Replay n'appelle JAMAIS
+    execute_scenario_anchor() (voir run_scenario_replay(), aucun acces MT5
+    reel pendant un rejeu historique)."""
     global CURRENT_SCENARIO, LAST_DPM_EVAL_AT
     now = now or datetime.now(timezone.utc)
 
@@ -4011,6 +4214,221 @@ def scenario_engine_step(
         "active_scenarios", "scenario_generator", scenario.to_dict(), confidence=scenario.scenario_confidence, now=now,
     )
     return scenario
+
+
+def execute_scenario_anchor(
+    scenario: Scenario,
+    params: dict,
+    symbol_names: dict[str, str],
+    account,
+    protection: dict,
+    trading_enabled: bool,
+    allow_real: bool,
+    now: datetime | None = None,
+    log_name: str = "scenario_log.jsonl",
+) -> None:
+    """Execution Manager -- Scenario Engine (v5.1.1, activation reelle du
+    05/08/2026, demande explicite de Louis, section 4 : "le systeme doit
+    devenir actif, plus aucun module critique ne doit rester isole ou
+    theorique"). Ouvre la VRAIE position d'ancrage MT5 d'un scenario
+    ACTIVE/DEGRADED via open_position() -- seule fonction autorisee a appeler
+    mt5.order_send pour une ouverture -- avec les niveaux calcules par le
+    Scenario Generator (invalidation_price -> SL, dernier target -> TP),
+    jamais le TP fixe du profil classique : c'est tout l'interet du scenario
+    face aux anciens reglages statiques.
+
+    Gate dedie `scenario_engine_execution_enabled` (defaut True depuis
+    l'activation), INDEPENDANT de `scenario_engine_enabled` (qui ne fait que
+    generer/journaliser) -- coupe-circuit immediat sans toucher a
+    l'observation si Louis veut redescendre en observation pure plus tard.
+    Respecte aussi les memes garde-fous que le pipeline classique : bouton
+    Demarrer (trading_enabled), protection de session (WARNING/HARD_LOCK/
+    TARGET_REACHED), confirmation compte reel (allow_real, re-verifiee de
+    toute facon dans open_position()).
+
+    Distinction deliberee entre blocage TRANSITOIRE (Demarrer pas encore
+    clique, protection momentanement active -- on ne touche pas a
+    anchor_status, nouvelle tentative au prochain cycle tant que le scenario
+    reste ACTIVE/DEGRADED) et ECHEC DEFINITIF pour CE scenario (ordre
+    reellement tente et refuse, symbole introuvable, scenario sans cible) --
+    anchor_status passe alors a FAILED, plus jamais retente."""
+    now = now or datetime.now(timezone.utc)
+    if scenario.anchor_status != "NONE" or scenario.status not in ("ACTIVE", "DEGRADED"):
+        return
+    if not bool(params.get("scenario_engine_execution_enabled", True)):
+        return
+    if not trading_enabled:
+        return  # transitoire -- IA pas demarree, retente au prochain cycle
+    if protection.get("state") in ("WARNING", "HARD_LOCK", "TARGET_REACHED") or protection.get("portfolio_blocks"):
+        return  # transitoire -- protection de session ou panier Portfolio Brain active
+
+    symbol = symbol_names.get(scenario.symbol_key)
+    if not symbol or not scenario.targets or scenario.invalidation_price is None:
+        scenario.anchor_status = "FAILED"
+        scenario.history.append(ScenarioEvent(
+            at=now.isoformat(), status=scenario.status,
+            note="Position d'ancrage impossible: symbole non resolu ou niveaux (cible/invalidation) manquants.",
+            scenario_health=scenario.scenario_health,
+        ))
+        log_scenario_event(scenario, log_name)
+        return
+
+    lot_info = lot_safety_state(params, account, symbol_names).get(scenario.symbol_key, {})
+    ok, message, _event = open_position(
+        scenario.symbol_key, symbol, scenario.direction, params, lot_info,
+        {"confidence": scenario.scenario_confidence}, allow_real,
+        position_type="SCENARIO", sl_price=scenario.invalidation_price, tp_price=scenario.targets[-1]["price"],
+    )
+    scenario.anchor_status = "OPEN" if ok else "FAILED"
+    if ok:
+        # Le ticket reel n'est connu qu'une fois la position visible cote MT5
+        # (open_position() ne le retourne pas explicitement -- comportement
+        # deja identique cote moteur classique) -- identifie via le tag
+        # "SCENARIO" pose dans le commentaire (position_type ci-dessus), le
+        # plus recemment ouvert sur ce symbole/sens en cas d'ambiguite.
+        candidates = [
+            p for p in live_positions(symbol_names, params)
+            if p["symbol_key"] == scenario.symbol_key and p["direction"] == scenario.direction
+            and "SCENARIO" in p.get("comment", "")
+        ]
+        if candidates:
+            scenario.anchor_ticket = max(candidates, key=lambda p: p["open_timestamp"])["ticket"]
+    scenario.history.append(ScenarioEvent(
+        at=now.isoformat(), status=scenario.status,
+        note=f"Position d'ancrage {'ouverte' if ok else 'refusee'}: {message}",
+        scenario_health=scenario.scenario_health,
+    ))
+    log_scenario_event(scenario, log_name)
+
+
+def close_scenario_anchor_if_needed(
+    scenario: Scenario, positions: list[dict], now: datetime | None = None, log_name: str = "scenario_log.jsonl",
+) -> None:
+    """Ferme reellement la position d'ancrage MT5 quand le scenario atteint
+    un statut terminal (COMPLETED/EXPIRED/INVALIDATED) -- symetrique
+    d'execute_scenario_anchor() pour l'ouverture, meme regle d'activation
+    (05/08/2026, demande explicite de Louis, section 4). Le SL/TP broker
+    (poses a l'ouverture sur invalidation_price/dernier target, voir
+    execute_scenario_anchor()) restent un filet de securite independant --
+    cette fermeture logicielle est le chemin normal, generalement plus
+    rapide que d'attendre que le prix atteigne exactement ces niveaux au
+    tick pres.
+
+    Idempotent : si la position est deja fermee cote broker (SL/TP deja
+    declenche avant que ce code ne s'execute), close_bot_position() echoue
+    proprement (position introuvable dans `positions`) -- on marque quand
+    meme CLOSED plutot que de retenter indefiniment une position qui n'existe
+    deja plus."""
+    now = now or datetime.now(timezone.utc)
+    if scenario.anchor_status != "OPEN" or scenario.status not in ("INVALIDATED", "EXPIRED", "COMPLETED"):
+        return
+    position = next((p for p in positions if int(p.get("ticket") or 0) == scenario.anchor_ticket), None)
+    if position is None:
+        scenario.anchor_status = "CLOSED"
+        scenario.history.append(ScenarioEvent(
+            at=now.isoformat(), status=scenario.status,
+            note="Position d'ancrage deja fermee cote broker (SL/TP ou fermeture externe).",
+            scenario_health=scenario.scenario_health,
+        ))
+        log_scenario_event(scenario, log_name)
+        return
+    ok, message = close_bot_position(position, f"scenario {scenario.status.lower()}")
+    if ok:
+        scenario.anchor_status = "CLOSED"
+    # Si echec (ex: throttle CLOSE_ATTEMPTS de close_bot_position, 5s min entre
+    # tentatives sur le meme ticket), anchor_status reste volontairement OPEN
+    # -- nouvelle tentative au prochain cycle, pas de boucle d'erreur infinie
+    # grace au throttle deja present dans close_bot_position() lui-meme.
+    scenario.history.append(ScenarioEvent(
+        at=now.isoformat(), status=scenario.status,
+        note=f"Position d'ancrage {'fermee' if ok else 'fermeture refusee'}: {message}",
+        scenario_health=scenario.scenario_health,
+    ))
+    log_scenario_event(scenario, log_name)
+
+
+def execute_scenario_scalp(
+    scenario: Scenario,
+    params: dict,
+    symbol_names: dict[str, str],
+    account,
+    protection: dict,
+    current_price: float,
+    risk_report: AgentReport,
+    candles: list[dict],
+    analysis: dict,
+    trading_enabled: bool,
+    allow_real: bool,
+    now: datetime | None = None,
+    log_name: str = "scenario_log.jsonl",
+) -> None:
+    """Execution Manager -- scalps du Scenario Engine (v5.1.1, 05/08/2026,
+    demande explicite de Louis, section 2/3 : "ouvrir des scalps uniquement
+    selon les regles definies"). Reevalue evaluate_scalp_opportunity() (les
+    memes 4 conditions que le Dynamic Position Manager utilise pour la
+    detection pure/simulee -- scenario_active, zone_favorable, risk_panier_ok,
+    micro_opportunity) et, si toutes vraies ET hors cooldown ET sous le
+    plafond par scenario, ouvre une VRAIE petite position via open_position()
+    -- lot reduit (scenario_scalp_lot_ratio) par rapport a l'ancrage, SL sur
+    l'invalidation du scenario (meme these que l'ancrage), TP sur la cible la
+    PLUS PROCHE (targets[0], pas targets[-1] comme l'ancrage -- un scalp vise
+    une capture rapide, pas le mouvement complet).
+
+    Meme separation deliberee que execute_scenario_anchor() : cette fonction
+    ne fait QUE l'execution, jamais la detection (deja faite par
+    dynamic_position_manager_step()/evaluate_scalp_opportunity(), qui restent
+    purement simulees/observation -- simulated_scalp_count n'est jamais
+    touche ici, executed_scalp_count est le compteur reel distinct)."""
+    now = now or datetime.now(timezone.utc)
+    if scenario.status != "ACTIVE" or not scenario.scalp_allowed:
+        return
+    if not bool(params.get("scenario_engine_execution_enabled", True)):
+        return
+    if not trading_enabled:
+        return  # transitoire
+    if protection.get("state") in ("WARNING", "HARD_LOCK", "TARGET_REACHED") or protection.get("portfolio_blocks"):
+        return  # transitoire
+    max_scalps = max(0, int(params.get("scenario_scalp_max_count", 3)))
+    if scenario.executed_scalp_count >= max_scalps:
+        return  # plafond definitif pour ce scenario -- pas transitoire, jamais retente
+    cooldown = max(0.0, float(params.get("scenario_scalp_cooldown_sec", 45.0)))
+    if scenario.last_scalp_executed_at:
+        try:
+            last = datetime.fromisoformat(scenario.last_scalp_executed_at)
+            if (now - last).total_seconds() < cooldown:
+                return  # transitoire -- cooldown pas encore ecoule
+        except ValueError:
+            pass
+
+    checks = evaluate_scalp_opportunity(
+        scenario, current_price, risk_report, analysis, now=now, candles=candles,
+        microstructure_min=float(params.get("scenario_microstructure_min", 60.0)),
+    )
+    if not all(checks.values()):
+        return  # pas d'opportunite ce cycle -- rien a journaliser, deja fait par le DPM
+
+    symbol = symbol_names.get(scenario.symbol_key)
+    if not symbol or not scenario.targets or scenario.invalidation_price is None:
+        return
+
+    lot_info = dict(lot_safety_state(params, account, symbol_names).get(scenario.symbol_key, {}))
+    ratio = max(0.01, min(1.0, float(params.get("scenario_scalp_lot_ratio", 0.5))))
+    lot_info["effective_lot"] = round(float(lot_info.get("effective_lot") or 0) * ratio, 8)
+    ok, message, _event = open_position(
+        scenario.symbol_key, symbol, scenario.direction, params, lot_info,
+        {"confidence": scenario.scenario_confidence}, allow_real,
+        position_type="SCENARIO_SCALP", sl_price=scenario.invalidation_price, tp_price=scenario.targets[0]["price"],
+    )
+    scenario.last_scalp_executed_at = now.isoformat()  # cooldown demarre meme sur un refus --
+    # evite de re-tenter en boucle serree si le refus est systemique (lot invalide, marche ferme...)
+    if ok:
+        scenario.executed_scalp_count += 1
+    scenario.history.append(ScenarioEvent(
+        at=now.isoformat(), status=scenario.status,
+        note=f"Scalp #{scenario.executed_scalp_count} {'execute' if ok else 'refuse'}: {message}",
+        scenario_health=scenario.scenario_health,
+    ))
+    log_scenario_event(scenario, log_name)
 
 
 def fetch_candles_range(symbol: str, timeframe: str, date_from: datetime, date_to: datetime) -> list[dict]:
@@ -4114,14 +4532,13 @@ def run_scenario_learning(min_samples: int = 20) -> None:
     active n'a rien a apprendre), et persiste des poids alternatifs bornes
     dans scenario_learned_weights.json.
 
-    Volontairement prudent, meme philosophie que la formalisation
-    learning_manager_apply() pour le pipeline classique : cette fonction ne
-    modifie PAS encore le calcul live de scenario_confidence (SCENARIO_WEIGHTS
-    reste la constante active) -- elle produit et publie une recommandation
-    inspectable. Le branchement de scenario_learned_weights.json dans le
-    calcul reel est la prochaine etape, pas faite ici deliberement (garder
-    une etape ou l'ajustement est visible avant de le laisser influencer une
-    decision, meme simulee)."""
+    Cette fonction ne fait que CALCULER et PERSISTER les poids -- elle ne les
+    applique jamais elle-meme. L'application au calcul reel (voir
+    load_scenario_weights(), branche dans generate_scenario()/
+    evaluate_scenario_health() depuis le meme jour, "Phase 5" ci-dessus) est
+    faite ailleurs, deliberement separee de ce calcul : cette fonction reste
+    rejouable independamment (ex: apres un nouveau Scenario Replay) sans
+    jamais risquer de coupler le calcul des poids a leur lecture."""
     entries: list[dict] = []
     for name in ("scenario_log.jsonl", "scenario_replay_log.jsonl"):
         path = DATA_DIR / name
@@ -4144,8 +4561,25 @@ def run_scenario_learning(min_samples: int = 20) -> None:
         return
 
     learned_weights = scenario_weight_adjustments(stats, SCENARIO_WEIGHTS)
+    # v5.1.1 -- 05/08/2026, historique reel des adaptations (demande explicite
+    # de Louis, section 6 : "je veux voir en temps reel l'evolution du
+    # systeme"). Compare aux poids PRECEDEMMENT appliques (le fichier qu'on
+    # est en train d'ecraser) -- SCENARIO_WEIGHTS (base figee) si c'est le
+    # tout premier calcul. Seuil 0.01 pour ignorer le bruit d'arrondi flottant.
+    previous = read_json("scenario_learned_weights.json", None)
+    previous_weights = previous.get("learned_weights") if previous else None
+    baseline_weights = previous_weights if isinstance(previous_weights, dict) else SCENARIO_WEIGHTS
+    now_iso = datetime.now(timezone.utc)
+    for factor, new_value in learned_weights.items():
+        old_value = float(baseline_weights.get(factor, SCENARIO_WEIGHTS.get(factor, 0.0)))
+        if abs(float(new_value) - old_value) > 0.01:
+            log_ai_adaptation(
+                "scenario_learning", f"scenario_weight.{factor}", round(old_value, 3), round(float(new_value), 3),
+                f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%).",
+                now=now_iso,
+            )
     write_json("scenario_learned_weights.json", {
-        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "computed_at": now_iso.isoformat(),
         "n_resolved": stats["n_resolved"],
         "overall_winrate": stats["overall_winrate"],
         "base_weights": SCENARIO_WEIGHTS,
@@ -4154,7 +4588,98 @@ def run_scenario_learning(min_samples: int = 20) -> None:
     })
     log(
         f"Scenario Learning: {stats['n_resolved']} scenarios resolus, winrate {stats['overall_winrate']}% "
-        f"-> scenario_learned_weights.json mis a jour (pas encore applique au calcul live).",
+        f"-> scenario_learned_weights.json mis a jour (applique au prochain scenario via load_scenario_weights()).",
+        "SUCCESS",
+    )
+
+
+def run_auto_backtest_if_due(params: dict, symbol_names: dict[str, str], *, now: datetime | None = None) -> None:
+    """Backtest automatique intelligent (v5.1.1, 05/08/2026, section 7 de la
+    demande de Louis). Reutilise le Scenario Replay (run_scenario_replay())
+    et le Scenario Learning (run_scenario_learning()) deja construits et
+    testes -- pas de second moteur de backtest duplique. Se declenche au
+    demarrage (jamais lance encore) puis toutes les
+    scenario_backtest_interval_hours (defaut 24h) -- throttle persiste dans
+    auto_backtest_state.json, jamais perdu au redemarrage.
+
+    Persiste un resume exploitable par l'UI dans auto_backtest_result.json :
+    periode testee, nb de trades, winrate, profit, drawdown, meilleures/pires
+    conditions (session/tendance), poids proposes par le Learning -- exactement
+    la liste demandee par Louis (section 7)."""
+    if not bool(params.get("scenario_auto_backtest_enabled", True)):
+        return
+    now = now or datetime.now(timezone.utc)
+    state = read_json("auto_backtest_state.json", {}) or {}
+    last_run = state.get("last_run_at")
+    interval_hours = max(1.0, float(params.get("scenario_backtest_interval_hours", 24.0)))
+    if last_run:
+        try:
+            last_dt = datetime.fromisoformat(last_run)
+            if (now - last_dt).total_seconds() < interval_hours * 3600:
+                return
+        except ValueError:
+            pass
+
+    days = max(1, int(params.get("scenario_backtest_days", 58)))
+    log(f"Backtest automatique: declenchement (rejeu {days}j)...", "INFO")
+    run_scenario_replay(params, symbol_names, days=days)
+    write_json("auto_backtest_state.json", {"last_run_at": now.isoformat()})
+    run_scenario_learning(min_samples=int(params.get("scenario_learning_min_samples", 20)))
+
+    replay_path = DATA_DIR / "scenario_replay_log.jsonl"
+    if not replay_path.exists():
+        log("Backtest automatique: aucun scenario_replay_log.jsonl produit -- historique MT5 insuffisant.", "WARNING")
+        return
+    by_id: dict[str, dict] = {}
+    for line in replay_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        by_id[d["scenario_id"]] = d
+    entries = list(by_id.values())
+    stats = scenario_learning_stats(entries, min_samples=max(5, int(params.get("scenario_learning_min_samples", 20)) // 2))
+
+    resolved = [e for e in entries if e.get("outcome") in ("WIN_SIMULATED", "LOSS_SIMULATED", "BREAKEVEN_SIMULATED")]
+    resolved.sort(key=lambda e: e.get("created_at") or "")
+    cumulative = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for e in resolved:
+        cumulative += float(e.get("outcome_profit") or 0.0)
+        peak = max(peak, cumulative)
+        max_drawdown = max(max_drawdown, peak - cumulative)
+
+    def _best_worst(bucket: dict) -> tuple[str | None, str | None]:
+        if not bucket:
+            return None, None
+        ranked = sorted(bucket.items(), key=lambda kv: kv[1]["winrate"])
+        return ranked[-1][0], ranked[0][0]
+
+    best_session, worst_session = _best_worst(stats["by_session"])
+    best_trend, worst_trend = _best_worst(stats["by_trend"])
+    learned = read_json("scenario_learned_weights.json", None)
+
+    write_json("auto_backtest_result.json", {
+        "computed_at": now.isoformat(),
+        "period_days": days,
+        "period_from": (now - timedelta(days=days)).date().isoformat(),
+        "period_to": now.date().isoformat(),
+        "n_trades": stats["n_resolved"],
+        "winrate": stats["overall_winrate"],
+        "total_profit_points": round(cumulative, 3),
+        "max_drawdown_points": round(max_drawdown, 3),
+        "best_session": best_session,
+        "worst_session": worst_session,
+        "best_trend": best_trend,
+        "worst_trend": worst_trend,
+        "proposed_weights": learned.get("learned_weights") if learned else None,
+    })
+    log(
+        f"Backtest automatique termine: {stats['n_resolved']} scenarios resolus, "
+        f"winrate {stats['overall_winrate']}%, drawdown {round(max_drawdown, 2)} pts.",
         "SUCCESS",
     )
 
@@ -4247,6 +4772,28 @@ def auto_trade_step(
                 params, active, se_candles, se_price, se_structure, se_smart_money, se_risk, se_econ, se_analysis,
             )
             if scenario is not None:
+                # v5.1.1 -- 05/08/2026, activation reelle demandee explicitement
+                # par Louis (section 4). Appele juste apres scenario_engine_step()
+                # (qui ne place lui-meme jamais d'ordre), avec tous les elements
+                # de garde deja disponibles ici : bouton Demarrer (state["enabled"]
+                # est garanti True a ce point, sinon la fonction serait deja
+                # retournee plus haut), protection de session, confirmation compte
+                # reel -- meme calcul que allow_real_entry plus bas dans cette
+                # fonction pour le pipeline classique.
+                try:
+                    execute_scenario_anchor(
+                        scenario, params, symbol_names, account, protection,
+                        trading_enabled=bool(state.get("enabled")),
+                        allow_real=bool(demo or state.get("real_confirmed")),
+                    )
+                    close_scenario_anchor_if_needed(scenario, positions)
+                    execute_scenario_scalp(
+                        scenario, params, symbol_names, account, protection, se_price, se_risk, se_candles, se_analysis,
+                        trading_enabled=bool(state.get("enabled")),
+                        allow_real=bool(demo or state.get("real_confirmed")),
+                    )
+                except Exception as exc:  # noqa: BLE001 -- une erreur d'execution ne doit jamais casser le cycle
+                    log(f"Scenario Engine (execution): {exc}", "ERROR")
                 state["scenario"] = scenario.to_dict()
         except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
             log(f"Scenario Engine (observation): {exc}", "ERROR")
@@ -4263,9 +4810,12 @@ def auto_trade_step(
             ts_structure = se_structure if "se_structure" in locals() else structure_analyst_report(
                 ts_candles, ts_candles[-1]["close"] if ts_candles else 0.0, timeframe=str(symbol_params.get("timeframe", "M5")),
             )
-            state["trading_style"] = trading_style_engine_step(params, ts_structure, ts_candles)
-        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
-            log(f"Trading Style Engine (observation): {exc}", "ERROR")
+            ts_entry = trading_style_engine_step(params, ts_structure, ts_candles)
+            state["trading_style"] = ts_entry
+            if ts_entry is not None:
+                apply_trading_style_recommendation(ts_entry, params)
+        except Exception as exc:  # noqa: BLE001 -- une erreur d'adaptation ne doit jamais casser le cycle de trading
+            log(f"Trading Style Engine: {exc}", "ERROR")
 
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     contexts = position_contexts()
@@ -4367,7 +4917,7 @@ def auto_trade_step(
     decision = payload.get("simulated_decision", {})
     if not symbol or not decision.get("eligible"):
         reason = str(decision.get("reason") or "Aucun signal eligible.")
-        log_reason_throttled(state, reason)
+        log_reason_throttled("decision_blocked", reason)
         state["reason"] = reason
         save_trading_state(state)
         return state
@@ -4489,7 +5039,7 @@ def auto_trade_step(
         server_signal = str(server_reply.get("decision") or "WAIT")
         server_confidence = float(server_reply.get("confidence") or 0)
         message = f"Validation IA serveur: {server_signal} {server_confidence:.1f}% - {reason}"
-        log_reason_throttled(state, message)
+        log_reason_throttled("server_validation_blocked", message)
         state["reason"] = message
         save_trading_state(state)
         return state
@@ -4689,7 +5239,35 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
     active_analysis = analyses.get(active, {})
     active_access = access.get(active, {"state": "CLOSED", "entries_allowed": False, "reason": "Actif indisponible."})
     active_lot_safety = lot_safety.get(active, {"rejected": True, "reason": "Lot non valide."})
-    protection_blocks = protection["state"] in {"WARNING", "HARD_LOCK", "TARGET_REACHED"}
+    # v5.1.1 -- 05/08/2026, application reelle du Portfolio Brain (demande
+    # explicite de Louis : "plus rien ne doit rester en simulation"). Calcule
+    # ici (pas seulement dans auto_trade_step(), qui tourne APRES et
+    # consommerait un `eligible` deja fige) pour que le blocage agisse
+    # vraiment sur la decision d'entree du pipeline classique, pas seulement
+    # sur l'affichage du panneau Portfolio Brain.
+    portfolio_bot_positions = [
+        p for p in positions
+        if p.get("symbol_key") == active and p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+    ]
+    portfolio_exposure = basket_exposure(portfolio_bot_positions, float(account.equity) if account else 0.0)
+    portfolio_assessment = portfolio_risk_assessment(
+        portfolio_exposure,
+        max_positions=int(params.get("portfolio_max_positions", 5)),
+        max_total_lot=float(params.get("portfolio_max_total_lot", 0.0) or 0.0),
+        floating_loss_warn_pct=float(params.get("portfolio_floating_loss_warn_pct", 2.0)),
+        floating_loss_critical_pct=float(params.get("portfolio_floating_loss_critical_pct", 5.0)),
+    )
+    portfolio_blocks = (
+        bool(params.get("portfolio_brain_enabled", False))
+        and portfolio_assessment["action"] in ("LIMIT_NEW_ENTRIES", "REDUCE_EXPOSURE")
+    )
+    protection_blocks = protection["state"] in {"WARNING", "HARD_LOCK", "TARGET_REACHED"} or portfolio_blocks
+    # Expose au reste du pipeline (execute_scenario_anchor()/execute_scenario_scalp(),
+    # qui recoivent ce meme dict `protection` via payload) sans surcharger
+    # `state`, qui reste le vocabulaire de la protection de session -- le
+    # panier est une raison de blocage distincte, pas un nouvel etat de session.
+    protection["portfolio_blocks"] = portfolio_blocks
+    protection["portfolio_reasons"] = portfolio_assessment["reasons"]
     lot_blocks = bool(active_lot_safety.get("rejected"))
     confidence_min = float(
         active_analysis.get("learned_threshold")
@@ -4805,7 +5383,11 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
             f"{float(active_analysis.get('quant_regime_risk', 0)):.0f}%."
         )
     elif protection_blocks:
-        decision_reason = protection["reason"]
+        decision_reason = (
+            f"Portfolio Brain: {'; '.join(portfolio_assessment['reasons'])}"
+            if portfolio_blocks and not (protection["state"] in {"WARNING", "HARD_LOCK", "TARGET_REACHED"})
+            else protection["reason"]
+        )
     elif lot_blocks:
         decision_reason = active_lot_safety.get("reason")
     elif not active_access.get("entries_allowed"):
@@ -4925,6 +5507,8 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         "lot_safety": lot_safety,
         "session_access": access,
         "simulated_decision": simulated_decision,
+        "ai_adaptations": recent_ai_adaptations(),
+        "auto_backtest": read_json("auto_backtest_result.json", None),
         "positions": positions,
         "timestamp": int(time.time()),
     }
@@ -5042,6 +5626,7 @@ def main() -> int:
             log(f"Historique {_key} pret: {len(_rates)} bougies chargees.", "SUCCESS")
 
     last_history = 0.0
+    last_auto_backtest_check = 0.0
     last_ai_sync = 0.0
     last_microstructure = 0.0
     gold_microstructure_snapshot_cache: dict = {"available": False, "reason": "Pas encore calcule."}
@@ -5134,6 +5719,17 @@ def main() -> int:
             trades = sync_history(conn, symbol_names, params)
             write_json("trades.json", {"trades": trades, "ts": int(time.time())})
             last_history = now
+        if now - last_auto_backtest_check > 600:
+            # v5.1.1 -- 05/08/2026, section 7. Verification peu couteuse
+            # (lecture d'un petit fichier JSON) toutes les 10 min -- le vrai
+            # rejeu ne se declenche que si run_auto_backtest_if_due() juge
+            # que l'intervalle configure (scenario_backtest_interval_hours)
+            # est vraiment ecoule.
+            try:
+                run_auto_backtest_if_due(params, symbol_names)
+            except Exception as exc:  # noqa: BLE001 -- un backtest rate ne doit jamais casser le cycle de trading
+                log(f"Backtest automatique: {exc}", "ERROR")
+            last_auto_backtest_check = now
         if cmd.get("command") == "NEW_SESSION" and is_new_command:
             account_now = mt5.account_info()
             account_login = int(account_now.login) if account_now else None

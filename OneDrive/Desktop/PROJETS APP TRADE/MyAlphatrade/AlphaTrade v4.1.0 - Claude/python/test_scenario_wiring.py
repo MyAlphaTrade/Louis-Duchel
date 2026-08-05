@@ -607,6 +607,43 @@ def test_run_scenario_learning_writes_recommendation_without_touching_default_we
     print("test_run_scenario_learning_writes_recommendation_without_touching_default_weights OK")
 
 
+def test_run_scenario_learning_logs_real_adaptation_when_weights_change():
+    """v5.1.1, 05/08/2026 -- historique reel des adaptations (section 6,
+    demande explicite de Louis). Seed un "avant" tres different du resultat
+    reel calcule, pour garantir un ecart > 0.01 sur au moins un facteur."""
+    (ae.DATA_DIR / "scenario_learned_weights.json").unlink(missing_ok=True)
+    (ae.DATA_DIR / "scenario_replay_log.jsonl").unlink(missing_ok=True)
+    (ae.DATA_DIR / "ai_adaptations_log.jsonl").unlink(missing_ok=True)
+    log_path = ae.DATA_DIR / "scenario_log.jsonl"
+    log_path.unlink(missing_ok=True)
+    with log_path.open("w", encoding="utf-8") as f:
+        for i in range(30):
+            f.write(json.dumps({
+                "scenario_id": f"s{i}",
+                "outcome": "WIN_SIMULATED" if i % 2 == 0 else "LOSS_SIMULATED",
+                "market_context": {"session": "london", "trend": "UPTREND", "volatility": "medium"},
+                "direction": "BUY",
+            }) + "\n")
+    # "avant" artificiel, tres eloigne de tout resultat plausible -- garantit
+    # un ecart detecte quel que soit le calcul reel de scenario_weight_adjustments().
+    ae.write_json("scenario_learned_weights.json", {
+        "computed_at": NOW.isoformat(), "n_resolved": 20, "overall_winrate": 50.0,
+        "base_weights": ae.SCENARIO_WEIGHTS,
+        "learned_weights": {k: 0.0 for k in ae.SCENARIO_WEIGHTS},
+        "stats": {},
+    })
+    ae.run_scenario_learning(min_samples=20)
+    lines = [json.loads(l) for l in (ae.DATA_DIR / "ai_adaptations_log.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(lines) > 0
+    assert all(l["module"] == "scenario_learning" for l in lines)
+    assert all(l["parameter"].startswith("scenario_weight.") for l in lines)
+    assert all(l["old_value"] == 0.0 for l in lines)
+    (ae.DATA_DIR / "scenario_learned_weights.json").unlink(missing_ok=True)
+    (ae.DATA_DIR / "ai_adaptations_log.jsonl").unlink(missing_ok=True)
+    log_path.unlink(missing_ok=True)
+    print("test_run_scenario_learning_logs_real_adaptation_when_weights_change OK")
+
+
 def test_scenario_engine_step_returns_none_without_candles():
     ae.CURRENT_SCENARIO = None
     result = ae.scenario_engine_step(
@@ -673,6 +710,480 @@ def test_auto_trade_step_wires_scenario_engine_observation_without_crashing():
     print("test_auto_trade_step_wires_scenario_engine_observation_without_crashing OK")
 
 
+def _fake_position(ticket, symbol_key="XAUUSD", direction="BUY", comment="AlphaTrade 5.1.1 SCENARIO", open_timestamp=1000):
+    return {
+        "ticket": ticket, "symbol_key": symbol_key, "symbol": "XAUUSD", "direction": direction,
+        "origin": "BOT", "origin_name": "AlphaTrade", "origin_type": "INTERNAL_BOT", "origin_magic": 0,
+        "lot": 0.01, "open_price": 4086.5, "current_price": 4086.5, "profit": 0.0,
+        "open_timestamp": open_timestamp, "open_time": "2026-08-05T10:00:00", "comment": comment,
+    }
+
+
+def _poison_open_position(*a, **k):
+    raise AssertionError("open_position() ne doit pas etre appele dans ce scenario de test")
+
+
+def test_execute_scenario_anchor_opens_real_position_when_all_gates_pass():
+    """Coeur de l'activation reelle (05/08/2026, demande explicite de Louis).
+    Tous les garde-fous sont verts : la position d'ancrage doit reellement
+    s'ouvrir, avec le SL/TP du scenario (pas le TP fixe classique), et le
+    ticket reel doit etre retrouve via le tag SCENARIO du commentaire."""
+    scenario = _active_scenario()
+    calls = []
+
+    def _fake_open_position(symbol_key, symbol, direction, params, lot_info, analysis, allow_real, **kwargs):
+        calls.append((symbol_key, symbol, direction, allow_real, kwargs))
+        return True, "BUY 0.010 XAUUSD execute en 42 ms.", {"ok": True}
+
+    original_open_position = ae.open_position
+    original_lot_safety = ae.lot_safety_state
+    original_live_positions = ae.live_positions
+    ae.open_position = _fake_open_position
+    ae.lot_safety_state = lambda params, account, symbol_names: {"XAUUSD": {"effective_lot": 0.01, "reason": ""}}
+    ae.live_positions = lambda symbol_names, params=None: [_fake_position(555001)]
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "OPEN"
+        assert scenario.anchor_ticket == 555001
+        assert len(calls) == 1
+        symbol_key, symbol, direction, allow_real, kwargs = calls[0]
+        assert symbol_key == "XAUUSD" and symbol == "XAUUSD" and direction == "BUY"
+        assert kwargs["sl_price"] == scenario.invalidation_price
+        assert kwargs["tp_price"] == scenario.targets[-1]["price"]
+        assert kwargs["position_type"] == "SCENARIO"
+    finally:
+        ae.open_position = original_open_position
+        ae.lot_safety_state = original_lot_safety
+        ae.live_positions = original_live_positions
+    print("test_execute_scenario_anchor_opens_real_position_when_all_gates_pass OK")
+
+
+def test_execute_scenario_anchor_skipped_when_execution_flag_disabled():
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {"scenario_engine_execution_enabled": False}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "NONE"
+        assert scenario.anchor_ticket is None
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_skipped_when_execution_flag_disabled OK")
+
+
+def test_execute_scenario_anchor_transient_skip_when_trading_not_enabled():
+    """Bouton Demarrer pas encore clique -- blocage TRANSITOIRE, pas un
+    echec definitif : anchor_status doit rester NONE (retentable)."""
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=False, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "NONE"
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_transient_skip_when_trading_not_enabled OK")
+
+
+def test_execute_scenario_anchor_transient_skip_when_protection_blocks():
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        for blocking_state in ("WARNING", "HARD_LOCK", "TARGET_REACHED"):
+            scenario.anchor_status = "NONE"
+            ae.execute_scenario_anchor(
+                scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": blocking_state},
+                trading_enabled=True, allow_real=False, now=NOW,
+            )
+            assert scenario.anchor_status == "NONE", f"devait rester NONE pour {blocking_state}"
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_transient_skip_when_protection_blocks OK")
+
+
+def test_execute_scenario_anchor_transient_skip_when_portfolio_brain_blocks():
+    """v5.1.1, 05/08/2026 -- Portfolio Brain applique reellement un blocage
+    (demande explicite de Louis), expose via protection['portfolio_blocks'],
+    distinct de protection['state']."""
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED", "portfolio_blocks": True},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "NONE"
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_transient_skip_when_portfolio_brain_blocks OK")
+
+
+def test_execute_scenario_anchor_permanent_fail_when_symbol_missing():
+    """Symbole introuvable dans symbol_names : blocage DEFINITIF pour ce
+    scenario (pas une question de timing, retenter ne changerait rien)."""
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {}, None, {"state": "ARMED"}, trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "FAILED"
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_permanent_fail_when_symbol_missing OK")
+
+
+def test_execute_scenario_anchor_marks_failed_when_order_rejected():
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    original_lot_safety = ae.lot_safety_state
+    ae.open_position = lambda *a, **k: (False, "Ordre refuse: 10004 Requote", None)
+    ae.lot_safety_state = lambda params, account, symbol_names: {"XAUUSD": {"effective_lot": 0.01, "reason": ""}}
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "FAILED"
+        assert scenario.anchor_ticket is None
+    finally:
+        ae.open_position = original_open_position
+        ae.lot_safety_state = original_lot_safety
+    print("test_execute_scenario_anchor_marks_failed_when_order_rejected OK")
+
+
+def test_execute_scenario_anchor_never_reattempts_once_resolved():
+    """Une seule tentative par scenario, quel que soit le resultat -- jamais
+    de boucle de re-essai a chaque cycle."""
+    scenario = _active_scenario()
+    scenario.anchor_status = "OPEN"
+    scenario.anchor_ticket = 999001
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "OPEN"
+        assert scenario.anchor_ticket == 999001
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_never_reattempts_once_resolved OK")
+
+
+def test_close_scenario_anchor_if_needed_closes_real_position_on_terminal_status():
+    scenario = _active_scenario()
+    scenario.anchor_status = "OPEN"
+    scenario.anchor_ticket = 555001
+    scenario.transition("INVALIDATED", "test", now=NOW)  # ACTIVE -> INVALIDATED autorise
+    calls = []
+
+    def _fake_close(position, reason):
+        calls.append((position["ticket"], reason))
+        return True, f"Fermeture {position['ticket']} OK."
+
+    original_close = ae.close_bot_position
+    ae.close_bot_position = _fake_close
+    try:
+        ae.close_scenario_anchor_if_needed(scenario, [_fake_position(555001)], now=NOW)
+        assert scenario.anchor_status == "CLOSED"
+        assert len(calls) == 1 and calls[0][0] == 555001
+    finally:
+        ae.close_bot_position = original_close
+    print("test_close_scenario_anchor_if_needed_closes_real_position_on_terminal_status OK")
+
+
+def test_close_scenario_anchor_if_needed_noop_when_not_open():
+    scenario = _active_scenario()
+    scenario.transition("INVALIDATED", "test", now=NOW)
+    original_close = ae.close_bot_position
+    ae.close_bot_position = _poison_open_position
+    try:
+        ae.close_scenario_anchor_if_needed(scenario, [_fake_position(555001)], now=NOW)
+        assert scenario.anchor_status == "NONE"  # jamais ouvert -- rien a fermer
+    finally:
+        ae.close_bot_position = original_close
+    print("test_close_scenario_anchor_if_needed_noop_when_not_open OK")
+
+
+def test_close_scenario_anchor_if_needed_noop_while_scenario_still_active():
+    scenario = _active_scenario()
+    scenario.anchor_status = "OPEN"
+    scenario.anchor_ticket = 555001
+    original_close = ae.close_bot_position
+    ae.close_bot_position = _poison_open_position
+    try:
+        ae.close_scenario_anchor_if_needed(scenario, [_fake_position(555001)], now=NOW)
+        assert scenario.anchor_status == "OPEN"  # toujours ACTIVE -- pas encore a fermer
+    finally:
+        ae.close_bot_position = original_close
+    print("test_close_scenario_anchor_if_needed_noop_while_scenario_still_active OK")
+
+
+def test_close_scenario_anchor_if_needed_marks_closed_when_position_already_gone():
+    """SL/TP broker deja declenche avant que le logiciel n'ait le temps de
+    reagir -- la position n'apparait plus dans `positions`."""
+    scenario = _active_scenario()
+    scenario.anchor_status = "OPEN"
+    scenario.anchor_ticket = 555001
+    scenario.transition("COMPLETED", "test", now=NOW)
+    original_close = ae.close_bot_position
+    ae.close_bot_position = _poison_open_position
+    try:
+        ae.close_scenario_anchor_if_needed(scenario, [], now=NOW)  # plus aucune position ouverte
+        assert scenario.anchor_status == "CLOSED"
+    finally:
+        ae.close_bot_position = original_close
+    print("test_close_scenario_anchor_if_needed_marks_closed_when_position_already_gone OK")
+
+
+def test_close_scenario_anchor_if_needed_retries_when_close_fails():
+    scenario = _active_scenario()
+    scenario.anchor_status = "OPEN"
+    scenario.anchor_ticket = 555001
+    scenario.transition("EXPIRED", "test", now=NOW)
+    original_close = ae.close_bot_position
+    ae.close_bot_position = lambda position, reason: (False, "Fermeture refusee: en attente.")
+    try:
+        ae.close_scenario_anchor_if_needed(scenario, [_fake_position(555001)], now=NOW)
+        assert scenario.anchor_status == "OPEN"  # retente au prochain cycle
+    finally:
+        ae.close_bot_position = original_close
+    print("test_close_scenario_anchor_if_needed_retries_when_close_fails OK")
+
+
+def test_execute_scenario_scalp_opens_real_position_when_all_gates_pass():
+    scenario = _active_scenario()
+    calls = []
+
+    def _fake_open_position(symbol_key, symbol, direction, params, lot_info, analysis, allow_real, **kwargs):
+        calls.append((direction, lot_info["effective_lot"], kwargs))
+        return True, "BUY 0.005 XAUUSD execute.", {"ok": True}
+
+    original_open_position = ae.open_position
+    original_lot_safety = ae.lot_safety_state
+    ae.open_position = _fake_open_position
+    ae.lot_safety_state = lambda params, account, symbol_names: {"XAUUSD": {"effective_lot": 0.02, "reason": ""}}
+    try:
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.executed_scalp_count == 1
+        assert scenario.last_scalp_executed_at == NOW.isoformat()
+        assert scenario.simulated_scalp_count == 0  # inchange -- compteur distinct, jamais touche ici
+        assert len(calls) == 1
+        direction, lot, kwargs = calls[0]
+        assert direction == "BUY"
+        assert abs(lot - 0.01) < 1e-9  # 0.02 * ratio par defaut 0.5
+        assert kwargs["sl_price"] == scenario.invalidation_price
+        assert kwargs["tp_price"] == scenario.targets[0]["price"]  # cible la PLUS PROCHE, pas la derniere
+        assert kwargs["position_type"] == "SCENARIO_SCALP"
+    finally:
+        ae.open_position = original_open_position
+        ae.lot_safety_state = original_lot_safety
+    print("test_execute_scenario_scalp_opens_real_position_when_all_gates_pass OK")
+
+
+def test_execute_scenario_scalp_respects_cooldown():
+    scenario = _active_scenario()
+    scenario.last_scalp_executed_at = NOW.isoformat()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        soon_after = NOW + timedelta(seconds=10)  # sous les 45s par defaut
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=soon_after,
+        )
+        assert scenario.executed_scalp_count == 0
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_scalp_respects_cooldown OK")
+
+
+def test_execute_scenario_scalp_opens_again_after_cooldown_elapsed():
+    scenario = _active_scenario()
+    scenario.last_scalp_executed_at = NOW.isoformat()
+    original_open_position = ae.open_position
+    original_lot_safety = ae.lot_safety_state
+    ae.open_position = lambda *a, **k: (True, "ok", {"ok": True})
+    ae.lot_safety_state = lambda params, account, symbol_names: {"XAUUSD": {"effective_lot": 0.02, "reason": ""}}
+    try:
+        later = NOW + timedelta(seconds=46)  # au-dela des 45s par defaut
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=later,
+        )
+        assert scenario.executed_scalp_count == 1
+    finally:
+        ae.open_position = original_open_position
+        ae.lot_safety_state = original_lot_safety
+    print("test_execute_scenario_scalp_opens_again_after_cooldown_elapsed OK")
+
+
+def test_execute_scenario_scalp_respects_max_count_cap():
+    scenario = _active_scenario()
+    scenario.executed_scalp_count = 3  # deja au plafond par defaut
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.executed_scalp_count == 3  # inchange, jamais retente
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_scalp_respects_max_count_cap OK")
+
+
+def test_execute_scenario_scalp_transient_skip_when_gates_block():
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=False, allow_real=False, now=NOW,
+        )
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "HARD_LOCK"}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.executed_scalp_count == 0
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_scalp_transient_skip_when_gates_block OK")
+
+
+def test_execute_scenario_scalp_transient_skip_when_portfolio_brain_blocks():
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED", "portfolio_blocks": True}, 4086.6, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.executed_scalp_count == 0
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_scalp_transient_skip_when_portfolio_brain_blocks OK")
+
+
+def test_execute_scenario_scalp_noop_when_conditions_not_all_met():
+    """Prix hors zone favorable -- une des 4 conditions echoue, aucun ordre."""
+    scenario = _active_scenario()
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_scalp(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"}, 4200.0, _ok_risk(),
+            _candles_scalp_opportunity(), {"score_gap": 50.0},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.executed_scalp_count == 0
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_scalp_noop_when_conditions_not_all_met OK")
+
+
+def test_run_auto_backtest_if_due_skips_when_recently_run():
+    """v5.1.1, 05/08/2026 -- section 7. Throttle persiste (auto_backtest_state.json),
+    survit au redemarrage -- pas de rejeu couteux tant que l'intervalle n'est pas ecoule."""
+    from datetime import timedelta
+    ae.write_json("auto_backtest_state.json", {"last_run_at": NOW.isoformat()})
+    original_replay = ae.run_scenario_replay
+
+    def _poison(*a, **k):
+        raise AssertionError("run_scenario_replay() ne doit pas etre appele si pas encore du")
+
+    ae.run_scenario_replay = _poison
+    try:
+        soon_after = NOW + timedelta(hours=1)  # sous les 24h par defaut
+        ae.run_auto_backtest_if_due({}, {"XAUUSD": "XAUUSD"}, now=soon_after)
+    finally:
+        ae.run_scenario_replay = original_replay
+        (ae.DATA_DIR / "auto_backtest_state.json").unlink(missing_ok=True)
+    print("test_run_auto_backtest_if_due_skips_when_recently_run OK")
+
+
+def test_run_auto_backtest_if_due_noop_when_disabled():
+    original_replay = ae.run_scenario_replay
+    ae.run_scenario_replay = lambda *a, **k: (_ for _ in ()).throw(AssertionError("ne doit pas etre appele"))
+    try:
+        ae.run_auto_backtest_if_due({"scenario_auto_backtest_enabled": False}, {"XAUUSD": "XAUUSD"}, now=NOW)
+    finally:
+        ae.run_scenario_replay = original_replay
+    print("test_run_auto_backtest_if_due_noop_when_disabled OK")
+
+
+def test_run_auto_backtest_if_due_writes_result_after_replay():
+    (ae.DATA_DIR / "auto_backtest_state.json").unlink(missing_ok=True)
+    (ae.DATA_DIR / "auto_backtest_result.json").unlink(missing_ok=True)
+    (ae.DATA_DIR / "scenario_replay_log.jsonl").unlink(missing_ok=True)
+    with (ae.DATA_DIR / "scenario_replay_log.jsonl").open("w", encoding="utf-8") as f:
+        for i in range(25):
+            f.write(json.dumps({
+                "scenario_id": f"r{i}",
+                "outcome": "WIN_SIMULATED" if i % 3 else "LOSS_SIMULATED",
+                "outcome_profit": 1.5 if i % 3 else -1.0,
+                "created_at": f"2026-07-{(i % 28) + 1:02d}T10:00:00+00:00",
+                "market_context": {"session": "london" if i % 2 else "new_york", "trend": "UPTREND", "volatility": "medium"},
+                "direction": "BUY",
+            }) + "\n")
+    original_replay = ae.run_scenario_replay
+    ae.run_scenario_replay = lambda *a, **k: None  # le fichier existe deja, simule un rejeu qui ne le touche pas
+    try:
+        ae.run_auto_backtest_if_due({"scenario_learning_min_samples": 10}, {"XAUUSD": "XAUUSD"}, now=NOW)
+        assert (ae.DATA_DIR / "auto_backtest_state.json").exists()
+        result = json.loads((ae.DATA_DIR / "auto_backtest_result.json").read_text(encoding="utf-8"))
+        assert result["n_trades"] == 25
+        assert "winrate" in result and "max_drawdown_points" in result
+    finally:
+        ae.run_scenario_replay = original_replay
+        (ae.DATA_DIR / "auto_backtest_state.json").unlink(missing_ok=True)
+        (ae.DATA_DIR / "auto_backtest_result.json").unlink(missing_ok=True)
+        (ae.DATA_DIR / "scenario_replay_log.jsonl").unlink(missing_ok=True)
+    print("test_run_auto_backtest_if_due_writes_result_after_replay OK")
+
+
+def test_execute_scenario_anchor_noop_when_scenario_not_active():
+    scenario = make_scenario("XAUUSD_CAND2", "XAUUSD", "BUY", {"low": 4085.0, "high": 4088.0}, now=NOW)
+    original_open_position = ae.open_position
+    ae.open_position = _poison_open_position
+    try:
+        ae.execute_scenario_anchor(
+            scenario, {}, {"XAUUSD": "XAUUSD"}, None, {"state": "ARMED"},
+            trading_enabled=True, allow_real=False, now=NOW,
+        )
+        assert scenario.anchor_status == "NONE"
+    finally:
+        ae.open_position = original_open_position
+    print("test_execute_scenario_anchor_noop_when_scenario_not_active OK")
+
+
 if __name__ == "__main__":
     test_scenario_generator_can_write_active_scenarios_compartment()
     test_other_source_cannot_write_active_scenarios_compartment()
@@ -705,6 +1216,31 @@ if __name__ == "__main__":
     test_load_scenario_weights_falls_back_when_keys_incomplete()
     test_generate_scenario_uses_injected_weights_via_scenario_engine_step()
     test_run_scenario_learning_writes_recommendation_without_touching_default_weights()
+    test_run_scenario_learning_logs_real_adaptation_when_weights_change()
     test_scenario_engine_step_returns_none_without_candles()
     test_auto_trade_step_wires_scenario_engine_observation_without_crashing()
+    test_execute_scenario_anchor_opens_real_position_when_all_gates_pass()
+    test_execute_scenario_anchor_skipped_when_execution_flag_disabled()
+    test_execute_scenario_anchor_transient_skip_when_trading_not_enabled()
+    test_execute_scenario_anchor_transient_skip_when_protection_blocks()
+    test_execute_scenario_anchor_permanent_fail_when_symbol_missing()
+    test_execute_scenario_anchor_marks_failed_when_order_rejected()
+    test_execute_scenario_anchor_never_reattempts_once_resolved()
+    test_execute_scenario_anchor_noop_when_scenario_not_active()
+    test_close_scenario_anchor_if_needed_closes_real_position_on_terminal_status()
+    test_close_scenario_anchor_if_needed_noop_when_not_open()
+    test_close_scenario_anchor_if_needed_noop_while_scenario_still_active()
+    test_close_scenario_anchor_if_needed_marks_closed_when_position_already_gone()
+    test_close_scenario_anchor_if_needed_retries_when_close_fails()
+    test_execute_scenario_scalp_opens_real_position_when_all_gates_pass()
+    test_execute_scenario_scalp_respects_cooldown()
+    test_execute_scenario_scalp_opens_again_after_cooldown_elapsed()
+    test_execute_scenario_scalp_respects_max_count_cap()
+    test_execute_scenario_scalp_transient_skip_when_gates_block()
+    test_execute_scenario_scalp_noop_when_conditions_not_all_met()
+    test_execute_scenario_anchor_transient_skip_when_portfolio_brain_blocks()
+    test_execute_scenario_scalp_transient_skip_when_portfolio_brain_blocks()
+    test_run_auto_backtest_if_due_skips_when_recently_run()
+    test_run_auto_backtest_if_due_noop_when_disabled()
+    test_run_auto_backtest_if_due_writes_result_after_replay()
     print("ALL TESTS PASSED")

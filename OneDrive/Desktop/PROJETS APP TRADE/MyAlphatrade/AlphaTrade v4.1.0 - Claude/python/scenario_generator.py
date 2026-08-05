@@ -220,9 +220,15 @@ def evaluate_scalp_opportunity(
 ) -> dict[str, bool]:
     """CAIO mode (b) -- Dynamic Position Manager, Phase 4 (section 9,
     correction de Louis du point 6 : plus un renfort directionnel, une
-    exploitation de scenario a 4 conditions, toutes requises). N'ouvre
-    AUCUNE position reelle (meme garde d'observation que caio_decide_scenario)
-    -- journalise seulement l'opportunite detectee (`simulated_scalp_count`).
+    exploitation de scenario a 4 conditions, toutes requises). Cette
+    fonction-ci reste une evaluation PURE -- n'ouvre elle-meme aucune
+    position, journalise seulement l'opportunite detectee
+    (`simulated_scalp_count`). Depuis le 05/08/2026 (demande explicite de
+    Louis), l'appelant (auto_trade_step(), via execute_scenario_scalp()) peut
+    reevaluer ces memes 4 conditions et executer reellement un scalp --
+    execute_scenario_scalp() garde son propre cooldown/plafond, distincts de
+    `simulated_scalp_count` qui continue de servir de trace de detection pure
+    pour le Learning, inchange.
 
     `micro_opportunity` (v5.1.1, chantier 2, 05/08/2026) : utilise le Gold
     Microstructure Engine (vitesse/acceleration/rejet de meche sur `candles`)

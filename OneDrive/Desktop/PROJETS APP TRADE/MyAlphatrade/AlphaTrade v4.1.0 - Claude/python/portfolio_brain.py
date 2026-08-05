@@ -24,9 +24,13 @@ Ce que Portfolio Brain ajoute (signal qui n'existe nulle part encore) :
     seulement compare a une limite en $ fixe par symbole, pas relative a
     la taille du compte).
 
-Meme prudence que le reste de la feuille de route : formalise un signal
-d'observation (AgentReport, cote alphatrade_engine.py), n'ecrit et ne bloque
-rien lui-meme -- c'est au CAIO (futur chantier) de decider quoi en faire."""
+Module pur : formalise un signal (AgentReport, cote alphatrade_engine.py),
+n'ecrit et ne bloque rien lui-meme. Depuis le 05/08/2026 (demande explicite
+de Louis : "plus rien ne doit rester en simulation"), c'est l'appelant --
+status_payload() pour le pipeline classique, execute_scenario_anchor()/
+execute_scenario_scalp() pour le Scenario Engine -- qui traduit
+`action in ("LIMIT_NEW_ENTRIES", "REDUCE_EXPOSURE")` en blocage reel des
+nouvelles entrees, derriere le flag portfolio_brain_enabled."""
 from __future__ import annotations
 
 

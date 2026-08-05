@@ -80,6 +80,17 @@ class Scenario:
     # Position Manager (Phase 4) -- jamais de position reelle en Phase 4, juste la trace
     outcome: str | None = None  # resultat final a la cloture (ex: WIN/LOSS/BREAKEVEN/UNUSED)
     outcome_profit: float | None = None
+    anchor_ticket: int | None = None  # ticket MT5 reel de la position d'ancrage --
+    # None tant qu'aucune n'a ete tentee (execution reelle activee le 05/08/2026,
+    # demande explicite de Louis ; None reste la norme en observation pure)
+    anchor_status: str = "NONE"  # NONE | OPEN | FAILED | CLOSED -- une seule
+    # tentative d'ouverture par scenario, jamais retentee en boucle (voir
+    # execute_scenario_anchor() dans alphatrade_engine.py)
+    executed_scalp_count: int = 0  # nb de VRAIS scalps executes -- distinct de
+    # simulated_scalp_count (detection pure, inchange, sert toujours au
+    # Learning). Voir execute_scenario_scalp().
+    last_scalp_executed_at: str | None = None  # horodatage ISO du dernier
+    # scalp reellement execute -- base du cooldown (scenario_scalp_cooldown_sec)
     maximum_validity_min: int = 45
     created_at: str = ""
     last_evaluated_at: str = ""
@@ -178,6 +189,10 @@ class Scenario:
             "simulated_scalp_count": self.simulated_scalp_count,
             "outcome": self.outcome,
             "outcome_profit": self.outcome_profit,
+            "anchor_ticket": self.anchor_ticket,
+            "anchor_status": self.anchor_status,
+            "executed_scalp_count": self.executed_scalp_count,
+            "last_scalp_executed_at": self.last_scalp_executed_at,
             "maximum_validity_min": self.maximum_validity_min,
             "created_at": self.created_at,
             "last_evaluated_at": self.last_evaluated_at,

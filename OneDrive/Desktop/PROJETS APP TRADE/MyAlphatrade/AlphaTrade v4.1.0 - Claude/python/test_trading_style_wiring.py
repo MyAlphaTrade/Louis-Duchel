@@ -1,7 +1,9 @@
 """Tests pour le branchement reel du Trading Style Engine (v5.1.1,
 chantier 3) dans alphatrade_engine.py : trading_style_engine_step(),
-TRADING_STYLE_STATE, persistance trading_style_log.jsonl, et la garde
-d'observation obligatoire -- ne modifie jamais params['strategy_mode']."""
+TRADING_STYLE_STATE, persistance trading_style_log.jsonl -- reste une
+evaluation pure, ne modifie jamais params['strategy_mode'] elle-meme.
+L'application reelle (05/08/2026, demande explicite de Louis) est testee
+separement : apply_trading_style_recommendation()."""
 import json
 import os
 import tempfile
@@ -123,6 +125,65 @@ def test_never_calls_real_execution():
     print("test_never_calls_real_execution OK")
 
 
+def test_apply_writes_strategy_mode_to_params_json_when_it_differs():
+    ae.LAST_TRADING_STYLE_SWITCH_AT = None
+    (ae.DATA_DIR / "params.json").unlink(missing_ok=True)
+    (ae.DATA_DIR / "ai_adaptations_log.jsonl").unlink(missing_ok=True)
+    entry = {"current_mode": "scalping_fast", "recommended_mode": "combined", "matches_current": False, "reason": "test"}
+    applied = ae.apply_trading_style_recommendation(entry, {}, now=NOW)
+    assert applied is True
+    saved = json.loads((ae.DATA_DIR / "params.json").read_text(encoding="utf-8"))
+    assert saved["strategy_mode"] == "combined"
+    lines = [json.loads(l) for l in (ae.DATA_DIR / "ai_adaptations_log.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(lines) == 1
+    assert lines[0]["module"] == "trading_style_engine"
+    assert lines[0]["old_value"] == "scalping_fast" and lines[0]["new_value"] == "combined"
+    print("test_apply_writes_strategy_mode_to_params_json_when_it_differs OK")
+
+
+def test_apply_noop_when_recommendation_matches_current():
+    ae.LAST_TRADING_STYLE_SWITCH_AT = None
+    entry = {"current_mode": "scalping_fast", "recommended_mode": "scalping_fast", "matches_current": True, "reason": "test"}
+    assert ae.apply_trading_style_recommendation(entry, {}, now=NOW) is False
+    print("test_apply_noop_when_recommendation_matches_current OK")
+
+
+def test_apply_noop_when_auto_apply_disabled():
+    ae.LAST_TRADING_STYLE_SWITCH_AT = None
+    entry = {"current_mode": "scalping_fast", "recommended_mode": "combined", "matches_current": False, "reason": "test"}
+    params = {"trading_style_auto_apply_enabled": False}
+    assert ae.apply_trading_style_recommendation(entry, params, now=NOW) is False
+    print("test_apply_noop_when_auto_apply_disabled OK")
+
+
+def test_apply_respects_cooldown_between_switches():
+    from datetime import timedelta
+    ae.LAST_TRADING_STYLE_SWITCH_AT = NOW
+    entry = {"current_mode": "scalping_fast", "recommended_mode": "combined", "matches_current": False, "reason": "test"}
+    soon_after = NOW + timedelta(seconds=30)  # sous le cooldown par defaut (300s)
+    assert ae.apply_trading_style_recommendation(entry, {}, now=soon_after) is False
+    print("test_apply_respects_cooldown_between_switches OK")
+
+
+def test_apply_never_calls_real_execution():
+    original_place_order = ae.place_order
+    original_open_position = ae.open_position
+
+    def _poison(*a, **k):
+        raise AssertionError("apply_trading_style_recommendation() ne doit jamais executer d'ordre reel")
+
+    ae.place_order = _poison
+    ae.open_position = _poison
+    ae.LAST_TRADING_STYLE_SWITCH_AT = None
+    try:
+        entry = {"current_mode": "scalping_fast", "recommended_mode": "long_analysis", "matches_current": False, "reason": "test"}
+        ae.apply_trading_style_recommendation(entry, {}, now=NOW)
+    finally:
+        ae.place_order = original_place_order
+        ae.open_position = original_open_position
+    print("test_apply_never_calls_real_execution OK")
+
+
 if __name__ == "__main__":
     test_disabled_by_default_returns_none_and_leaves_state_untouched()
     test_enabled_returns_recommendation_and_updates_state()
@@ -131,4 +192,9 @@ if __name__ == "__main__":
     test_range_context_recommends_combined_when_volatility_not_low()
     test_logs_to_dedicated_jsonl_file_never_mixed_with_scenario_log()
     test_never_calls_real_execution()
+    test_apply_writes_strategy_mode_to_params_json_when_it_differs()
+    test_apply_noop_when_recommendation_matches_current()
+    test_apply_noop_when_auto_apply_disabled()
+    test_apply_respects_cooldown_between_switches()
+    test_apply_never_calls_real_execution()
     print("ALL TESTS PASSED")
