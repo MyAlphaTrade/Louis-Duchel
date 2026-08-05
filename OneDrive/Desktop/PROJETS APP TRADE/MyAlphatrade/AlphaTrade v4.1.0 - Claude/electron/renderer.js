@@ -974,6 +974,15 @@ function renderStatus(s) {
   const decision = s.simulated_decision || {};
   const access = s.session_access?.[activeSymbol] || {};
   const lotSafety = s.lot_safety?.[activeSymbol] || {};
+  // 05/08/2026 -- affichage en lecture seule du lot auto-calculé (voir carte
+  // Renfort & Rebond > "Lot calculé (auto)") -- lotSafety.effective_lot est
+  // désormais la SEULE source, plus aucun champ manuel ne l'influence.
+  const lotCalcEl = $('lotCalculatedInfo');
+  if (lotCalcEl) {
+    lotCalcEl.textContent = lotSafety.rejected
+      ? '0.00 (refusé)'
+      : lotSafety.effective_lot ? Number(lotSafety.effective_lot).toFixed(3) : '—';
+  }
   $('simulationDecision').textContent = decision.eligible
     ? `${decision.signal} - ${Number(decision.confidence || 0).toFixed(1)}%`
     : `${decision.signal || 'WAIT'} - entrée bloquée`;
@@ -1612,10 +1621,29 @@ function tradeInSessionFilter(t, session) {
 let calendarRangeStart = null;
 let calendarRangeEnd = null;
 
-function calendarStats(key) {
+// 05/08/2026 -- calendarStats() faisait un allTrades.filter() COMPLET pour
+// CHAQUE jour de la grille (42 cellules) à chaque rendu -- donc jusqu'à
+// 42 balayages entiers de l'historique par clic, plus l'historique grossit
+// plus c'est lent. Constat de Louis en direct : "il faut cliquer plusieurs
+// fois, comme si ça pèse". groupTradesByDay() ne fait plus qu'UN seul
+// passage sur allTrades ; calendarStats() accepte ce regroupement en
+// paramètre optionnel (rétrocompatible avec les appels hors grille,
+// renderCalendarDetail/renderCalendarRange, qui n'appellent que sur UNE clé).
+function groupTradesByDay(trades) {
+  const map = new Map();
+  for (const t of trades) {
+    const key = tradeDay(t);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  }
+  return map;
+}
+
+function calendarStats(key, tradesByDay) {
   const session = $('calendarSessionFilter')?.value || 'all';
+  const dayTrades = tradesByDay ? (tradesByDay.get(key) || []) : allTrades.filter(t => tradeDay(t) === key);
   // Trades récents disponibles en mémoire (pour la vue détail)
-  const recentTrades = allTrades.filter(t => tradeDay(t) === key && tradeInSessionFilter(t, session));
+  const recentTrades = dayTrades.filter(t => tradeInSessionFilter(t, session));
 
   // Pour la grille du calendrier : priorité aux données persistantes (toutes périodes)
   // On n'applique le filtre session que si on a les trades individuels
@@ -1636,9 +1664,33 @@ function calendarStats(key) {
   return { trades: recentTrades, total, wins, losses, summaryOnly: false };
 }
 
+// 05/08/2026 -- root cause reel du "il faut cliquer plusieurs fois" (constat
+// de Louis en direct) : renderStatus() appelle renderCalendar() a CHAQUE
+// status-update, et status.json est reecrit par le moteur Python toutes les
+// 100ms (voir watchData() dans main.js) -- la grille entiere (42 boutons)
+// etait donc detruite et reconstruite ~10 fois par seconde, en continu,
+// meme quand rien de pertinent pour le calendrier n'avait change. Un clic
+// utilisateur dure largement plus de 100ms : il tombait tres souvent sur un
+// bouton en train d'etre remplace, d'ou l'impression de clic qui "ne prend
+// pas". Fix : ne reconstruire que si quelque chose de reellement pertinent
+// a change depuis le dernier rendu (empreinte legere, pas une comparaison
+// profonde) -- les clics/navigations, qui changent forcement l'empreinte
+// (selection/plage/mois), continuent de re-rendre normalement.
+let lastCalendarFingerprint = null;
+
 function renderCalendar() {
   const grid = $('calendarGrid');
   if (!grid) return;
+  const lastTrade = allTrades[allTrades.length - 1];
+  const fingerprint = [
+    calendarCursor.getFullYear(), calendarCursor.getMonth(),
+    calendarSelected || '', calendarRangeStart || '', calendarRangeEnd || '',
+    allTrades.length, lastTrade ? (lastTrade.close_time || lastTrade.open_time || '') : '',
+    Object.keys(calendarData || {}).length,
+    $('calendarSessionFilter')?.value || 'all',
+  ].join('|');
+  if (fingerprint === lastCalendarFingerprint && grid.children.length) return;
+  lastCalendarFingerprint = fingerprint;
   const title = $('calendarTitle');
   const first = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
   const start = new Date(first);
@@ -1656,12 +1708,13 @@ function renderCalendar() {
     };
   }
   const todayKey = dayKey(new Date());
+  const tradesByDay = groupTradesByDay(allTrades); // un seul passage pour les 42 cellules, pas 42
   const cells = [];
   for (let i = 0; i < 42; i += 1) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     const key = dayKey(d);
-    const st = calendarStats(key);
+    const st = calendarStats(key, tradesByDay);
     const outside = d.getMonth() !== calendarCursor.getMonth();
     const inRange = calendarRangeStart && calendarRangeEnd
       ? key >= calendarRangeStart && key <= calendarRangeEnd
@@ -1681,6 +1734,14 @@ function renderCalendar() {
       calendarRangeEnd = calendarSelected < key ? key : calendarSelected;
       renderCalendar();
       renderCalendarRange(calendarRangeStart, calendarRangeEnd);
+    } else if (!calendarRangeStart && key === calendarSelected) {
+      // 05/08/2026, demande de Louis : re-cliquer sur le jour déjà sélectionné
+      // le désélectionne (avant : impossible de désélectionner sans en
+      // choisir un autre).
+      calendarSelected = null;
+      renderCalendar();
+      const detail = $('calendarDetail');
+      if (detail) detail.innerHTML = `<div class="calendar-empty">${currentLanguage === 'en' ? 'Select a day to see its detail.' : 'Sélectionnez un jour pour voir son détail.'}</div>`;
     } else {
       calendarSelected = key;
       calendarRangeStart = null;

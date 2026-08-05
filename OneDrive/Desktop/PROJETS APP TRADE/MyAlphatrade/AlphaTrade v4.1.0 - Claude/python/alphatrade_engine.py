@@ -2141,13 +2141,22 @@ def mission_state(
 
 
 def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dict:
+    """05/08/2026 -- lot desormais calcule PUREMENT depuis le capital et le
+    risque (capital x risk_pct / distance de stop), comme AlphaTrade Global
+    (EA_Bridge/local_functions.py calculate_lot()) -- demande explicite et
+    repetee de Louis : "les parametres manuel ne doivent plus du tout
+    impacter ces decisions". L'ancien champ "lot" (Paramètres > Renfort &
+    Rebond > "Lot fixe", configure manuellement) N'EST PLUS LU ICI -- il ne
+    sert plus a rien dans le calcul, retire de l'UI dans le meme commit.
+    Seul le plafond de compte (real_lot_cap/demo_lot_cap, carte Sécurité)
+    reste : un filet de securite absolu au meme titre que emergency_loss_limit,
+    pas un levier de decision -- l'IA ne peut jamais depasser ce plafond quel
+    que soit le calcul, mais rien en dessous ne lui est impose manuellement."""
     is_demo = bool(account and ("demo" in str(account.server).lower() or int(account.trade_mode) == 0))
-    configured_account_cap = max(
+    account_cap = max(
         0.0,
         float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10 if is_demo else 0.10)),
     )
-    # real_lot_cap / demo_lot_cap sont la vraie limite : aucun plafond caché derrière.
-    account_cap = configured_account_cap
     balance = float(account.balance) if account else 0.0
     effective_risk_pct = min(
         max(0.0, float(params.get("risk_pct", 0.35))),
@@ -2156,7 +2165,6 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
     risk_budget = max(0.0, balance * effective_risk_pct / 100)
     result = {}
     for key, symbol_params in params.get("symbols", {}).items():
-        configured = max(0.0, float(symbol_params.get("lot", 0)))
         requested_min = max(0.0, float(symbol_params.get("lot_min", 0)))
         name = symbol_names.get(key)
         info = mt5.symbol_info(name) if mt5 and name else None
@@ -2193,22 +2201,14 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             loss_per_lot = abs(float(estimated or 0))
             if loss_per_lot > 0 and risk_budget > 0:
                 risk_lot_cap = risk_budget / loss_per_lot
-        caps = [value for value in (account_cap, risk_lot_cap) if value > 0]
-        cap = min(caps) if caps else 0.0
-        effective = min(configured, cap) if cap > 0 else 0.0
+        # Le lot EST le calcul de risque -- plus jamais plafonne par une
+        # valeur manuelle, seulement par le plafond de compte (securite absolue).
+        effective = min(risk_lot_cap, account_cap) if account_cap > 0 else risk_lot_cap
         if broker_step > 0:
             effective = math.floor((effective + 1e-12) / broker_step) * broker_step
         effective = round(effective, 8)
-        # Si le cap global est inférieur au lot minimum du broker mais que le lot configuré
-        # le couvre, on utilise le lot configuré (cas des synthétiques Deriv min 0.20)
-        if effective < broker_min and broker_min <= configured:
-            effective = configured
-            if broker_step > 0:
-                effective = math.floor((effective + 1e-12) / broker_step) * broker_step
-            effective = round(effective, 8)
         rejected = effective < broker_min or effective <= 0
         result[key] = {
-            "configured_lot": configured,
             "account_cap": account_cap,
             "broker_min": broker_min,
             "broker_step": broker_step,
@@ -2219,9 +2219,9 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             "risk_lot_cap": round(risk_lot_cap, 8),
             "rejected": rejected,
             "reason": (
-                "Lot minimal du broker superieur a la limite de securite."
+                "Lot minimal du broker superieur au lot calcule par le risque (capital insuffisant pour ce risque)."
                 if rejected
-                else f"Lot limite par le profil de risque et le plafond de compte {account_cap:.3f}."
+                else f"Lot calcule depuis le capital et le risque (plafond de compte {account_cap:.3f})."
             ),
         }
     return result
@@ -3830,8 +3830,13 @@ def auto_rebond_step(
     analysis: dict,
     allow_real: bool,
     is_demo: bool,
+    main_lot: float = 0.0,
 ) -> dict:
     """Étape principale du module Capture Rebond (multi-rebond).
+    `main_lot` (05/08/2026) : effective_lot deja calcule par lot_safety_state()
+    pour la position principale (voir auto_trade_step(), payload["lot_safety"]) --
+    plus jamais lu depuis symbols.<key>.lot (retire, demande explicite de
+    Louis : les parametres manuel ne doivent plus impacter les decisions).
     Gère jusqu'à rebond_max_active rebonds simultanés."""
     global REBOND_STATES, REBOND_META
     rebond_enabled = bool(params.get("rebond_enabled", False))
@@ -3924,8 +3929,6 @@ def auto_rebond_step(
                     if "Cible" in close_reason and rebond_profit > 0:
                         main_dir = rs.get("main_direction")
                         if main_dir in ("BUY", "SELL"):
-                            sym_params = params.get("symbols", {}).get(symbol_key, {})
-                            main_lot = float(sym_params.get("lot", 0.05))
                             lot_renfort = {"effective_lot": main_lot, "reason": "Renfort Phase 3 — résistance atteinte après rebond"}
                             ok_r, msg_r, _ = open_position(symbol_key, symbol, main_dir, params, lot_renfort, analysis, allow_real)
                             if ok_r:
@@ -3956,8 +3959,6 @@ def auto_rebond_step(
 
     # ── 3. Calcul du lot dynamique ──────────────────────────────────────────────
     tier = rebond_info.get("tier", "normal")
-    sym_params = params.get("symbols", {}).get(symbol_key, {})
-    main_lot = float(sym_params.get("lot", 0.05))
     lot = rebond_lot(main_lot, params, is_demo, tier=tier)
     lot_reason = "Rebond Fort contra-tendance (signal principal fort)" if tier == "fort" else "Rebond contra-tendance (perte en cours + retracement)"
     lot_info_rebond = {"effective_lot": lot, "reason": lot_reason}
@@ -5372,6 +5373,7 @@ def auto_trade_step(
             payload.get("analysis", {}).get(active, {}),
             bool(demo or state.get("real_confirmed")),
             demo,
+            main_lot=float(payload.get("lot_safety", {}).get(active, {}).get("effective_lot") or 0),
         )
         state["rebond"] = rebond_result
         save_trading_state(state)

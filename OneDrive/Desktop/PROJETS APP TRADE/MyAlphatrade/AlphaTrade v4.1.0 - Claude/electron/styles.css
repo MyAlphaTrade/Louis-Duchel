@@ -366,6 +366,7 @@ td { padding: 7px; border-bottom: 1px solid rgba(32,44,67,.65); font: 11px monos
 .settings-grid label { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #b1bad0; }
 .settings-grid input, .settings-grid select { width: 110px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: #070c16; }
 .settings-grid input[type="text"] { width: 240px; }
+.readonly-value { width: 110px; padding: 6px 8px; text-align: right; font: 700 13px/1.2 monospace; color: var(--gold, #d4af37); }
 .settings-grid .check { grid-column: 1 / -1; justify-content: flex-start; }
 .settings-grid .check input { width: auto; }
 .disabled { opacity: .55; }
