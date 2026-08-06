@@ -837,8 +837,36 @@ const KB1000_PARAM_CARDS = [
   }},
 ];
 
+// AlphaTrade Global (05/08/2026, demande explicite de Louis : "tu as juste
+// mis les paramètres de Gold à la place") -- application séparée, moteur
+// différent (EA_Bridge/local_functions.py + Dist/src/lib/tradingProfiles.js),
+// donc ses propres vrais paramètres, pas ceux d'AlphaTrade. Clés reprises
+// EXACTEMENT telles que lues/écrites par l'app (entité Parameter, voir
+// Dist/src/components/settings/{TradingProfileSelector,
+// ConfidenceThresholdControl,DailyGoalSection,AutonomousExecutionSection}.jsx)
+// -- un verrouillage ici doit correspondre a un champ que l'app lit reellement,
+// sinon le cadenas ne ferait rien.
+const GLOBAL_PARAM_CARDS = [
+  { title: '🟩 Profil de trading', params: {
+    trading_profile:     { val: 'intraday', label: 'Profil de trading',        type: 'select', options: ['scalping','intraday','swing','auto'] },
+    min_confidence:       { val: 70,   label: 'Seuil de confiance min (%)',    type: 'number', step: '1' },
+    max_risk_percent:     { val: 1,    label: 'Risque max / trade (%)',        type: 'number', step: '0.1' },
+    max_daily_trades:     { val: 5,    label: 'Trades max / jour',             type: 'number', step: '1' },
+    break_even_trigger:   { val: 1,    label: 'Déclencheur Break-Even ($)',    type: 'number', step: '0.1' },
+  }},
+  { title: '🟩 Objectif journalier', params: {
+    daily_goal_amount:      { val: 50, label: 'Objectif de gain ($)',              type: 'number', step: '1' },
+    max_daily_loss_amount:  { val: 50, label: 'Limite de perte journalière ($)',   type: 'number', step: '1' },
+  }},
+  { title: '🟩 Exécution', params: {
+    autonomous_execution_enabled: { val: false, label: 'Exécution autonome active', type: 'bool' },
+  }},
+];
+
 function cardsForPlan(plan) {
-  return plan === 'basique' ? KB1000_PARAM_CARDS : ALPHATRADE_PARAM_CARDS;
+  if (plan === 'basique') return KB1000_PARAM_CARDS;
+  if (plan === 'global') return GLOBAL_PARAM_CARDS;
+  return ALPHATRADE_PARAM_CARDS;
 }
 
 function buildPlanParams(plan) {
@@ -848,7 +876,10 @@ function buildPlanParams(plan) {
     for (const [key, d] of Object.entries(card.params)) {
       // Basique n'a qu'un seul niveau (pas de "premium" au-dessus) -- tout est
       // verrouillé par défaut, comme les autres forfaits non-premium.
-      const locked = d.alwaysLocked === true || !isPremium;
+      // Global (05/08/2026) : un seul forfait, pas de notion de palier
+      // premium/non-premium -- rien n'est verrouillé par défaut, Louis
+      // verrouille lui-même au cas par cas ce qu'il veut figer côté client.
+      const locked = d.alwaysLocked === true || (plan !== 'global' && !isPremium);
       const entry = { val: d.val, locked, label: d.label, type: d.type, card: card.title };
       if (d.step) entry.step = d.step;
       if (d.options) entry.options = d.options;
@@ -859,7 +890,7 @@ function buildPlanParams(plan) {
 }
 
 const PLAN_PARAMS_DEFAULT = {};
-for (const plan of ['basique','starter','pro','elite','premium']) {
+for (const plan of ['basique','starter','pro','elite','premium','global']) {
   PLAN_PARAMS_DEFAULT[plan] = buildPlanParams(plan);
 }
 
@@ -914,10 +945,11 @@ async function ensureForfaitsLoaded() {
 function renderPlanTabs() {
   const bar = document.getElementById('planTabsBar');
   if (!bar) return;
-  // 05/08/2026 -- AlphaTrade Global exclu de ce verrouillage : c'est un produit
-  // à part (moteur/app distincts), ses params ne passent pas par ce système de
-  // verrouillage par forfait AlphaTrade (demande explicite de Louis).
-  const keys = Object.entries(currentForfaits).filter(([, f]) => !f.at_global)
+  // 05/08/2026 -- AlphaTrade Global A SON PROPRE onglet ici : produit a part
+  // (moteur/app distincts d'AlphaTrade), mais avec ses propres vrais parametres
+  // (GLOBAL_PARAM_CARDS, voir cardsForPlan) -- demande explicite de Louis pour
+  // que le verrouillage Admin verrouille reellement l'app Global (grise).
+  const keys = Object.entries(currentForfaits)
     .sort((a, b) => (a[1].price_monthly || 0) - (b[1].price_monthly || 0)).map(([k]) => k);
   if (!keys.length) return;
   if (!keys.includes(currentPlanTab)) currentPlanTab = keys[0];
@@ -997,8 +1029,13 @@ function renderForfaitsGrid(data) {
           style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
       </label>
       <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Badge (optionnel)
-        <input type="text" value="${f.badge || ''}" placeholder="ex: ⭐ LE PLUS POPULAIRE" oninput="updateForfaitField('${key}','badge',this.value)"
-          style="display:block;width:100%;margin-top:4px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <input type="text" value="${f.badge || ''}" placeholder="ex: ⭐ LE PLUS POPULAIRE" oninput="updateForfaitField('${key}','badge',this.value)"
+            style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)">
+          <input type="color" value="${f.badge_color || '#00C896'}" title="Couleur du badge"
+            oninput="updateForfaitField('${key}','badge_color',this.value)"
+            style="width:38px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg);cursor:pointer">
+        </div>
       </label>
       <label style="display:block;margin-bottom:8px;font-size:12px;color:var(--muted)">Prix mensuel ($)
         <input type="number" step="0.01" value="${f.price_monthly}" oninput="updateForfaitField('${key}','price_monthly',parseFloat(this.value)||0)"
@@ -1125,6 +1162,7 @@ async function saveForfaits() {
     forfaits[key] = {
       name: f.name || key,
       badge: f.badge || '',
+      badge_color: f.badge_color || '',
       price_monthly: parseFloat(f.price_monthly) || 0,
       price_weekly: parseFloat(f.price_weekly) || 0,
       capital_min: parseFloat(f.capital_min) || 0,
