@@ -1,11 +1,21 @@
-"""Tests pour le calcul automatique du lot (v5.1.1, 05/08/2026) -- demande
-explicite et repetee de Louis : "les parametres manuel ne doivent plus du
-tout impacter ces decisions" (lot). lot_safety_state() calcule desormais le
+"""Tests pour le calcul automatique du lot (v5.1.1, 05-06/08/2026) --
+demande explicite et repetee de Louis : "les parametres manuel ne doivent
+plus du tout impacter ces decisions" (lot). lot_safety_state() calcule le
 lot PUREMENT depuis le capital et le risque (capital x risk_pct / distance
-de stop), comme AlphaTrade Global (EA_Bridge/local_functions.py
-calculate_lot()) -- l'ancien champ manuel "lot" (Paramètres > Renfort &
-Rebond > "Lot fixe") n'a plus aucune influence, retire de l'UI dans le
-meme commit."""
+de stop), EXACTEMENT comme AlphaTrade Global (EA_Bridge/local_functions.py
+calculate_lot() : risk_amount / (sl_distance * contract_size), aucun
+plafond au-dela du minimum broker) -- l'ancien champ manuel "lot"
+(Paramètres > Renfort & Rebond > "Lot fixe") n'a plus aucune influence,
+retire de l'UI dans le meme commit.
+
+06/08/2026 -- `real_lot_cap`/`demo_lot_cap` (carte Securite) retires du
+chemin de decision actif : Louis a demande explicitement de reprendre le
+mecanisme de Global a l'identique ("regarde le code de Global simplement et
+applique ce meme mecanisme"), et Global n'a aucun plafond de compte --
+seulement un minimum (0.01). Le test qui verifiait l'ancien plafond
+(test_lot_respects_account_cap_as_safety_ceiling) est remplace par son
+oppose : verifier qu'AUCUN plafond ne s'applique desormais, meme avec un
+risque configure de façon extreme."""
 import os
 import tempfile
 
@@ -57,8 +67,10 @@ class _FakeMT5:
 def _base_params(lot_manual=0.05, risk_pct=0.35, emergency_loss_limit=3.0):
     p = ae.merge_params()
     p["risk_pct"] = risk_pct
-    p["real_lot_cap"] = 10.0  # plafond de securite large, pour isoler le calcul de risque dans ces tests
-    p["demo_lot_cap"] = 10.0
+    # 06/08/2026 -- laisses a leur defaut (0.10) volontairement : les tests
+    # ci-dessous verifient precisement que ces deux valeurs n'influencent
+    # plus jamais effective_lot, meme quand le calcul de risque les depasse
+    # largement (voir test_lot_has_no_manual_ceiling_like_global).
     p["symbols"] = {"XAUUSD": {"lot": lot_manual, "lot_min": 0.0, "emergency_loss_limit": emergency_loss_limit}}
     return p
 
@@ -94,19 +106,27 @@ def test_lot_scales_with_capital_not_with_manual_lot_param():
     print("test_lot_scales_with_capital_not_with_manual_lot_param OK")
 
 
-def test_lot_respects_account_cap_as_safety_ceiling():
-    """Le plafond de compte (Securite) reste un vrai filet de securite absolu
-    -- meme avec un capital enorme, le lot calcule ne doit jamais le depasser."""
+def test_lot_has_no_manual_ceiling_like_global():
+    """06/08/2026 -- comme AlphaTrade Global (calculate_lot(), EA_Bridge/
+    local_functions.py), il n'existe plus AUCUN plafond de compte manuel.
+    Meme avec un risque configure extreme et real_lot_cap/demo_lot_cap
+    delibrement tres bas, le lot calcule doit largement les depasser --
+    la seule limite restante est un garde-fou technique du broker (le pas
+    de volume), jamais une decision manuelle."""
     def run():
         params = _base_params(lot_manual=0.01, risk_pct=50.0)  # risque volontairement excessif
         params["real_lot_cap"] = 0.05
         params["demo_lot_cap"] = 0.05
         return ae.lot_safety_state(params, _FakeAccount(1_000_000.0), {"XAUUSD": "XAUUSD"})
     result = _with_fake_mt5(run)
-    assert result["XAUUSD"]["effective_lot"] <= 0.05 + 1e-9, (
-        f"Le plafond de compte doit rester une limite absolue, obtenu {result['XAUUSD']['effective_lot']}."
+    assert result["XAUUSD"]["effective_lot"] > 0.05, (
+        "real_lot_cap/demo_lot_cap ne doivent plus jamais plafonner le lot -- "
+        f"obtenu {result['XAUUSD']['effective_lot']} (attendu tres superieur a 0.05)."
     )
-    print("test_lot_respects_account_cap_as_safety_ceiling OK")
+    assert "account_cap" not in result["XAUUSD"], (
+        "lot_safety_state() ne doit plus renvoyer de plafond de compte actif."
+    )
+    print("test_lot_has_no_manual_ceiling_like_global OK")
 
 
 def test_lot_zero_when_no_mt5_data():
@@ -125,6 +145,6 @@ def test_lot_zero_when_no_mt5_data():
 
 if __name__ == "__main__":
     test_lot_scales_with_capital_not_with_manual_lot_param()
-    test_lot_respects_account_cap_as_safety_ceiling()
+    test_lot_has_no_manual_ceiling_like_global()
     test_lot_zero_when_no_mt5_data()
     print("ALL OK")

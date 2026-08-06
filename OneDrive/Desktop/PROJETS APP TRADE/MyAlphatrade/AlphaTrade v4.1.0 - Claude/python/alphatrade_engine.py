@@ -316,6 +316,17 @@ DEFAULT_PARAMS = {
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
             "profit_trailing_giveback": 0.0,
+            # 06/08/2026 -- "phase naissance du trade" (demande explicite de
+            # Louis suite a l'audit du ticket 9748487751 : PROFIT_TRAILING a
+            # ferme a -2.20$ un trade ne de 1.7 seconde, qui avait pourtant
+            # touche +1.80$ de pic -- le temps que l'ordre de fermeture
+            # atteigne MT5, le prix avait deja continue contre la position
+            # (execute a -4.40$). Pendant ce court intervalle apres
+            # l'ouverture, aucune decision Python instantanee ne doit fermer
+            # la position -- seuls les filets de securite independants du
+            # temps (MAX_POSITION_LOSS, stop broker) restent actifs. Voir
+            # position_exit_reason().
+            "trade_birth_phase_sec": 5.0,
             "signal_reversal_margin": 99,
             "cooldown_after_loss_sec": 30,
             "session_filter_enabled": False,
@@ -2141,22 +2152,24 @@ def mission_state(
 
 
 def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dict:
-    """05/08/2026 -- lot desormais calcule PUREMENT depuis le capital et le
-    risque (capital x risk_pct / distance de stop), comme AlphaTrade Global
-    (EA_Bridge/local_functions.py calculate_lot()) -- demande explicite et
-    repetee de Louis : "les parametres manuel ne doivent plus du tout
-    impacter ces decisions". L'ancien champ "lot" (Paramètres > Renfort &
-    Rebond > "Lot fixe", configure manuellement) N'EST PLUS LU ICI -- il ne
-    sert plus a rien dans le calcul, retire de l'UI dans le meme commit.
-    Seul le plafond de compte (real_lot_cap/demo_lot_cap, carte Sécurité)
-    reste : un filet de securite absolu au meme titre que emergency_loss_limit,
-    pas un levier de decision -- l'IA ne peut jamais depasser ce plafond quel
-    que soit le calcul, mais rien en dessous ne lui est impose manuellement."""
+    """05-06/08/2026 -- lot calcule PUREMENT depuis le capital et le risque
+    (capital x risk_pct / distance de stop), exactement comme AlphaTrade
+    Global (EA_Bridge/local_functions.py calculate_lot() : risk_amount /
+    (sl_distance * contract_size), aucun plafond au-dela du minimum broker)
+    -- demande explicite et repetee de Louis : "les parametres manuel ne
+    doivent plus du tout impacter ces decisions". L'ancien champ "lot"
+    (Paramètres > Renfort & Rebond > "Lot fixe") N'EST PLUS LU ICI.
+
+    06/08/2026 -- `real_lot_cap`/`demo_lot_cap` (carte Securite) retires du
+    chemin de decision actif : Louis a explicitement demande de reprendre le
+    mecanisme de Global a l'identique ("il calcule de facon automatique...
+    regarde le code de Global simplement et applique ce meme mecanisme"),
+    et le code de Global n'a aucun plafond de compte. Ces deux parametres
+    restent lisibles dans params.json (compat/affichage eventuel) mais
+    n'influencent plus jamais `effective_lot`. Seuls des garde-fous
+    techniques du broker (lot minimum, pas de volume) subsistent -- ce ne
+    sont pas des leviers de decision, juste ce que MT5 accepte."""
     is_demo = bool(account and ("demo" in str(account.server).lower() or int(account.trade_mode) == 0))
-    account_cap = max(
-        0.0,
-        float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10 if is_demo else 0.10)),
-    )
     balance = float(account.balance) if account else 0.0
     effective_risk_pct = min(
         max(0.0, float(params.get("risk_pct", 0.35))),
@@ -2201,15 +2214,16 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             loss_per_lot = abs(float(estimated or 0))
             if loss_per_lot > 0 and risk_budget > 0:
                 risk_lot_cap = risk_budget / loss_per_lot
-        # Le lot EST le calcul de risque -- plus jamais plafonne par une
-        # valeur manuelle, seulement par le plafond de compte (securite absolue).
-        effective = min(risk_lot_cap, account_cap) if account_cap > 0 else risk_lot_cap
+        # 06/08/2026 -- le lot EST le calcul de risque, plein point. Aucun
+        # plafond de compte manuel ne le reduit plus (voir docstring) --
+        # seul le pas de volume du broker (arrondi) s'applique encore, ce
+        # n'est pas une decision, c'est ce que MT5 accepte comme volume valide.
+        effective = risk_lot_cap
         if broker_step > 0:
             effective = math.floor((effective + 1e-12) / broker_step) * broker_step
         effective = round(effective, 8)
         rejected = effective < broker_min or effective <= 0
         result[key] = {
-            "account_cap": account_cap,
             "broker_min": broker_min,
             "broker_step": broker_step,
             "effective_lot": 0.0 if rejected else effective,
@@ -2221,7 +2235,7 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             "reason": (
                 "Lot minimal du broker superieur au lot calcule par le risque (capital insuffisant pour ce risque)."
                 if rejected
-                else f"Lot calcule depuis le capital et le risque (plafond de compte {account_cap:.3f})."
+                else "Lot calcule depuis le capital et le risque (aucun plafond manuel, comme AlphaTrade Global)."
             ),
         }
     return result
@@ -3588,10 +3602,22 @@ def position_exit_reason(
         return "PROTECTION"
     if session_state_name in {"PRECLOSE", "CLOSED"}:
         return "SESSION"
+    # 06/08/2026 -- "phase naissance du trade" (demande de Louis, audit ticket
+    # 9748487751 : PROFIT_TRAILING a ferme a -2.20$ un trade ne 1.7 seconde
+    # plus tot, execute a -4.40$ apres la latence MT5 -- la position n'a
+    # jamais eu le temps de "respirer"). Pendant les premieres
+    # trade_birth_phase_sec, aucune sortie basee sur un mouvement de prix
+    # instantane (MOMENTUM_EXIT, PROFIT_TRAILING plus bas) n'est autorisee --
+    # seuls les filets de securite independants du temps restent actifs
+    # (MAX_POSITION_LOSS et CATASTROPHIC_PROTECTION deja verifies plus haut,
+    # stop broker gere separement par open_position()/profit_trailing_ratchet_step()).
+    # Ce n'est pas un delai avant toute protection : c'est un delai avant
+    # qu'une DECISION PYTHON puisse fermer au marche.
+    in_birth_phase = age < max(0.0, float(pos_params.get("trade_birth_phase_sec", 5.0)))
     min_positive_exit = max(0.0, float(pos_params.get("min_positive_exit", 0.05)))
     # Sortie sur perte de momentum — actif même quand rebond_enabled=True
     momentum_exit_score = float(pos_params.get("momentum_exit_score", 0))
-    if momentum_exit_score > 0 and profit >= min_positive_exit:
+    if not in_birth_phase and momentum_exit_score > 0 and profit >= min_positive_exit:
         opp_key = "score_sell" if position.get("direction") == "BUY" else "score_buy"
         if float(position_analysis.get(opp_key, 0)) >= momentum_exit_score:
             return "MOMENTUM_EXIT"
@@ -3617,7 +3643,7 @@ def position_exit_reason(
         # ci-dessous, puisqu'il s'agit ici de sécuriser un profit déjà acquis,
         # pas d'attendre que la cible complète soit atteinte.
         trailing_giveback = max(0.0, float(pos_params.get("profit_trailing_giveback", 0) or 0))
-        if trailing_giveback > 0 and peak >= min_positive_exit and profit <= peak - trailing_giveback:
+        if not in_birth_phase and trailing_giveback > 0 and peak >= min_positive_exit and profit <= peak - trailing_giveback:
             return "PROFIT_TRAILING"
         if age >= max(review_sec, int(pos_params.get("max_hold_sec", 45))) and profit >= float(
             pos_params.get("profit_target", 0.50)
@@ -3635,16 +3661,15 @@ def position_exit_reason(
 
 def rebond_lot(main_lot: float, params: dict, is_demo: bool, tier: str = "normal") -> float:
     """Calcule le lot du rebond : lot principal × multiplicateur (configurable,
-    different pour le palier Fort), plafonné par le plafond de compte
-    configuré (demo_lot_cap / real_lot_cap) -- ce plafond de compte reste le
-    vrai garde-fou absolu, quel que soit le multiplicateur choisi."""
+    different pour le palier Fort). 06/08/2026 -- plus de plafond de compte
+    manuel (demo_lot_cap/real_lot_cap) ici : retire du chemin de decision
+    actif partout, meme mecanisme que lot_safety_state() (voir sa docstring)
+    -- comme AlphaTrade Global, seul le calcul de risque decide."""
     sym_params = params.get("symbols", {}).get("XAUUSD", {})
     lot_min = float(sym_params.get("lot_min", 0.01))
-    account_cap = float(params.get("demo_lot_cap" if is_demo else "real_lot_cap", 0.10))
     mult_key = "lot_multiplicateur_rebond_fort" if tier == "fort" else "lot_multiplicateur_rebond"
     mult_rebond = float(sym_params.get(mult_key, 1.0))
     lot = main_lot * max(0.0, mult_rebond)
-    lot = min(lot, account_cap) if account_cap > 0 else lot
     lot = max(lot_min, lot)
     # Arrondir au step 0.01
     lot = round(round(lot / 0.01) * 0.01, 3)
@@ -5243,8 +5268,9 @@ def auto_trade_step(
             high_conf_min = thresh_renfort + margin
             if conf_renfort >= high_conf_min:
                 base = float(lot_info.get("effective_lot", 0))
-                account_cap_r = float(lot_info.get("account_cap", 0) or base)
-                renfort_lot = round(min(base * mult_renfort, account_cap_r), 8)
+                # 06/08/2026 -- account_cap retire de lot_safety_state() (voir
+                # sa docstring) : plus de plafond manuel a appliquer ici non plus.
+                renfort_lot = round(base * mult_renfort, 8)
                 broker_min = float(lot_info.get("broker_min", 0))
                 if renfort_lot >= max(0.001, broker_min):
                     lot_info = {**lot_info, "effective_lot": renfort_lot, "reason": f"Renfort x{mult_renfort} (confiance {conf_renfort:.1f}%)"}
