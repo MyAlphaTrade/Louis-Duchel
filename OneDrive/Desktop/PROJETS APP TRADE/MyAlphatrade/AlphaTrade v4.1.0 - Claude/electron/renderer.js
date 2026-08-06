@@ -2107,11 +2107,21 @@ function fillSettings(values) {
 // statique"). Ne couvre que les 4 seuils reellement calibres aujourd'hui --
 // les autres cartes restent honnetement "Réglage fixe" (voir
 // scenario_threshold_adjustments() pour pourquoi).
+// icScalpCooldownFoot/icScalpMaxFoot/icPortfolioWarnFoot/icPortfolioCriticalFoot
+// ajoutés le 06/08/2026 (tasks #173/#174) : ces 4 seuils sont désormais
+// réellement calibrables (voir calibrate_scenario_thresholds(), blocs 2/3,
+// alphatrade_engine.py) -- scenario_scalp_lot_ratio reste volontairement
+// "Réglage fixe" (aucune clé ici), voir scalp_threshold_adjustments()
+// pour pourquoi.
 const IC_CALIBRATED_FOOTERS = {
   icCaioConfidenceFoot: 'scenario_caio_min_confidence',
   icLondonConfidenceFoot: 'scenario_london_min_confidence',
   icHealthThresholdFoot: 'scenario_health_degradation_threshold',
   icCorrectionBlockedFoot: 'scenario_block_correction_regime',
+  icScalpCooldownFoot: 'scenario_scalp_cooldown_sec',
+  icScalpMaxFoot: 'scenario_scalp_max_count',
+  icPortfolioWarnFoot: 'portfolio_floating_loss_warn_pct',
+  icPortfolioCriticalFoot: 'portfolio_floating_loss_critical_pct',
 };
 
 function renderIntelCardFooters() {

@@ -411,6 +411,114 @@ def scenario_threshold_adjustments(
     return adjustments
 
 
+def scalp_learning_stats(entries: list[dict[str, Any]], min_samples: int = 10) -> dict[str, Any]:
+    """task #173 (06/08/2026, demande de Louis : construire le suivi
+    maintenant plutot que de laisser le calibrage scalp comme un module
+    mort). Agrege le P&L REEL (pas simule) de scalps executes, par index
+    dans le scenario (1er/2e/3e...) et par tranche de cooldown reellement
+    observe -- meme discipline que scenario_learning_stats() : chaque case
+    doit atteindre `min_samples` pour apparaitre. `entries` = deja jointes
+    au P&L reel par l'appelant (voir _scalp_correlated_entries(),
+    alphatrade_engine.py, seul endroit avec acces a la table SQLite
+    `trades`) -- ce module reste pur, aucune dependance DB/MT5."""
+    resolved = [e for e in entries if e.get("profit") is not None]
+
+    def _bucket(key_fn) -> dict[str, dict[str, Any]]:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for e in resolved:
+            key = key_fn(e)
+            if key is None:
+                continue
+            groups.setdefault(str(key), []).append(e)
+        result: dict[str, dict[str, Any]] = {}
+        for key, items in groups.items():
+            if len(items) < min_samples:
+                continue
+            wins = sum(1 for i in items if i["profit"] > 0)
+            result[key] = {
+                "samples": len(items),
+                "winrate": round(wins / len(items) * 100, 1),
+                "avg_profit": round(sum(i["profit"] for i in items) / len(items), 2),
+            }
+        return result
+
+    def _cooldown_band(e: dict[str, Any]) -> str | None:
+        c = e.get("cooldown_actual_sec")
+        if c is None:
+            return None
+        if c < 30:
+            return "0-30"
+        if c < 60:
+            return "30-60"
+        if c < 120:
+            return "60-120"
+        return "120+"
+
+    wins_total = sum(1 for e in resolved if e["profit"] > 0)
+    return {
+        "n_resolved": len(resolved),
+        "overall_winrate": round(wins_total / len(resolved) * 100, 1) if resolved else 0.0,
+        "by_scalp_index": _bucket(lambda e: e.get("scalp_index")),
+        "by_cooldown_band": _bucket(_cooldown_band),
+    }
+
+
+def scalp_threshold_adjustments(
+    stats: dict[str, Any], current: dict[str, Any], *,
+    max_count_step: int = 1, max_cooldown_step: float = 15.0, min_edge: float = 10.0,
+) -> dict[str, Any]:
+    """task #173 (06/08/2026) -- calibration reelle de
+    scenario_scalp_max_count/scenario_scalp_cooldown_sec depuis le VRAI P&L
+    des scalps executes (voir scalp_learning_stats()). Meme discipline que
+    scenario_threshold_adjustments() : bornee (+/- max_*_step par cycle),
+    reversible, ne touche rien sans preuve suffisante (min_samples deja
+    applique dans scalp_learning_stats()).
+
+    scenario_scalp_lot_ratio reste DELIBEREMENT hors calibration automatique
+    ici : c'est un levier de taille de position (combien miser), pas une
+    porte oui/non sur QUAND scalper -- le lot ne change pas la probabilite
+    de gagner un scalp donne, seulement l'ampleur du gain/de la perte.
+    Deduire une taille de lot "optimale" d'un signal de winrate par tranche
+    de lot serait statistiquement malhonnete (le lot n'est meme pas une
+    variable testee independamment ici, contrairement a l'index/au
+    cooldown) -- reste un reglage manuel de Louis, en toute franchise."""
+    adjustments: dict[str, Any] = {}
+    overall = stats.get("overall_winrate", 0.0)
+
+    by_index = stats.get("by_scalp_index") or {}
+    if by_index:
+        # Plus petit index dont le winrate chute nettement sous la moyenne
+        # globale -- le plafond doit s'arreter juste avant lui (jamais
+        # scalper a un rang qui a prouve etre perdant).
+        bad_indexes = sorted(int(k) for k, v in by_index.items() if (overall - v["winrate"]) >= min_edge)
+        if bad_indexes:
+            target = max(1, bad_indexes[0] - 1)
+            current_max = int(current.get("scenario_scalp_max_count", 3))
+            step = max(-max_count_step, min(max_count_step, target - current_max))
+            if step != 0:
+                adjustments["scenario_scalp_max_count"] = current_max + step
+
+    by_cooldown = stats.get("by_cooldown_band") or {}
+    if by_cooldown:
+        def _band_floor(band: str) -> float:
+            return 0.0 if band == "0-30" else float(band.split("-")[0]) if "-" in band else 120.0
+        # Tranche de cooldown la plus COURTE dont le winrate ne chute PAS
+        # nettement sous la moyenne -- pas la peine d'imposer une attente
+        # plus longue que necessaire, mais jamais en-dessous d'une tranche
+        # qui n'a pas prouve tenir la route.
+        safe_bands = sorted(
+            (b for b, v in by_cooldown.items() if (overall - v["winrate"]) < min_edge), key=_band_floor,
+        )
+        if safe_bands:
+            target = _band_floor(safe_bands[0])
+            current_cooldown = float(current.get("scenario_scalp_cooldown_sec", 45.0))
+            step = max(-max_cooldown_step, min(max_cooldown_step, target - current_cooldown))
+            if abs(step) >= 1.0:
+                adjustments["scenario_scalp_cooldown_sec"] = round(current_cooldown + step, 1)
+
+    return adjustments
+
+
 def scenario_weight_adjustments(
     stats: dict[str, Any], base_weights: dict[str, float], *, max_delta: float = 0.05,
 ) -> dict[str, float]:

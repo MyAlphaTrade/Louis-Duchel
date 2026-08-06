@@ -30,10 +30,13 @@ from scenario import Scenario, ScenarioEvent, make_scenario, activate_scenario, 
 from scenario_generator import (
     generate_scenario, validate_scenario, evaluate_scenario_health, evaluate_scalp_opportunity,
     scenario_learning_stats, scenario_weight_adjustments, scenario_threshold_adjustments,
+    scalp_learning_stats, scalp_threshold_adjustments,
     SCENARIO_WEIGHTS, volatility_score,
 )
 from trading_style_engine import recommend_trading_style
-from portfolio_brain import basket_exposure, portfolio_risk_assessment
+from portfolio_brain import (
+    basket_exposure, portfolio_risk_assessment, floating_loss_learning_stats, floating_loss_threshold_adjustments,
+)
 from market_microstructure_gold import gold_microstructure_score
 from slack_notifier import notify_slack, blocks_caio_go, blocks_mission_target, blocks_trading_toggle, SLACK_GREEN, SLACK_RED
 # v5.1.0 -- modules purs recuperes depuis l'historique git (commit f5f6403,
@@ -170,6 +173,13 @@ DEFAULT_PARAMS = {
     # Fraction du lot normal pour un scalp -- plus petit que la position
     # d'ancrage (renfort d'opportunite, pas une deuxieme position principale).
     "scenario_scalp_lot_ratio": 0.5,
+    # task #173 (06/08/2026) -- nb minimum de scalps REELS resolus (P&L reel,
+    # pas simule) avant que scalp_threshold_adjustments() ne touche
+    # scenario_scalp_max_count/scenario_scalp_cooldown_sec. Volontairement
+    # plus bas que scenario_learning_min_samples (20) : le volume de scalps
+    # reels sera plus lent a s'accumuler que les scenarios (chaque scalp
+    # depend d'un scenario deja ACTIVE), pas la peine d'attendre autant.
+    "scenario_scalp_learning_min_samples": 10,
     # v5.1.1 -- 05/08/2026, backtest automatique intelligent (section 7 de la
     # demande de Louis). Reutilise le Scenario Replay/Learning existants --
     # voir run_auto_backtest_if_due(). Defaut True (activation demandee).
@@ -261,6 +271,11 @@ DEFAULT_PARAMS = {
     "portfolio_max_total_lot": 0.0,  # 0 = pas de plafond de lot total (meme convention que max_floating_loss)
     "portfolio_floating_loss_warn_pct": 2.0,
     "portfolio_floating_loss_critical_pct": 5.0,
+    # task #174 (06/08/2026) -- nb minimum de JOURNEES resolues (P&L final
+    # connu) avant que floating_loss_threshold_adjustments() ne touche
+    # portfolio_floating_loss_warn_pct/critical_pct. Notion journaliere, pas
+    # par scenario -- voir floating_loss_learning_stats().
+    "portfolio_floating_loss_learning_min_samples": 10,
     "fast_be_enabled": True,
     "profit_protection_enabled": True,
     "profit_drawdown_pct": 30.0,
@@ -4553,11 +4568,19 @@ def _find_scenario_anchor_position(scenario: Scenario, symbol_names: dict[str, s
     d'ambiguite. Factorise depuis execute_scenario_anchor() (task #170,
     06/08/2026) pour servir aussi bien a une entree au marche (MARKET,
     immediate) qu'a la detection du declenchement d'un ordre en attente
-    (LIMIT/STOP, voir plus bas)."""
+    (LIMIT/STOP, voir plus bas).
+
+    Suffixe exact (` SCENARIO`), pas une simple sous-chaine -- corrige une
+    ambiguite trouvee en construisant le suivi des scalps (06/08/2026) :
+    "SCENARIO" est aussi une sous-chaine de "SCENARIO_SCALP" (comment d'un
+    scalp), donc un scalp ouvert juste apres l'ancrage sur le meme symbole/
+    sens pouvait, avant ce correctif, etre pris a tort pour l'ancrage lui-meme
+    (le plus recent gagnant) -- risque reel de fermer/suivre la mauvaise
+    position."""
     candidates = [
         p for p in live_positions(symbol_names, params)
         if p["symbol_key"] == scenario.symbol_key and p["direction"] == scenario.direction
-        and "SCENARIO" in p.get("comment", "")
+        and p.get("comment", "").endswith(" SCENARIO")
     ]
     if not candidates:
         return None
@@ -4804,6 +4827,56 @@ def close_scenario_anchor_if_needed(
     log_scenario_event(scenario, log_name)
 
 
+def _record_scalp_open_event(
+    scenario: Scenario, symbol_names: dict[str, str], params: dict, previous_scalp_at: str | None, now: datetime,
+) -> None:
+    """task #173 (06/08/2026, demande de Louis : construire le suivi
+    maintenant plutot que de laisser le calibrage des seuils scalp comme un
+    module mort). Capture le TICKET REEL du scalp qui vient de s'ouvrir --
+    meme technique que _find_scenario_anchor_position() (tag exact du
+    commentaire, jamais une simple sous-chaine -- " SCENARIO_SCALP" ne doit
+    surtout pas etre confondu avec " SCENARIO", l'ancrage), en excluant les
+    tickets deja journalises pour ne jamais reprendre le meme scalp deux fois
+    si plusieurs se sont ouverts depuis la derniere verification. Sans ce
+    ticket, aucun lien n'est possible avec le P&L REEL (table trades, via
+    sync_history()) une fois la position fermee -- seule facon de justifier
+    un jour un ajustement reel de scenario_scalp_cooldown_sec/
+    scenario_scalp_max_count (voir scalp_learning_stats() plus bas, qui lit
+    ce fichier)."""
+    known_tickets: set[int] = set()
+    path = DATA_DIR / "scenario_scalp_events.jsonl"
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                known_tickets.add(int(json.loads(line).get("ticket") or 0))
+            except (ValueError, json.JSONDecodeError):
+                continue
+    candidates = [
+        p for p in live_positions(symbol_names, params)
+        if p["symbol_key"] == scenario.symbol_key and p["direction"] == scenario.direction
+        and p.get("comment", "").endswith(" SCENARIO_SCALP")
+        and int(p.get("ticket") or 0) not in known_tickets
+    ]
+    if not candidates:
+        return  # ticket introuvable ce cycle -- un point de donnee en moins pour la calibration, pas grave
+    position = max(candidates, key=lambda p: p["open_timestamp"])
+    cooldown_actual_sec = None
+    if previous_scalp_at:
+        try:
+            cooldown_actual_sec = round((now - datetime.fromisoformat(previous_scalp_at)).total_seconds(), 1)
+        except ValueError:
+            pass
+    append_jsonl("scenario_scalp_events.jsonl", {
+        "ticket": int(position["ticket"]),
+        "scenario_id": scenario.scenario_id,
+        "scalp_index": scenario.executed_scalp_count,
+        "cooldown_actual_sec": cooldown_actual_sec,
+        "opened_at": now.isoformat(),
+    })
+
+
 def execute_scenario_scalp(
     scenario: Scenario,
     params: dict,
@@ -4868,6 +4941,8 @@ def execute_scenario_scalp(
     if not symbol or not scenario.targets or scenario.invalidation_price is None:
         return
 
+    previous_scalp_at = scenario.last_scalp_executed_at  # avant ecrasement -- necessaire pour
+    # calculer cooldown_actual_sec dans _record_scalp_open_event() (task #173, 06/08/2026)
     lot_info = dict(lot_safety_state(params, account, symbol_names).get(scenario.symbol_key, {}))
     ratio = max(0.01, min(1.0, float(params.get("scenario_scalp_lot_ratio", 0.5))))
     lot_info["effective_lot"] = round(float(lot_info.get("effective_lot") or 0) * ratio, 8)
@@ -4880,6 +4955,7 @@ def execute_scenario_scalp(
     # evite de re-tenter en boucle serree si le refus est systemique (lot invalide, marche ferme...)
     if ok:
         scenario.executed_scalp_count += 1
+        _record_scalp_open_event(scenario, symbol_names, params, previous_scalp_at, now)
     scenario.history.append(ScenarioEvent(
         at=now.isoformat(), status=scenario.status,
         note=f"Scalp #{scenario.executed_scalp_count} {'execute' if ok else 'refuse'}: {message}",
@@ -5050,6 +5126,95 @@ def run_scenario_learning(min_samples: int = 20) -> None:
     )
 
 
+def _apply_calibration_adjustments(
+    adjustments: dict, current: dict, source: str, evidence_note: str, *, now: datetime,
+) -> int:
+    """Boilerplate partage par les 3 blocs de calibrate_scenario_thresholds()
+    (seuils scenario, scalp -- task #173, Portfolio Brain -- task #174,
+    06/08/2026) : lecture/ecriture params.json + log_ai_adaptation(),
+    identique dans les 3 cas -- seule la source des donnees change. Retourne
+    le nombre de valeurs reellement modifiees (0 si aucune, params.json non
+    touche dans ce cas)."""
+    if not adjustments:
+        return 0
+    saved = read_json("params.json", {}) or {}
+    changed = 0
+    for key, new_value in adjustments.items():
+        old_value = current[key]
+        if isinstance(new_value, bool):
+            differs = bool(new_value) != bool(old_value)
+        else:
+            differs = abs(float(new_value) - float(old_value)) > 0.01
+        if not differs:
+            continue
+        saved[key] = new_value
+        changed += 1
+        log_ai_adaptation(
+            source, key,
+            old_value if not isinstance(old_value, bool) else bool(old_value),
+            new_value if not isinstance(new_value, bool) else bool(new_value),
+            evidence_note, now=now,
+        )
+    if changed:
+        write_json("params.json", saved)
+    return changed
+
+
+def _record_portfolio_floating_loss(floating_pnl_pct: float, now: datetime) -> None:
+    """task #174 (06/08/2026, demande de Louis : construire le suivi
+    maintenant plutot que de laisser le calibrage Portfolio Brain comme un
+    module mort). Persiste la PIRE perte flottante du panier XAUUSD atteinte
+    chaque jour (cle UTC YYYY-MM-DD), mise a jour a chaque cycle de
+    auto_trade_step(). Seule donnee manquante pour calibrer
+    portfolio_floating_loss_warn_pct/critical_pct depuis un vrai resultat de
+    fin de journee (voir calibrate_scenario_thresholds(), qui la correle au
+    P&L journalier deja tenu par calendar_tracker.py -- pas duplique ici)."""
+    day_key = now.strftime("%Y-%m-%d")
+    data = read_json("portfolio_floating_loss_daily.json", {}) or {}
+    current_worst = float(data.get(day_key, 0.0))
+    if floating_pnl_pct < current_worst:
+        data[day_key] = round(floating_pnl_pct, 2)
+        write_json("portfolio_floating_loss_daily.json", data)
+
+
+def _scalp_correlated_entries(conn: sqlite3.Connection) -> list[dict]:
+    """task #173 (06/08/2026) -- joint scenario_scalp_events.jsonl (ticket/
+    scalp_index/cooldown_actual_sec, ecrit a l'ouverture par
+    _record_scalp_open_event()) au VRAI P&L de la table `trades` (rempli a
+    la fermeture par sync_history()) -- seule source honnete pour calibrer
+    scenario_scalp_max_count/scenario_scalp_cooldown_sec (voir
+    scalp_threshold_adjustments(), scenario_generator.py)."""
+    path = DATA_DIR / "scenario_scalp_events.jsonl"
+    if not path.exists():
+        return []
+    entries: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    tickets = [int(e["ticket"]) for e in entries if e.get("ticket")]
+    if not tickets:
+        return []
+    placeholders = ",".join("?" * len(tickets))
+    rows = conn.execute(
+        f"SELECT ticket, profit FROM trades WHERE status='CLOSED' AND ticket IN ({placeholders})", tickets,
+    ).fetchall()
+    profit_by_ticket = {int(r[0]): float(r[1]) for r in rows if r[0] is not None and r[1] is not None}
+    correlated = []
+    for e in entries:
+        ticket = int(e.get("ticket") or 0)
+        if ticket in profit_by_ticket:
+            correlated.append({
+                "scalp_index": e.get("scalp_index"),
+                "cooldown_actual_sec": e.get("cooldown_actual_sec"),
+                "profit": profit_by_ticket[ticket],
+            })
+    return correlated
+
+
 def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: datetime | None = None) -> None:
     """05/08/2026 -- calibration REELLE des seuils Scenario Engine (demande
     explicite de Louis : "des valeurs qui doivent s'ajuster... et non
@@ -5061,12 +5226,20 @@ def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: d
     lus par params.get(...) partout dans le moteur, contrairement aux poids
     de score qui passent par un fichier "appris" separe.
 
-    Ne touche QUE scenario_caio_min_confidence / scenario_london_min_confidence
-    / scenario_health_degradation_threshold / scenario_block_correction_regime
-    -- voir scenario_threshold_adjustments() pour pourquoi les seuils
-    scalp/Portfolio Brain n'y figurent pas encore (donnees de resultat
-    manquantes, pas une omission)."""
+    3 blocs INDEPENDANTS, chacun avec sa propre source de donnees et son
+    propre min_samples (task #173/#174, 06/08/2026 -- avant ce chantier,
+    seul le premier existait ; les seuils scalp/Portfolio Brain restaient
+    delibrement non calibres faute de donnees de resultat, jamais une
+    omission -- voir scenario_threshold_adjustments()) :
+      1. Seuils Scenario Engine (confiance CAIO/Londres, sante, regime
+         CORRECTION) -- scenario_log.jsonl + scenario_replay_log.jsonl.
+      2. Seuils scalp (max_count/cooldown) -- scenario_scalp_events.jsonl
+         joint au VRAI P&L (table trades).
+      3. Seuils Portfolio Brain (warn/critical) -- pire perte flottante
+         journaliere jointe au P&L REEL de fin de journee (calendar_data.json)."""
     now = now or datetime.now(timezone.utc)
+
+    # --- Bloc 1 : seuils Scenario Engine (existant, inchange) -------------
     entries: list[dict] = []
     for name in ("scenario_log.jsonl", "scenario_replay_log.jsonl"):
         path = DATA_DIR / name
@@ -5081,42 +5254,64 @@ def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: d
         entries.extend(by_id.values())
 
     stats = scenario_learning_stats(entries, min_samples=min_samples)
-    if stats["n_resolved"] < min_samples:
-        return  # deja journalise par run_scenario_learning() juste avant -- pas la peine de repeter
+    total_changed = 0
+    if stats["n_resolved"] >= min_samples:
+        current = {
+            "scenario_caio_min_confidence": params.get("scenario_caio_min_confidence", 60.0),
+            "scenario_london_min_confidence": params.get("scenario_london_min_confidence", 70.0),
+            "scenario_health_degradation_threshold": params.get("scenario_health_degradation_threshold", 45.0),
+            "scenario_block_correction_regime": params.get("scenario_block_correction_regime", True),
+        }
+        adjustments = scenario_threshold_adjustments(stats, current)
+        total_changed += _apply_calibration_adjustments(
+            adjustments, current, "scenario_threshold_calibration",
+            f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%).", now=now,
+        )
 
-    current = {
-        "scenario_caio_min_confidence": params.get("scenario_caio_min_confidence", 60.0),
-        "scenario_london_min_confidence": params.get("scenario_london_min_confidence", 70.0),
-        "scenario_health_degradation_threshold": params.get("scenario_health_degradation_threshold", 45.0),
-        "scenario_block_correction_regime": params.get("scenario_block_correction_regime", True),
-    }
-    adjustments = scenario_threshold_adjustments(stats, current)
-    if not adjustments:
-        return
-
-    saved = read_json("params.json", {}) or {}
-    changed = False
-    for key, new_value in adjustments.items():
-        old_value = current[key]
-        if isinstance(new_value, bool):
-            differs = bool(new_value) != bool(old_value)
-        else:
-            differs = abs(float(new_value) - float(old_value)) > 0.01
-        if not differs:
-            continue
-        saved[key] = new_value
-        changed = True
-        log_ai_adaptation(
-            "scenario_threshold_calibration", key,
-            old_value if not isinstance(old_value, bool) else bool(old_value),
-            new_value if not isinstance(new_value, bool) else bool(new_value),
-            f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%).",
+    # --- Bloc 2 : seuils scalp (task #173) ---------------------------------
+    conn = db_conn()
+    try:
+        scalp_entries = _scalp_correlated_entries(conn)
+    finally:
+        conn.close()
+    scalp_min_samples = max(1, int(params.get("scenario_scalp_learning_min_samples", 10)))
+    scalp_stats = scalp_learning_stats(scalp_entries, min_samples=scalp_min_samples)
+    if scalp_stats["n_resolved"] >= scalp_min_samples:
+        scalp_current = {
+            "scenario_scalp_max_count": params.get("scenario_scalp_max_count", 3),
+            "scenario_scalp_cooldown_sec": params.get("scenario_scalp_cooldown_sec", 45.0),
+        }
+        scalp_adjustments = scalp_threshold_adjustments(scalp_stats, scalp_current)
+        total_changed += _apply_calibration_adjustments(
+            scalp_adjustments, scalp_current, "scalp_threshold_calibration",
+            f"Apres {scalp_stats['n_resolved']} scalps reels resolus (winrate global {scalp_stats['overall_winrate']}%).",
             now=now,
         )
-    if changed:
-        write_json("params.json", saved)
-        log(f"Calibration des seuils Scenario Engine: {len(adjustments)} valeur(s) evaluee(s), "
-            f"params.json mis a jour.", "SUCCESS")
+
+    # --- Bloc 3 : seuils Portfolio Brain (task #174) -----------------------
+    worst_by_day = read_json("portfolio_floating_loss_daily.json", {}) or {}
+    daily_pnl_by_day = {
+        day: float((info or {}).get("profit", 0.0))
+        for day, info in (read_json("calendar_data.json", {}) or {}).get("daily", {}).items()
+    }
+    portfolio_min_samples = max(1, int(params.get("portfolio_floating_loss_learning_min_samples", 10)))
+    portfolio_stats = floating_loss_learning_stats(worst_by_day, daily_pnl_by_day, min_samples=portfolio_min_samples)
+    if portfolio_stats["n_days"] >= portfolio_min_samples:
+        portfolio_current = {
+            "portfolio_floating_loss_warn_pct": params.get("portfolio_floating_loss_warn_pct", 2.0),
+            "portfolio_floating_loss_critical_pct": params.get("portfolio_floating_loss_critical_pct", 5.0),
+        }
+        portfolio_adjustments = floating_loss_threshold_adjustments(portfolio_stats, portfolio_current)
+        total_changed += _apply_calibration_adjustments(
+            portfolio_adjustments, portfolio_current, "portfolio_floating_loss_calibration",
+            f"Apres {portfolio_stats['n_days']} journees resolues "
+            f"(taux de mauvaise journee global {portfolio_stats['overall_bad_day_rate']}%).",
+            now=now,
+        )
+
+    if total_changed:
+        log(f"Calibration des seuils Scenario Engine: {total_changed} valeur(s) mise(s) a jour dans params.json.",
+            "SUCCESS")
 
 
 def run_auto_backtest_if_due(params: dict, symbol_names: dict[str, str], *, now: datetime | None = None) -> None:
@@ -5782,6 +5977,14 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         if p.get("symbol_key") == active and p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
     ]
     portfolio_exposure = basket_exposure(portfolio_bot_positions, float(account.equity) if account else 0.0)
+    # task #174 (06/08/2026) -- alimente le suivi journalier pour un futur
+    # calibrage reel de portfolio_floating_loss_warn_pct/critical_pct (voir
+    # calibrate_scenario_thresholds()). Sans effet sur la decision de ce
+    # cycle -- pure collecte, jamais un blocage.
+    try:
+        _record_portfolio_floating_loss(portfolio_exposure["floating_pnl_pct"], datetime.now(timezone.utc))
+    except Exception as exc:  # noqa: BLE001 -- collecte seule, ne doit jamais casser le cycle de trading
+        log(f"Portfolio Brain (suivi perte flottante): {exc}", "ERROR")
     portfolio_assessment = portfolio_risk_assessment(
         portfolio_exposure,
         max_positions=int(params.get("portfolio_max_positions", 5)),
