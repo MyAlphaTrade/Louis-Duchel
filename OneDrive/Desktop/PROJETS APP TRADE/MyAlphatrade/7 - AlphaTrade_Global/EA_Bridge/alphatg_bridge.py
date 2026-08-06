@@ -64,15 +64,56 @@ logging.basicConfig(
 )
 log = logging.getLogger("alphatg_bridge")
 
+# ── Allowed origins (Security Hardening, 2026-08-06) ──────────────
+# The bridge only listening on 127.0.0.1 is NOT a real security boundary on
+# its own: with CORS wide open ("*") and no Origin check, any unrelated web
+# page open in the SAME browser could fetch()/POST/PATCH/DELETE against
+# /entities or /functions from its own JavaScript — the browser sends the
+# request regardless of which tab is "focused". That is the real app's own
+# renderer origin (verified against electron-main.js):
+#   - Packaged app: mainWindow.loadFile(...) over file:// — the Fetch spec
+#     serializes a file:// document's Origin header as the literal string
+#     "null", not the word "none" or an empty header.
+#   - Dev app / Electron dev mode: mainWindow.loadURL('http://localhost:5173')
+#     (matches Dist's own Vite dev server port, see .claude/launch.json).
+# A request with NO Origin header at all (curl, server-to-server, or some
+# non-browser HTTP clients) is also allowed — Origin is a browser-added
+# header, and this bridge already trusts anything running on the same
+# machine (127.0.0.1) that isn't a browser tab from an unrelated site.
+ALLOWED_ORIGINS = {"null", "http://localhost:5173", "http://127.0.0.1:5173"}
+
+
+def _request_origin_allowed():
+    origin = request.headers.get("Origin")
+    return origin is None or origin in ALLOWED_ORIGINS
+
+
+def _cors_origin_header():
+    """Echo back the caller's own Origin if it's allowed (required for
+    Access-Control-Allow-Origin to work with a non-"*" allowlist — the
+    header must match the request's Origin exactly, it can't be a list).
+    Falls back to the dev origin for non-browser callers (no Origin sent),
+    which is harmless since those callers don't enforce CORS anyway."""
+    origin = request.headers.get("Origin")
+    return origin if origin in ALLOWED_ORIGINS else "http://localhost:5173"
+
+
 # ── Flask app ────────────────────────────────────────────────────
+# CORS is handled entirely by hand below (add_pna_headers + the OPTIONS
+# branch in check_auth) rather than via flask_cors.CORS(): the two systems
+# fought over the Access-Control-Allow-Origin header when both were active
+# (flask_cors's own after_request hook silently overwrote the origin-echo
+# logic below with "*", defeating the whole point of ALLOWED_ORIGINS —
+# caught by the live curl tests during the 2026-08-06 security hardening).
+# flask_cors stays a listed dependency only because CORS(...)'s import
+# guard above gives a clear "pip install flask flask-cors" error message.
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
 
 @app.after_request
 def add_pna_headers(resp):
     resp.headers["Access-Control-Allow-Private-Network"] = "true"
-    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Origin"] = _cors_origin_header()
     resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return resp
@@ -103,7 +144,7 @@ def check_auth():
     if request.method == "OPTIONS":
         resp = app.response_class(status=204)
         resp.headers["Access-Control-Allow-Private-Network"] = "true"
-        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Origin"] = _cors_origin_header()
         resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         resp.headers["Access-Control-Max-Age"] = "86400"
@@ -112,12 +153,25 @@ def check_auth():
     if request.path == "/health":
         return None
 
-    # Local app data (entities/auth/functions) is not MT5-order-sensitive —
-    # the bridge only listens on 127.0.0.1, which is already the security
-    # boundary for a local desktop app. Keeping the API key requirement here
-    # would create a chicken-and-egg problem: the frontend needs to read
-    # TradingAccount before it can even display the API key field.
+    # Local app data (entities/auth/functions) is not MT5-order-sensitive, and
+    # keeping the API key requirement here would create a chicken-and-egg
+    # problem (the frontend needs to read TradingAccount before it can even
+    # display the API key field) — so these stay key-free. But "the bridge
+    # only listens on 127.0.0.1" is NOT by itself a security boundary: any
+    # unrelated web page open in the same browser can still reach 127.0.0.1
+    # from its own JavaScript. The real boundary enforced here is Origin —
+    # only the app's own renderer (see ALLOWED_ORIGINS above) may call these
+    # paths without a key. Hardened 2026-08-06 after the professional audit
+    # flagged this as the most realistic attack surface on a local desktop
+    # trading app: an attacker can't send an MT5 order this way (/send_order
+    # and friends are outside this exemption and still require the API key
+    # below), but could otherwise have rewritten Parameter/TradingAccount —
+    # e.g. max_risk_percent or execution_mode — which the legitimate app
+    # would then have traded on at its next cycle, believing it was its own
+    # configuration.
     if request.path.startswith("/auth") or request.path.startswith("/entities") or request.path.startswith("/functions"):
+        if not _request_origin_allowed():
+            return jsonify({"ok": False, "error": "Origin non autorisée"}), 403
         return None
 
     # SSE endpoint accepts key via query param (EventSource can't set headers)
