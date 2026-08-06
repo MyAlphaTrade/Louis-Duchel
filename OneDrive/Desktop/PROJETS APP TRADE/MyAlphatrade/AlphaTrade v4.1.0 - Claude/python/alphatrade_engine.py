@@ -4,9 +4,11 @@ import json
 import logging
 import math
 import os
+import queue
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import argparse
 import urllib.error
@@ -478,6 +480,12 @@ AI_SERVER_STATE = {
 }
 AI_TRAIN_ATTEMPTS: dict[str, float] = {}
 CLOSE_ATTEMPTS: dict[int, float] = {}
+# 06/08/2026 -- monitoring latence (demande de Louis) : time.perf_counter()
+# au moment ou le dernier snapshot de positions (live_positions()) a ete pris
+# dans la boucle principale -- lu par close_bot_position() pour savoir a quel
+# point les donnees de profit utilisees pour la decision de fermeture etaient
+# fraiches. 0.0 tant que la boucle n'a pas encore tourne une fois (tests).
+_PERF_POSITIONS_SNAPSHOT_AT: float = 0.0
 TAKE_PROFIT_STATE: dict[int, dict] = {}  # {ticket: {tp_done, be_applied}}
 FAST_BE_STATE: dict[int, bool] = {}  # {ticket: True} une fois le Break-Even rapide appliqué (fast_breakeven_step)
 PROFIT_TRAIL_RATCHET_STATE: dict[int, float] = {}  # {ticket: dernier SL appliqué} par profit_trailing_ratchet_step
@@ -570,11 +578,70 @@ def read_json(name: str, fallback=None):
         return fallback
 
 
+# 06/08/2026 -- audit latence MT5<->AlphaTrade (demande explicite de Louis) :
+# params.json etait relu et re-parse DEPUIS LE DISQUE deux fois par cycle de
+# la boucle principale (merge_params() + effective_params_for_strategy()),
+# soit ~20 lectures disque/seconde meme quand rien n'a change. Cache par
+# mtime -- ne relit reellement le fichier que si sa date de modification a
+# change depuis le dernier appel (donc a chaque vraie sauvegarde depuis
+# Parametres, jamais autrement). Reserve aux lectures pures (jamais aux
+# endroits qui lisent puis reecrivent params.json dans la meme fonction --
+# ceux-la doivent voir l'etat reel du disque, pas un cache potentiellement
+# perime, voir les 2 autres appels directs a read_json("params.json", ...)
+# plus bas dans ce fichier).
+_PARAMS_JSON_CACHE: dict = {"mtime": None, "data": {}}
+
+
+def _cached_params_json() -> dict:
+    path = DATA_DIR / "params.json"
+    try:
+        mtime = path.stat().st_mtime if path.exists() else None
+    except OSError:
+        mtime = None
+    if mtime != _PARAMS_JSON_CACHE["mtime"]:
+        _PARAMS_JSON_CACHE["data"] = read_json("params.json", {}) or {}
+        _PARAMS_JSON_CACHE["mtime"] = mtime
+    return _PARAMS_JSON_CACHE["data"]
+
+
+# 06/08/2026 -- audit latence MT5<->AlphaTrade (demande explicite de Louis) :
+# log() faisait un open/write/close DISQUE SYNCHRONE a chaque appel, dans la
+# boucle de trading elle-meme (des dizaines d'appels/seconde en periode
+# active, voir alphatrade.log ~11 Mo). Un trade ne doit jamais attendre
+# l'ecriture du journal -- log() ne fait plus que deposer la ligne dans une
+# file, un thread dedie (_log_writer_loop) l'ecrit en arriere-plan. print()
+# reste synchrone (stdout, deja tres rapide, utile pour le direct au
+# demarrage) ; seule l'ecriture DISQUE est deportee."""
+_LOG_QUEUE: "queue.Queue[str]" = queue.Queue()
+_LOG_WRITER_STARTED = False
+
+
+def _log_writer_loop() -> None:
+    log_path = DATA_DIR / "alphatrade.log"
+    while True:
+        line = _LOG_QUEUE.get()
+        try:
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except Exception:
+            pass  # jamais faire planter le moteur pour une ligne de journal perdue
+        finally:
+            _LOG_QUEUE.task_done()
+
+
+def _ensure_log_writer_started() -> None:
+    global _LOG_WRITER_STARTED
+    if _LOG_WRITER_STARTED:
+        return
+    threading.Thread(target=_log_writer_loop, name="alphatrade-log-writer", daemon=True).start()
+    _LOG_WRITER_STARTED = True
+
+
 def log(message: str, level: str = "INFO") -> None:
+    _ensure_log_writer_started()
     line = f"[{datetime.now().strftime('%H:%M:%S')}] [{level}] {message}"
     print(line, flush=True)
-    with (DATA_DIR / "alphatrade.log").open("a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+    _LOG_QUEUE.put(line)
 
 
 class _StdlibLogBridge(logging.Handler):
@@ -725,7 +792,7 @@ def log_scenario_event(scenario: Scenario, log_name: str = "scenario_log.jsonl")
 
 
 def merge_params() -> dict:
-    saved = read_json("params.json", {}) or {}
+    saved = _cached_params_json()
     merged = json.loads(json.dumps(DEFAULT_PARAMS))
     for key, value in saved.items():
         if key == "symbols" and isinstance(value, dict):
@@ -743,7 +810,7 @@ def effective_params_for_strategy(params: dict) -> dict:
     effective = json.loads(json.dumps(params))
     mode = str(effective.get("strategy_mode") or "scalping_fast")
     profile = STRATEGY_PROFILES.get(mode, STRATEGY_PROFILES["scalping_fast"])
-    saved = read_json("params.json", {}) or {}
+    saved = _cached_params_json()
     for key, value in profile.get("global", {}).items():
         # Ne pas écraser si l'utilisateur a explicitement défini la valeur
         if key not in saved:
@@ -1637,6 +1704,9 @@ def live_positions(symbol_names: dict[str, str], params: dict | None = None) -> 
     return rows
 
 
+_HISTORY_FULL_RESCAN_STATE: dict[str, float] = {"last": 0.0}
+
+
 def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params: dict | None = None, days: int = 7) -> list[dict]:
     reverse = {v: k for k, v in symbol_names.items()}
 
@@ -1671,9 +1741,24 @@ def sync_history(conn: sqlite3.Connection, symbol_names: dict[str, str], params:
 
     if mt5 is None:
         return from_db()
-    start = datetime.now() - timedelta(days=days)
+    # 06/08/2026 -- audit latence MT5<->AlphaTrade (demande explicite de
+    # Louis) : cette fonction est appelee toutes les 2s par la boucle
+    # principale et rescannait `days` (7) jours COMPLETS de deals MT5 a
+    # CHAQUE appel -- l'appel le plus lourd de toute la boucle. La fenetre
+    # normale est resserree a quelques heures (tres largement superieure a
+    # max_hold_sec, la plus longue duree de maintien reelle d'un trade,
+    # quelques dizaines de minutes au pire) pour ne jamais casser
+    # l'appariement DEAL_ENTRY_IN/DEAL_ENTRY_OUT d'un trade encore ouvert.
+    # Le rescan complet `days` jours ne tourne plus qu'en filet de securite
+    # toutes les 15 minutes (horloge/deconnexion MT5/trade tenu anormalement
+    # longtemps) -- jamais retire, seulement moins frequent.
+    now_ts = time.time()
+    full_rescan = (now_ts - _HISTORY_FULL_RESCAN_STATE["last"]) > 900
+    start = datetime.now() - (timedelta(days=days) if full_rescan else timedelta(hours=3))
     end = datetime.now() + timedelta(minutes=2)
     deals = mt5.history_deals_get(start, end)
+    if full_rescan:
+        _HISTORY_FULL_RESCAN_STATE["last"] = now_ts
     if not deals:
         return from_db()
     entries: dict[int, dict] = {}
@@ -3164,6 +3249,12 @@ def close_bot_position(position: dict, reason: str):
         "comment": "AT close",
         "type_time": mt5.ORDER_TIME_GTC,
     }
+    # 06/08/2026 -- monitoring latence (demande explicite de Louis, audit
+    # ticket 9748487751 : une position vue a +1.80$ a ete fermee par decision
+    # a -2.20$, executee a -4.40$ -- l'ecart entre "profit vu" et "profit
+    # execute" vient de la fraicheur du snapshot de positions ET du temps
+    # d'aller-retour MT5, mesures ici separement pour la premiere fois.
+    snapshot_age_ms = round((time.perf_counter() - _PERF_POSITIONS_SNAPSHOT_AT) * 1000, 1) if _PERF_POSITIONS_SNAPSHOT_AT else None
     started = time.perf_counter()
     result = send_deal(request)
     latency_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -3186,8 +3277,21 @@ def close_bot_position(position: dict, reason: str):
             "retcode": int(result.retcode) if result is not None else None,
             "comment": str(getattr(result, "comment", "")) if result is not None else str(mt5.last_error()),
             "latency_ms": latency_ms,
+            "snapshot_age_ms": snapshot_age_ms,
         },
     )
+    # Visible dans le Journal (pas seulement dans learning_events.jsonl) des
+    # que la latence totale devient significative -- seuil choisi pour ne
+    # jamais noyer le Journal en fonctionnement normal (ordre MT5 typique:
+    # quelques dizaines de ms), mais remonter tout ce qui pourrait expliquer
+    # un ecart profit vu / profit execute comme sur le ticket audite.
+    total_ms = (snapshot_age_ms or 0) + latency_ms
+    if total_ms >= 150:
+        log(
+            f"[PERFORMANCE] Fermeture {ticket} ({reason}): snapshot vieux de {snapshot_age_ms}ms"
+            f" + ordre MT5 {latency_ms}ms = {round(total_ms, 1)}ms au total.",
+            "WARNING",
+        )
     if ok:
         CLOSE_ATTEMPTS.pop(ticket, None)
         return True, f"Fermeture {ticket} {reason}: OK."
@@ -5967,6 +6071,12 @@ def main() -> int:
                 log("Nouvelle session AlphaTrade initialisee pour ce compte.", "SUCCESS")
 
         positions = live_positions(symbol_names, params)
+        # 06/08/2026 -- monitoring latence (demande explicite de Louis, audit
+        # ticket 9748487751) : date de ce snapshot de positions, consulte par
+        # close_bot_position() pour mesurer l'age reel des donnees de profit
+        # au moment de la decision de fermeture -- voir _PERF_POSITIONS_SNAPSHOT_AT.
+        global _PERF_POSITIONS_SNAPSHOT_AT
+        _PERF_POSITIONS_SNAPSHOT_AT = time.perf_counter()
         now = time.time()
         if now - last_history > 2:
             trades = sync_history(conn, symbol_names, params)
