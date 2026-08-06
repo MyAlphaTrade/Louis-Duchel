@@ -1661,7 +1661,19 @@ def call_function(function_name):
         if action in ("test", "connect", "reconnect"):
             return jsonify(local_functions.trading_connector_test(get_account_snapshot, fetch_symbols_direct))
         if action == "build_order":
-            return jsonify({"ok": True, "order": local_functions.build_order(body)})
+            # Real Capital Risk Engine (2026-08-06): the lot is sized against
+            # the account's real, current equity read from MT5 right now —
+            # never a capital figure supplied by the caller (see
+            # local_functions.build_order's docstring). If MT5 isn't
+            # connected or the account snapshot has no usable equity, refuse
+            # explicitly rather than let calculate_lot() guess.
+            snap = get_account_snapshot()
+            equity = snap.get("equity") if snap else None
+            try:
+                order = local_functions.build_order(body, account_equity=equity)
+            except local_functions.RealCapitalUnavailable as e:
+                return jsonify({"ok": False, "error": str(e), "reason": "CAPITAL_UNAVAILABLE"}), 400
+            return jsonify({"ok": True, "order": order})
         if action == "save_bridge_result":
             payload, status = local_functions.trading_connector_save_bridge_result(body, fetch_symbols_direct)
             return jsonify(payload), status

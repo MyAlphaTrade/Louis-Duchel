@@ -359,8 +359,28 @@ def trading_connector_save_bridge_result(body, fetch_symbols_fn=None):
     return {"ok": False, "error": "Not a bridge platform"}, 200
 
 
+class RealCapitalUnavailable(Exception):
+    """Raised when a lot size is needed but no real capital figure is
+    available to size it against. Every caller must turn this into an
+    explicit refusal (HTTP error / WAIT), never a silent fallback.
+
+    Real Capital Risk Engine, 2026-08-06 (Phase 2 of the professional audit's
+    transformation plan): calculate_lot() used to default to a fictitious
+    1000$ whenever `capital` was falsy — which was ALWAYS the case in real
+    use, because no Settings field in the whole frontend ever wrote
+    Parameter.capital. On a real account this meant every position was
+    sized against a number with no relationship to the actual balance:
+    10x too small on a 10 000$ account, or dangerously oversized on a
+    small one. There is now no fallback — see build_order() below, which
+    is passed the account's real equity from MT5 by the bridge itself,
+    never a value supplied by the caller."""
+
+
 def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None):
-    capital = capital or 1000
+    if not capital or capital <= 0:
+        raise RealCapitalUnavailable(
+            "Capital réel indisponible (equity MT5 introuvable) — impossible de calculer une taille de position en toute sécurité."
+        )
     risk_percent = risk_percent if risk_percent is not None else 1
     risk_amount = capital * (risk_percent / 100)
     contract_size = CONTRACT_SIZES.get((symbol or "").upper(), 100000)
@@ -371,7 +391,15 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     return max(0.01, round(lot * 100) / 100)
 
 
-def build_order(body):
+def build_order(body, account_equity=None):
+    """account_equity: the account's real, current equity as read from MT5
+    by the bridge (see get_account_snapshot() in alphatg_bridge.py), passed
+    in explicitly by the caller — NEVER taken from `body`. A capital figure
+    supplied by the frontend can't be trusted for a real order: it might be
+    stale, absent, or (before this fix) silently wrong for months. Raises
+    RealCapitalUnavailable if account_equity isn't a real positive number;
+    the caller (alphatg_bridge.py) must turn that into an explicit error
+    response, never send an order sized on a guess."""
     direction = "SELL" if body.get("direction") == "SELL" else "BUY"
     symbol = (body.get("symbol") or "").upper()
     return {
@@ -381,7 +409,7 @@ def build_order(body):
             symbol,
             entry_price=body.get("entry_price"),
             stop_loss=body.get("stop_loss"),
-            capital=body.get("capital"),
+            capital=account_equity,
             risk_percent=body.get("risk_percent"),
         ),
         "entry_price": body.get("entry_price"),
