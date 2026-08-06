@@ -900,7 +900,15 @@ function maybeShowWhatsNew(version) {
 function renderStatus(s) {
   if (!s) return;
   currentStatus = s;
-  renderIntelCardFooters(); // reflete les nouvelles adaptations sans attendre un reload du formulaire
+  // 06/08/2026 -- Louis : "les écrans dans paramètres qui n'actualisent pas".
+  // La carte "Piloté par l'IA" lisait le `params` global, rempli une seule
+  // fois par fillSettings() au démarrage — un calibrage cote Python restait
+  // invisible sans redémarrer l'app. s.live_params (voir status_payload())
+  // porte les seuls champs affichés par cette carte ; on les fusionne dans
+  // `params` a chaque tick avant de la re-rendre, sans toucher au reste du
+  // formulaire (donc sans risque d'écraser une saisie en cours ailleurs).
+  if (s.live_params && params) Object.assign(params, s.live_params);
+  renderIntelCards(); // valeurs ET footers ("Calibré"/"Jamais ajusté") à jour à chaque tick
   if (s.version) maybeShowWhatsNew(s.version);
   if (s.version) {
     const vStr = `v${s.version}`;

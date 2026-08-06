@@ -5865,6 +5865,33 @@ def status_payload(params: dict, symbol_names: dict[str, str], trades: list[dict
         "session_access": access,
         "simulated_decision": simulated_decision,
         "ai_adaptations": recent_ai_adaptations(),
+        # 06/08/2026 -- Louis : "les ecrans dans parametres qui n'actualisent
+        # pas". Root cause : la carte "Pilote par l'IA" (renderIntelCards(),
+        # renderer.js) lit le params JS global, qui n'etait rempli qu'UNE
+        # SEULE FOIS par fillSettings() au demarrage -- jamais rafraichi par
+        # le flux status-update (contrairement au footer "Calibre/Jamais
+        # ajuste", deja branche sur ai_adaptations juste au-dessus). Un
+        # calibrage cote Python (calibrate_scenario_thresholds()) restait
+        # donc invisible tant que l'app n'etait pas redemarree. Liste
+        # explicite (pas tout `params`, qui contient des tableaux/dicts bien
+        # plus lourds type take_profit_levels/symbols) des seuls champs
+        # reellement affiches par cette carte.
+        "live_params": {
+            k: params.get(k)
+            for k in (
+                "scenario_caio_min_confidence",
+                "scenario_london_min_confidence",
+                "scenario_health_degradation_threshold",
+                "scenario_scalp_cooldown_sec",
+                "scenario_scalp_max_count",
+                "scenario_scalp_lot_ratio",
+                "scenario_block_correction_regime",
+                "portfolio_floating_loss_warn_pct",
+                "portfolio_floating_loss_critical_pct",
+                "scenario_engine_execution_enabled",
+                "scenario_engine_enabled",
+            )
+        },
         "auto_backtest": read_json("auto_backtest_result.json", None),
         "positions": positions,
         "timestamp": int(time.time()),
