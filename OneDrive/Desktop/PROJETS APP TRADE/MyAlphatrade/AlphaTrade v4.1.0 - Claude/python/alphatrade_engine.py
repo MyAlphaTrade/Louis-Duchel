@@ -57,7 +57,7 @@ from market_smart_money import (
 
 MAGIC = 20260607
 AVA_MAGIC = 7525001
-VERSION = "5.1.1"
+VERSION = "1.1.5"
 # v5.1.0 -- version propre au "Gold AI Brain" (CAIO/Mission Manager/Structure/
 # Smart Money/Risk), independante de VERSION : premiere version de ce
 # sous-systeme entierement nouveau, ne suit pas le numero de l'application.
@@ -3828,6 +3828,36 @@ def rebond_lot(main_lot: float, params: dict, is_demo: bool, tier: str = "normal
     return lot
 
 
+def total_bot_positions_open(symbol_key: str, positions: list[dict]) -> int:
+    """Porte unique de comptage (Phase 0.1, 06/08/2026, demande explicite de
+    Louis suite a l'audit d'empilement de positions). Compte TOUTES les
+    positions BOT/ALPHATRADE/ALPHAKARIS ouvertes sur ce symbole, tous
+    mecanismes confondus (entree principale, Renfort, Rebond, ancrage et
+    scalps du Scenario Engine) -- avant cette fonction, chaque mecanisme
+    comptait uniquement SES propres positions (rebond_max_active,
+    scenario_scalp_max_count, un seul ancrage par scenario), sans jamais
+    voir ce que les 2 autres avaient deja ouvert."""
+    return sum(
+        1 for p in positions
+        if p.get("symbol_key") == symbol_key and p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")
+    )
+
+
+def hard_position_cap_reached(symbol_key: str, positions: list[dict]) -> bool:
+    """Plafond dur ABSOLU (Phase 0.1, 06/08/2026), commun aux 3 mecanismes
+    d'ouverture de position (voir total_bot_positions_open()) -- audit du
+    06/08/2026 : Rebond (should_open_rebond()) et le Scenario Engine
+    (execute_scenario_anchor()/execute_scenario_scalp()) etaient aveugles
+    au nombre reel de positions deja ouvertes par les autres mecanismes,
+    seule l'entree principale/Renfort (auto_trade_step(), effective_max)
+    voyait juste. Reutilise HARD_AUTO_POSITION_CAP, deja le plafond absolu
+    de la Porte 1 -- un seul chiffre a faire evoluer si besoin, jamais
+    duplique entre les 3 portes. Volontairement INDEPENDANT de
+    portfolio_brain_enabled : c'est un garde-fou dur, toujours actif, pas
+    une fonctionnalite avancee optionnelle du Portfolio Brain."""
+    return total_bot_positions_open(symbol_key, positions) >= HARD_AUTO_POSITION_CAP
+
+
 def should_open_rebond(
     symbol_key: str,
     symbol: str,
@@ -3850,6 +3880,12 @@ def should_open_rebond(
     check_close_rebond, cible/stop/durée max, inchangé).
     Retourne (ok, raison, info_rebond_ou_None)."""
     global REBOND_STATES, REBOND_META
+    # Phase 0.1 (06/08/2026) -- porte unique de comptage, verifiee AVANT le
+    # plafond propre au Rebond : Rebond ne doit plus pouvoir ouvrir en
+    # ignorant combien de positions l'entree principale/Renfort ou le
+    # Scenario Engine ont deja ouvertes sur ce meme symbole.
+    if hard_position_cap_reached(symbol_key, positions):
+        return False, f"Plafond absolu ({HARD_AUTO_POSITION_CAP}) de positions atteint sur {symbol_key}, tous mecanismes confondus.", None
     rebond_max = int(params.get("rebond_max_active", 3))
     sym_rebond_count = sum(1 for s in REBOND_STATES if s.get("symbol_key") == symbol_key)
     if sym_rebond_count >= rebond_max:
@@ -4596,6 +4632,7 @@ def execute_scenario_anchor(
     trading_enabled: bool,
     allow_real: bool,
     current_price: float = 0.0,
+    positions: list[dict] | None = None,
     now: datetime | None = None,
     log_name: str = "scenario_log.jsonl",
 ) -> None:
@@ -4639,6 +4676,16 @@ def execute_scenario_anchor(
     actif entre-temps : un ordre reel deja sur le broker doit rester supervise,
     pas abandonne silencieusement.
 
+    `positions` (Phase 0.1, 06/08/2026, demande explicite de Louis suite a
+    l'audit d'empilement de positions) : porte unique de comptage, voir
+    hard_position_cap_reached() -- avant cet ajout, un ancrage pouvait
+    s'ouvrir sans jamais verifier combien de positions l'entree principale/
+    Renfort ou le Rebond avaient deja ouvertes sur ce meme symbole (sauf si
+    portfolio_brain_enabled etait active, ce qui n'est pas le cas par
+    defaut). Optionnel (defaut None) : un appelant qui ne le fournit pas
+    (anciens appels/tests) desactive uniquement CE nouveau garde-fou, aucune
+    regression sur le reste du comportement.
+
     Distinction deliberee entre blocage TRANSITOIRE (Demarrer pas encore
     clique, protection momentanement active -- on ne touche pas a
     anchor_status, nouvelle tentative au prochain cycle tant que le scenario
@@ -4675,6 +4722,8 @@ def execute_scenario_anchor(
         return  # transitoire -- IA pas demarree, retente au prochain cycle
     if protection.get("state") in ("WARNING", "HARD_LOCK", "TARGET_REACHED") or protection.get("portfolio_blocks"):
         return  # transitoire -- protection de session ou panier Portfolio Brain active
+    if positions is not None and hard_position_cap_reached(scenario.symbol_key, positions):
+        return  # transitoire -- Phase 0.1, porte unique de comptage (voir docstring)
 
     symbol = symbol_names.get(scenario.symbol_key)
     if not symbol or not scenario.targets or scenario.invalidation_price is None:
@@ -4889,6 +4938,7 @@ def execute_scenario_scalp(
     analysis: dict,
     trading_enabled: bool,
     allow_real: bool,
+    positions: list[dict] | None = None,
     now: datetime | None = None,
     log_name: str = "scenario_log.jsonl",
 ) -> None:
@@ -4908,7 +4958,12 @@ def execute_scenario_scalp(
     ne fait QUE l'execution, jamais la detection (deja faite par
     dynamic_position_manager_step()/evaluate_scalp_opportunity(), qui restent
     purement simulees/observation -- simulated_scalp_count n'est jamais
-    touche ici, executed_scalp_count est le compteur reel distinct)."""
+    touche ici, executed_scalp_count est le compteur reel distinct).
+
+    `positions` (Phase 0.1, 06/08/2026) : meme porte unique de comptage que
+    execute_scenario_anchor() -- voir hard_position_cap_reached(). Optionnel
+    (defaut None), meme regle de non-regression pour les anciens appels/
+    tests qui ne le fournissent pas."""
     now = now or datetime.now(timezone.utc)
     if scenario.status != "ACTIVE" or not scenario.scalp_allowed:
         return
@@ -4918,6 +4973,8 @@ def execute_scenario_scalp(
         return  # transitoire
     if protection.get("state") in ("WARNING", "HARD_LOCK", "TARGET_REACHED") or protection.get("portfolio_blocks"):
         return  # transitoire
+    if positions is not None and hard_position_cap_reached(scenario.symbol_key, positions):
+        return  # transitoire -- Phase 0.1, porte unique de comptage
     max_scalps = max(0, int(params.get("scenario_scalp_max_count", 3)))
     if scenario.executed_scalp_count >= max_scalps:
         return  # plafond definitif pour ce scenario -- pas transitoire, jamais retente
@@ -5510,12 +5567,14 @@ def auto_trade_step(
                         trading_enabled=bool(state.get("enabled")),
                         allow_real=bool(demo or state.get("real_confirmed")),
                         current_price=se_price,
+                        positions=positions,
                     )
                     close_scenario_anchor_if_needed(scenario, positions)
                     execute_scenario_scalp(
                         scenario, params, symbol_names, account, protection, se_price, se_risk, se_candles, se_analysis,
                         trading_enabled=bool(state.get("enabled")),
                         allow_real=bool(demo or state.get("real_confirmed")),
+                        positions=positions,
                     )
                 except Exception as exc:  # noqa: BLE001 -- une erreur d'execution ne doit jamais casser le cycle
                     log(f"Scenario Engine (execution): {exc}", "ERROR")
