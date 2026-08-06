@@ -720,6 +720,27 @@
           <span id="scenarioExecPill" class="pill off">Inactive</span>
         </div>
 
+        <!-- task #170 (06/08/2026) -- seul reglage MANUEL de cette section : le choix
+             du contexte de raisonnement (timeframe) reste une decision de Louis, pas
+             quelque chose que l'IA calibre elle-meme -- distinct de la grille en
+             lecture seule ci-dessous. Champ generique [name=...] dans #settingsForm :
+             deja charge/sauvegarde par fillSettings()/collectSettings(), aucun JS
+             supplementaire necessaire (meme mecanisme que les autres champs simples). -->
+        <div class="master-switch">
+          <div class="ms-left">
+            <div>
+              <strong>Contexte de raisonnement du Scenario Engine</strong>
+              <small>Bougies utilisées par le Générateur/Validateur/CAIO du scénario — indépendant du timeframe du pipeline classique. M15/H1 = zones plus larges, cibles plus loin, durée de vie plus longue (calculé automatiquement depuis l'ATR réel de ce timeframe). <span class="info-dot" data-tip="Défaut M5 : comportement strictement identique à avant l'ajout de ce réglage.">ⓘ</span></small>
+            </div>
+          </div>
+          <select name="scenario_engine_timeframe">
+            <option value="M1">M1 — scalp</option>
+            <option value="M5" selected>M5 — défaut</option>
+            <option value="M15">M15 — intraday</option>
+            <option value="H1">H1 — intraday large</option>
+          </select>
+        </div>
+
         <div class="intel-grid">
           <article class="intel-card">
             <div class="ic-head"><span class="ic-name">Confiance minimum d'activation</span><span class="ic-source src-caio">CAIO</span></div>

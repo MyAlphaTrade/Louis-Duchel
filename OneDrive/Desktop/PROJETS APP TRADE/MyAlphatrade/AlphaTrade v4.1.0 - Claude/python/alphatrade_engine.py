@@ -214,6 +214,17 @@ DEFAULT_PARAMS = {
     # principale -- source du bruit ACTIVE<->DEGRADED observe en direct,
     # plusieurs fois par seconde). Voir LAST_DPM_EVAL_AT/scenario_engine_step().
     "scenario_health_reeval_interval_sec": 3.0,
+    # v5.1.1 -- 06/08/2026, task #170 (demande de Louis : "mode intraday
+    # 15m/1h"). Contexte de raisonnement dedie du Scenario Engine, INDEPENDANT
+    # du `timeframe` par symbole du pipeline classique -- les deux moteurs
+    # peuvent tourner sur des horizons differents sans interference. Defaut
+    # "M5" : comportement strictement identique a avant l'ajout de ce
+    # parametre. M15/H1 : zones plus larges, cibles plus eloignees et duree de
+    # vie plus longue -- tout decoule automatiquement de l'ATR/bougies reels a
+    # ce nouveau timeframe (voir generate_scenario()), aucun autre reglage
+    # manuel a toucher. La duree de validite maximale (auparavant fixe a 45
+    # min) est desormais deduite de ce choix, voir SCENARIO_VALIDITY_MINUTES_BY_TIMEFRAME.
+    "scenario_engine_timeframe": "M5",
     # v5.1.1 chantier 3 -- Trading Style Engine (trading_style_engine.py) :
     # recommande un strategy_mode a partir du regime/volatilite reels,
     # observation seule (n'ecrit jamais strategy_mode). Defaut False, meme
@@ -3214,6 +3225,10 @@ def place_order(
         "expiration": expiration_dt.isoformat(),
         "retcode": int(result.retcode) if result is not None else None,
         "comment": str(getattr(result, "comment", "")) if result is not None else str(mt5.last_error()),
+        # task #170 (06/08/2026) -- ticket MT5 de l'ordre en attente pose,
+        # necessaire au Scenario Engine pour surveiller/annuler cet ordre
+        # precis (voir execute_scenario_anchor()/cancel_pending_order()).
+        "order_ticket": int(getattr(result, "order", 0) or 0) or None if ok else None,
         "latency_ms": latency_ms,
         "analysis": analysis,
     }
@@ -3221,6 +3236,24 @@ def place_order(
     if ok:
         return True, f"{order_type} {volume:.3f} {symbol} pose a {price_hint:.2f} en {latency_ms:.0f} ms.", event
     return False, f"Ordre refuse: {event['retcode']} {event['comment']}", event
+
+
+def cancel_pending_order(symbol: str, ticket: int):
+    """task #170 (06/08/2026) -- annule un ordre en attente encore non
+    declenche (TRADE_ACTION_REMOVE). Utilise quand un scenario ayant pose un
+    ordre en attente (anchor_status == "PENDING") atteint un statut terminal
+    (INVALIDATED/EXPIRED/COMPLETED) avant declenchement -- meme philosophie
+    que _price_beyond_final_target() dans scenario_generator.py : une idee
+    perimee ne doit pas rester active a attendre un declenchement qui n'a
+    plus de sens, plutot que de compter uniquement sur l'expiration broker
+    (pending_order_expire_min, potentiellement jusqu'a 60 min plus tard)."""
+    request = {"action": mt5.TRADE_ACTION_REMOVE, "order": int(ticket)}
+    result = mt5.order_send(request)
+    ok = bool(result is not None and int(result.retcode) == mt5.TRADE_RETCODE_DONE)
+    if ok:
+        return True, f"Ordre en attente {ticket} ({symbol}) annule."
+    comment = str(getattr(result, "comment", "")) if result is not None else str(mt5.last_error())
+    return False, f"Annulation refusee pour l'ordre {ticket}: {comment}"
 
 
 def close_bot_position(position: dict, reason: str):
@@ -4413,6 +4446,16 @@ def dynamic_position_manager_step(
             log_scenario_event(scenario, log_name)
 
 
+# v5.1.1 -- 06/08/2026, task #170. Duree de validite maximale d'un scenario
+# CANDIDATE/VALIDATED selon le timeframe de raisonnement choisi
+# (scenario_engine_timeframe) -- un scenario construit sur des bougies H1 a
+# besoin de bien plus que 45 min pour que son hypothese ait une chance
+# reelle de se realiser, l'inverse serait incoherent avec ses propres cibles
+# (calculees en multiples d'ATR sur ce meme timeframe, voir generate_scenario()).
+# "M5": 45 preserve exactement le comportement historique (defaut inchange).
+SCENARIO_VALIDITY_MINUTES_BY_TIMEFRAME = {"M1": 15, "M5": 45, "M15": 180, "H1": 720}
+
+
 def scenario_engine_step(
     params: dict,
     symbol_key: str,
@@ -4454,8 +4497,10 @@ def scenario_engine_step(
         scenario = None  # scenario clos ou d'un autre symbole -- on en cherche un nouveau
 
     if scenario is None:
+        se_timeframe = str(params.get("scenario_engine_timeframe") or "M5")
         scenario = generate_scenario(
             symbol_key, candles, current_price, structure_report, smart_money_report, analysis,
+            maximum_validity_min=SCENARIO_VALIDITY_MINUTES_BY_TIMEFRAME.get(se_timeframe, 45),
             now=now, weights=load_scenario_weights(),
             block_correction_regime=bool(params.get("scenario_block_correction_regime", True)),
         )
@@ -4501,6 +4546,24 @@ def scenario_engine_step(
     return scenario
 
 
+def _find_scenario_anchor_position(scenario: Scenario, symbol_names: dict[str, str], params: dict) -> dict | None:
+    """Identifie la position MT5 reelle d'un ancrage via le tag "SCENARIO" du
+    commentaire (open_position()/place_order() ne retournent pas le ticket
+    directement) -- le plus recemment ouvert sur ce symbole/sens en cas
+    d'ambiguite. Factorise depuis execute_scenario_anchor() (task #170,
+    06/08/2026) pour servir aussi bien a une entree au marche (MARKET,
+    immediate) qu'a la detection du declenchement d'un ordre en attente
+    (LIMIT/STOP, voir plus bas)."""
+    candidates = [
+        p for p in live_positions(symbol_names, params)
+        if p["symbol_key"] == scenario.symbol_key and p["direction"] == scenario.direction
+        and "SCENARIO" in p.get("comment", "")
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p["open_timestamp"])
+
+
 def execute_scenario_anchor(
     scenario: Scenario,
     params: dict,
@@ -4509,6 +4572,7 @@ def execute_scenario_anchor(
     protection: dict,
     trading_enabled: bool,
     allow_real: bool,
+    current_price: float = 0.0,
     now: datetime | None = None,
     log_name: str = "scenario_log.jsonl",
 ) -> None:
@@ -4516,11 +4580,28 @@ def execute_scenario_anchor(
     05/08/2026, demande explicite de Louis, section 4 : "le systeme doit
     devenir actif, plus aucun module critique ne doit rester isole ou
     theorique"). Ouvre la VRAIE position d'ancrage MT5 d'un scenario
-    ACTIVE/DEGRADED via open_position() -- seule fonction autorisee a appeler
-    mt5.order_send pour une ouverture -- avec les niveaux calcules par le
-    Scenario Generator (invalidation_price -> SL, dernier target -> TP),
-    jamais le TP fixe du profil classique : c'est tout l'interet du scenario
-    face aux anciens reglages statiques.
+    ACTIVE/DEGRADED avec les niveaux calcules par le Scenario Generator
+    (invalidation_price -> SL, dernier target -> TP), jamais le TP fixe du
+    profil classique : c'est tout l'interet du scenario face aux anciens
+    reglages statiques.
+
+    task #170 (06/08/2026, demande de Louis : "ordres en attente (limite/
+    stop)") -- la zone touchee qui valide un scenario (voir validate_scenario())
+    est "collante" (reaction_count > 0 reste vrai meme si le prix en est
+    reparti depuis) : au moment ou CE cycle-ci active reellement l'ancrage, le
+    prix courant peut donc s'etre eloigne de l'entree ideale
+    (scenario.anchor_plan["entry"]). Le chasser au marche degraderait
+    l'execution reelle par rapport a ce que le Scenario Generator a prevu.
+    Decision purement geometrique (pas un reglage manuel -- coherente avec la
+    regle de Louis "aucune valeur en dur ne doit bloquer l'IA") : si le prix
+    est encore dans la moitie de la largeur de zone autour de l'entree ideale,
+    entree immediate au marche (comportement historique, inchange) ; sinon un
+    ordre en attente est pose exactement au niveau de l'entree ideale --
+    BUY_LIMIT/SELL_LIMIT si ce niveau attend un repli, BUY_STOP/SELL_STOP s'il
+    attend une cassure confirmee -- laissant le marche venir a la zone plutot
+    que l'inverse. `current_price` optionnel (defaut 0.0) : un appelant qui ne
+    le fournit pas (anciens appels/tests) conserve exactement l'ancien
+    comportement (toujours MARKET), aucune regression.
 
     Gate dedie `scenario_engine_execution_enabled` (defaut True depuis
     l'activation), INDEPENDANT de `scenario_engine_enabled` (qui ne fait que
@@ -4529,7 +4610,11 @@ def execute_scenario_anchor(
     Respecte aussi les memes garde-fous que le pipeline classique : bouton
     Demarrer (trading_enabled), protection de session (WARNING/HARD_LOCK/
     TARGET_REACHED), confirmation compte reel (allow_real, re-verifiee de
-    toute facon dans open_position()).
+    toute facon dans open_position()/place_order()). Ces gates ne s'appliquent
+    qu'a la pose d'un NOUVEL ordre -- la surveillance d'un ordre PENDING deja
+    pose (declenchement/reste en attente) continue meme si l'un d'eux devient
+    actif entre-temps : un ordre reel deja sur le broker doit rester supervise,
+    pas abandonne silencieusement.
 
     Distinction deliberee entre blocage TRANSITOIRE (Demarrer pas encore
     clique, protection momentanement active -- on ne touche pas a
@@ -4538,6 +4623,27 @@ def execute_scenario_anchor(
     reellement tente et refuse, symbole introuvable, scenario sans cible) --
     anchor_status passe alors a FAILED, plus jamais retente."""
     now = now or datetime.now(timezone.utc)
+
+    if scenario.anchor_status == "PENDING":
+        # Surveillance d'un ordre en attente deja pose -- independant des
+        # gates ci-dessous (voir docstring). Deux issues possibles : declenche
+        # (une position SCENARIO est apparue) ou toujours en attente (rien a
+        # faire, nouvelle verification au prochain cycle). L'annulation sur
+        # statut terminal est geree par close_scenario_anchor_if_needed(), pas
+        # ici (symetrie avec le chemin OPEN existant).
+        position = _find_scenario_anchor_position(scenario, symbol_names, params)
+        if position is not None:
+            scenario.anchor_status = "OPEN"
+            scenario.anchor_ticket = position["ticket"]
+            scenario.pending_order_ticket = None
+            scenario.history.append(ScenarioEvent(
+                at=now.isoformat(), status=scenario.status,
+                note=f"Ordre en attente declenche -- position d'ancrage {position['ticket']} ouverte.",
+                scenario_health=scenario.scenario_health,
+            ))
+            log_scenario_event(scenario, log_name)
+        return
+
     if scenario.anchor_status != "NONE" or scenario.status not in ("ACTIVE", "DEGRADED"):
         return
     if not bool(params.get("scenario_engine_execution_enabled", True)):
@@ -4559,30 +4665,52 @@ def execute_scenario_anchor(
         return
 
     lot_info = lot_safety_state(params, account, symbol_names).get(scenario.symbol_key, {})
-    ok, message, _event = open_position(
-        scenario.symbol_key, symbol, scenario.direction, params, lot_info,
-        {"confidence": scenario.scenario_confidence}, allow_real,
-        position_type="SCENARIO", sl_price=scenario.invalidation_price, tp_price=scenario.targets[-1]["price"],
-    )
-    scenario.anchor_status = "OPEN" if ok else "FAILED"
-    if ok:
-        # Le ticket reel n'est connu qu'une fois la position visible cote MT5
-        # (open_position() ne le retourne pas explicitement -- comportement
-        # deja identique cote moteur classique) -- identifie via le tag
-        # "SCENARIO" pose dans le commentaire (position_type ci-dessus), le
-        # plus recemment ouvert sur ce symbole/sens en cas d'ambiguite.
-        candidates = [
-            p for p in live_positions(symbol_names, params)
-            if p["symbol_key"] == scenario.symbol_key and p["direction"] == scenario.direction
-            and "SCENARIO" in p.get("comment", "")
-        ]
-        if candidates:
-            scenario.anchor_ticket = max(candidates, key=lambda p: p["open_timestamp"])["ticket"]
-    scenario.history.append(ScenarioEvent(
-        at=now.isoformat(), status=scenario.status,
-        note=f"Position d'ancrage {'ouverte' if ok else 'refusee'}: {message}",
-        scenario_health=scenario.scenario_health,
-    ))
+
+    entry_price = float(scenario.anchor_plan.get("entry") or (scenario.zone["low"] + scenario.zone["high"]) / 2)
+    zone_half_width = max(0.0, (scenario.zone["high"] - scenario.zone["low"]) / 2.0)
+    pending_order_type: str | None = None
+    if current_price > 0 and zone_half_width > 0:
+        if scenario.direction == "BUY":
+            if current_price > entry_price + zone_half_width:
+                pending_order_type = "BUY_LIMIT"  # prix reparti au-dessus -- attendre un repli vers la zone
+            elif current_price < entry_price - zone_half_width:
+                pending_order_type = "BUY_STOP"  # entree prevue au-dessus du prix actuel -- attendre la cassure
+        else:
+            if current_price < entry_price - zone_half_width:
+                pending_order_type = "SELL_LIMIT"  # prix reparti en-dessous -- attendre un rebond vers la zone
+            elif current_price > entry_price + zone_half_width:
+                pending_order_type = "SELL_STOP"  # entree prevue sous le prix actuel -- attendre la cassure
+
+    if pending_order_type is None:
+        ok, message, _event = open_position(
+            scenario.symbol_key, symbol, scenario.direction, params, lot_info,
+            {"confidence": scenario.scenario_confidence}, allow_real,
+            position_type="SCENARIO", sl_price=scenario.invalidation_price, tp_price=scenario.targets[-1]["price"],
+        )
+        scenario.anchor_status = "OPEN" if ok else "FAILED"
+        if ok:
+            position = _find_scenario_anchor_position(scenario, symbol_names, params)
+            if position is not None:
+                scenario.anchor_ticket = position["ticket"]
+        scenario.history.append(ScenarioEvent(
+            at=now.isoformat(), status=scenario.status,
+            note=f"Position d'ancrage {'ouverte' if ok else 'refusee'}: {message}",
+            scenario_health=scenario.scenario_health,
+        ))
+    else:
+        ok, message, event = place_order(
+            scenario.symbol_key, symbol, pending_order_type, params, lot_info,
+            {"confidence": scenario.scenario_confidence}, allow_real,
+            price_hint=entry_price, position_type="SCENARIO",
+        )
+        scenario.anchor_status = "PENDING" if ok else "FAILED"
+        if ok and event:
+            scenario.pending_order_ticket = event.get("order_ticket")
+        scenario.history.append(ScenarioEvent(
+            at=now.isoformat(), status=scenario.status,
+            note=f"Ordre en attente {pending_order_type} {'pose' if ok else 'refuse'} a {entry_price}: {message}",
+            scenario_health=scenario.scenario_health,
+        ))
     log_scenario_event(scenario, log_name)
 
 
@@ -4599,13 +4727,57 @@ def close_scenario_anchor_if_needed(
     rapide que d'attendre que le prix atteigne exactement ces niveaux au
     tick pres.
 
+    task #170 (06/08/2026) -- symetrie identique pour un ancrage PENDING
+    (ordre en attente encore non declenche) : plutot que d'attendre
+    l'expiration broker (jusqu'a pending_order_expire_min, potentiellement
+    bien plus tard qu'un scenario reste valide), l'ordre est annule
+    immediatement des que le scenario devient terminal -- une idee perimee ne
+    doit pas rester postee sur le marche.
+
     Idempotent : si la position est deja fermee cote broker (SL/TP deja
     declenche avant que ce code ne s'execute), close_bot_position() echoue
     proprement (position introuvable dans `positions`) -- on marque quand
     meme CLOSED plutot que de retenter indefiniment une position qui n'existe
-    deja plus."""
+    deja plus. Meme logique pour un ordre PENDING deja disparu (declenche
+    entre-temps ou expire cote broker)."""
     now = now or datetime.now(timezone.utc)
-    if scenario.anchor_status != "OPEN" or scenario.status not in ("INVALIDATED", "EXPIRED", "COMPLETED"):
+    if scenario.status not in ("INVALIDATED", "EXPIRED", "COMPLETED"):
+        return
+
+    if scenario.anchor_status == "PENDING":
+        ticket = scenario.pending_order_ticket
+        if not ticket:
+            scenario.anchor_status = "CLOSED"
+            scenario.history.append(ScenarioEvent(
+                at=now.isoformat(), status=scenario.status,
+                note="Ordre en attente sans ticket connu -- rien a annuler, marque cloture.",
+                scenario_health=scenario.scenario_health,
+            ))
+            log_scenario_event(scenario, log_name)
+            return
+        # `symbol` n'est utilise que pour le texte du log -- cancel_pending_order()
+        # n'en a pas besoin cote requete MT5 (TRADE_ACTION_REMOVE ne prend que
+        # le ticket) -- scenario.symbol_key est toujours disponible, pas
+        # besoin de symbol_names ici (positions ne contient pas cet ordre
+        # PENDING, qui n'est justement pas encore une position).
+        ok, message = cancel_pending_order(scenario.symbol_key, ticket)
+        if ok:
+            scenario.anchor_status = "CLOSED"
+            scenario.pending_order_ticket = None
+        # Echec (deja declenche/expire cote broker, ou ordre introuvable) :
+        # on ne boucle pas indefiniment -- si l'ordre a ete declenche entre
+        # temps, le prochain cycle d'execute_scenario_anchor() (branche
+        # PENDING) le detectera comme position OPEN et cette fonction
+        # prendra alors le relais normalement au cycle suivant.
+        scenario.history.append(ScenarioEvent(
+            at=now.isoformat(), status=scenario.status,
+            note=f"Ordre en attente {'annule' if ok else 'annulation echouee'}: {message}",
+            scenario_health=scenario.scenario_health,
+        ))
+        log_scenario_event(scenario, log_name)
+        return
+
+    if scenario.anchor_status != "OPEN":
         return
     position = next((p for p in positions if int(p.get("ticket") or 0) == scenario.anchor_ticket), None)
     if position is None:
@@ -5110,7 +5282,9 @@ def auto_trade_step(
     # parallele sans interference, aucun n'ecrit sur les positions ici.
     if bool(params.get("scenario_engine_enabled", False)) and symbol:
         try:
-            se_timeframe = str(symbol_params.get("timeframe", "M5"))
+            # task #170 (06/08/2026) -- contexte dedie du Scenario Engine, peut
+            # differer du `timeframe` du pipeline classique (mode intraday 15m/1h).
+            se_timeframe = str(params.get("scenario_engine_timeframe") or symbol_params.get("timeframe", "M5"))
             se_candles = fetch_candles(symbol, se_timeframe, 300)
             se_analysis = payload.get("analysis", {}).get(active, {})
             se_price = se_candles[-1]["close"] if se_candles else float(se_analysis.get("close") or 0)
@@ -5140,6 +5314,7 @@ def auto_trade_step(
                         scenario, params, symbol_names, account, protection,
                         trading_enabled=bool(state.get("enabled")),
                         allow_real=bool(demo or state.get("real_confirmed")),
+                        current_price=se_price,
                     )
                     close_scenario_anchor_if_needed(scenario, positions)
                     execute_scenario_scalp(

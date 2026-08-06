@@ -83,8 +83,17 @@ class Scenario:
     anchor_ticket: int | None = None  # ticket MT5 reel de la position d'ancrage --
     # None tant qu'aucune n'a ete tentee (execution reelle activee le 05/08/2026,
     # demande explicite de Louis ; None reste la norme en observation pure)
-    anchor_status: str = "NONE"  # NONE | OPEN | FAILED | CLOSED -- une seule
-    # tentative d'ouverture par scenario, jamais retentee en boucle (voir
+    pending_order_ticket: int | None = None  # v5.1.1 -- 06/08/2026, task #170.
+    # Ticket MT5 de l'ORDRE en attente (BUY/SELL LIMIT/STOP) tant que
+    # anchor_status == "PENDING" -- distinct de anchor_ticket (qui, lui, ne
+    # designe jamais qu'une POSITION reellement ouverte). Redevient None des
+    # que l'ordre est declenche (anchor_status -> OPEN) ou annule/expire
+    # (anchor_status -> CLOSED/FAILED).
+    anchor_status: str = "NONE"  # NONE | PENDING | OPEN | FAILED | CLOSED --
+    # PENDING (task #170) : un ordre en attente a ete pose au prix ideal de la
+    # zone (anchor_plan["entry"]) plutot qu'une entree au marche, quand le prix
+    # courant s'est trop eloigne de cette zone au moment de l'activation. Une
+    # seule tentative d'ouverture par scenario, jamais retentee en boucle (voir
     # execute_scenario_anchor() dans alphatrade_engine.py)
     executed_scalp_count: int = 0  # nb de VRAIS scalps executes -- distinct de
     # simulated_scalp_count (detection pure, inchange, sert toujours au
@@ -190,6 +199,7 @@ class Scenario:
             "outcome": self.outcome,
             "outcome_profit": self.outcome_profit,
             "anchor_ticket": self.anchor_ticket,
+            "pending_order_ticket": self.pending_order_ticket,
             "anchor_status": self.anchor_status,
             "executed_scalp_count": self.executed_scalp_count,
             "last_scalp_executed_at": self.last_scalp_executed_at,
