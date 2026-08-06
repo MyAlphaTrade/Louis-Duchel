@@ -403,8 +403,14 @@ def test_scenario_learning_stats_computes_winrate_per_bucket():
     )
     stats = scenario_learning_stats(entries, min_samples=20)
     assert stats["n_resolved"] == 40
-    assert stats["by_session"]["london"] == {"samples": 20, "winrate": 90.0}
-    assert stats["by_session"]["asian"] == {"samples": 20, "winrate": 0.0}
+    # avg_profit ajoute le 05/08/2026 (extension calibration reelle des seuils,
+    # voir scenario_learning_stats()) -- ce test comparait encore l'ancienne
+    # forme sans ce champ, jamais mis a jour depuis (bug trouve le 06/08/2026,
+    # flagge et corrige par Louis). _resolved_entry() ne fournit pas
+    # outcome_profit -- avg_profit reste donc None ici (aucune donnee de
+    # profit disponible) ; ce test se concentre sur samples/winrate.
+    assert stats["by_session"]["london"] == {"samples": 20, "winrate": 90.0, "avg_profit": None}
+    assert stats["by_session"]["asian"] == {"samples": 20, "winrate": 0.0, "avg_profit": None}
     print("test_scenario_learning_stats_computes_winrate_per_bucket OK")
 
 
