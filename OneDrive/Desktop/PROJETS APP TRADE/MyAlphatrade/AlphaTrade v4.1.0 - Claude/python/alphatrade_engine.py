@@ -373,6 +373,17 @@ DEFAULT_PARAMS = {
             "max_hold_sec": 2700,  # 45min -- time stop universel (positions perdantes incluses), voir position_exit_reason()
             "position_review_sec": 300,
             "profit_target": 5.00,
+            # 06/08/2026 -- demande de Louis ("un edge tres solide", point 4,
+            # suite au Finding 1 de l'audit du soir : 3712 trades, 84.8% de
+            # GAGNANTS mais -8454$ net -- perte moyenne ~51$ contre gain
+            # moyen ~6.50$, un ratio ~8x). Un plafond deconnecte de
+            # max_position_loss (ex: 100$ regle manuellement pendant
+            # l'incident, pour un profit_target de 3$) rend cette asymetrie
+            # possible meme quand l'IA a raison la plupart du temps. 3.0 =
+            # aucune perte ne peut structurellement depasser 3x l'objectif
+            # de gain du mode actif -- large marge meme a 50% de reussite,
+            # confortable a 85%. Voir position_exit_reason().
+            "max_loss_to_target_ratio": 3.0,
             "momentum_exit_score": 55,
             "emergency_loss_limit": 50.00,
             "min_positive_exit": 0.50,
@@ -873,13 +884,24 @@ def log_scenario_event(scenario: Scenario, log_name: str = "scenario_log.jsonl")
 
 
 def merge_params() -> dict:
+    """06/08/2026 -- bug trouve en observation reelle (demande de Louis :
+    "les parametres manuels ne doivent plus intervenir dans le calcul
+    intelligent de l'IA") : un `null` JSON explicite pour une cle deja
+    presente dans params.json ecrasait silencieusement la valeur par
+    defaut de DEFAULT_PARAMS (ex: trading_style_auto_apply_enabled=null a
+    desactive l'auto-application du Trading Style Engine sans qu'aucun
+    "false" explicite n'ait jamais ete choisi). Desormais, une valeur
+    `None` sauvegardee ne remplace JAMAIS le defaut -- seule une vraie
+    valeur (y compris `False` explicite, qui reste respecte) le peut."""
     saved = _cached_params_json()
     merged = json.loads(json.dumps(DEFAULT_PARAMS))
     for key, value in saved.items():
+        if value is None:
+            continue  # jamais laisser un null residuel ecraser silencieusement le defaut
         if key == "symbols" and isinstance(value, dict):
             for sym, sym_params in value.items():
                 if sym in merged["symbols"] and isinstance(sym_params, dict):
-                    merged["symbols"][sym].update(sym_params)
+                    merged["symbols"][sym].update({k: v for k, v in sym_params.items() if v is not None})
         else:
             merged[key] = value
     if not (DATA_DIR / "params.json").exists():
@@ -887,24 +909,49 @@ def merge_params() -> dict:
     return merged
 
 
+def apply_strategy_mode_if_changed(mode: str) -> None:
+    """06/08/2026 -- root cause reelle trouvee en verifiant EN EXECUTANT
+    le code (pas juste en le lisant) apres la plainte de Louis ("le manuel
+    impacte sur l'intelligence, comment se fait-il que je dois encore
+    parametrer des choses manuelles"). L'ancienne heuristique de
+    effective_params_for_strategy() ("appliquer le profil seulement si la
+    valeur sauvegardee == la valeur de base DEFAULT_PARAMS") ne distingue
+    PAS "l'utilisateur a vraiment choisi cette valeur" de "un PRECEDENT
+    changement de mode l'a laissee la" -- des qu'un premier profil s'est
+    applique une fois (ex: scalping_fast: confidence_min=55), cette valeur
+    ne correspond plus au defaut de base (60) et devient donc PERMANENTE,
+    meme apres avoir choisi un autre mode. Verifie concretement : passer a
+    "long_analysis" faisait bien passer le timeframe a M15 (coincidence :
+    M5 == defaut de base) mais confidence_min/profit_target/cadence_sec/
+    max_hold_sec/position_review_sec restaient tous bloques sur les
+    valeurs de scalping_fast -- un mode "intraday" qui gardait en realite
+    le comportement de scalping partout sauf le timeframe.
+
+    Correction : persiste quel mode a ete REELLEMENT applique en dernier
+    (`_last_applied_strategy_mode` dans params.json). Des que `mode`
+    differe de cette marque, le profil ENTIER est reecrit dans params.json
+    (ecrase vraiment, pas une preference) et la marque est mise a jour --
+    tant que le mode ne change pas, les ajustements manuels faits ENTRE
+    deux changements de mode restent respectes normalement."""
+    saved = read_json("params.json", {}) or {}
+    if saved.get("_last_applied_strategy_mode") == mode:
+        return
+    profile = STRATEGY_PROFILES.get(mode, STRATEGY_PROFILES["scalping_fast"])
+    for key, value in profile.get("global", {}).items():
+        saved[key] = value
+    saved.setdefault("symbols", {})
+    for symbol_key, overrides in profile.get("symbols", {}).items():
+        saved["symbols"].setdefault(symbol_key, {})
+        saved["symbols"][symbol_key].update(overrides)
+    saved["_last_applied_strategy_mode"] = mode
+    write_json("params.json", saved)
+    log(f"Mode de strategie change -> {profile.get('label', mode)}: profil complet reapplique.", "SUCCESS")
+
+
 def effective_params_for_strategy(params: dict) -> dict:
     effective = json.loads(json.dumps(params))
     mode = str(effective.get("strategy_mode") or "scalping_fast")
     profile = STRATEGY_PROFILES.get(mode, STRATEGY_PROFILES["scalping_fast"])
-    saved = _cached_params_json()
-    for key, value in profile.get("global", {}).items():
-        # Ne pas écraser si l'utilisateur a explicitement défini la valeur
-        if key not in saved:
-            effective[key] = value
-    for symbol_key, overrides in profile.get("symbols", {}).items():
-        if symbol_key in effective.get("symbols", {}):
-            saved_sym = saved.get("symbols", {}).get(symbol_key, {})
-            for k, v in overrides.items():
-                # Appliquer le profil si: clé absente OU valeur encore égale au défaut
-                # (valeur changée par l'utilisateur → préservée)
-                default_val = DEFAULT_PARAMS.get("symbols", {}).get(symbol_key, {}).get(k)
-                if k not in saved_sym or saved_sym.get(k) == default_val:
-                    effective["symbols"][symbol_key][k] = v
     effective["strategy_profile"] = {
         "key": mode,
         "label": profile.get("label", mode),
@@ -2321,6 +2368,19 @@ _LOT_SIZING_ATR_CACHE: dict[str, tuple[float, float]] = {}
 _LOT_SIZING_ATR_TTL_SEC = 30.0
 
 
+def compute_risk_budget(balance: float, risk_pct: float) -> float:
+    """06/08/2026 -- extrait de lot_safety_state() pour etre partage avec
+    position_exit_reason() (demande de Louis : "un edge tres solide" /
+    correctif du residu trouve sur le trade a -20$ en 45s meme apres le fix
+    ATR -- le lot etait sain mais le seuil de protection en temps reel
+    restait un chiffre fixe deconnecte). risk_budget represente "combien de
+    $ ce compte accepte de perdre sur UNE position" -- la meme grandeur des
+    deux cotes (dimensionnement du lot ET seuil de protection), jamais
+    dupliquee avec un calcul legerement different."""
+    effective_risk_pct = min(max(0.0, float(risk_pct)), HARD_RISK_PCT_CAP)
+    return max(0.0, float(balance) * effective_risk_pct / 100)
+
+
 def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dict:
     """05-06/08/2026 -- lot calcule PUREMENT depuis le capital et le risque
     (capital x risk_pct / distance de stop), exactement comme AlphaTrade
@@ -2341,11 +2401,8 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
     sont pas des leviers de decision, juste ce que MT5 accepte."""
     is_demo = bool(account and ("demo" in str(account.server).lower() or int(account.trade_mode) == 0))
     balance = float(account.balance) if account else 0.0
-    effective_risk_pct = min(
-        max(0.0, float(params.get("risk_pct", 0.35))),
-        HARD_RISK_PCT_CAP,
-    )
-    risk_budget = max(0.0, balance * effective_risk_pct / 100)
+    effective_risk_pct = min(max(0.0, float(params.get("risk_pct", 0.35))), HARD_RISK_PCT_CAP)
+    risk_budget = compute_risk_budget(balance, float(params.get("risk_pct", 0.35)))
     result = {}
     for key, symbol_params in params.get("symbols", {}).items():
         requested_min = max(0.0, float(symbol_params.get("lot_min", 0)))
@@ -3814,7 +3871,19 @@ def position_exit_reason(
     session_state_name: str,
     peak: float,
     age: float,
+    risk_budget: float | None = None,
 ) -> str:
+    """`risk_budget` (06/08/2026, correctif du residu trouve sur un vrai
+    trade a -20$ ferme en 45s malgre le fix ATR du lot -- demande de Louis :
+    "un edge tres solide") : le lot d'une position est desormais dimensionne
+    depuis risk_budget (voir lot_safety_state()/compute_risk_budget()), mais
+    max_position_loss restait un chiffre fixe totalement deconnecte de ce
+    calcul -- assez petit pour etre atteint par du bruit de marche normal
+    sur un lot pourtant sainement dimensionne. Le seuil REELLEMENT applique
+    ne peut desormais jamais etre plus strict que risk_budget : la position
+    a droit a AU MOINS ce qu'elle a ete dimensionnee pour tolerer. None
+    (defaut, tout appelant existant/tests) preserve exactement l'ancien
+    comportement -- aucune regression."""
     profit = float(position.get("profit") or 0)
     review_sec = max(30, int(pos_params.get("position_review_sec", 120)))
     opposite = "SELL" if position.get("direction") == "BUY" else "BUY"
@@ -3826,6 +3895,26 @@ def position_exit_reason(
     )
     rebond_enabled = bool(pos_params.get("rebond_enabled", False))
     max_position_loss = float(pos_params.get("max_position_loss", 0) or 0)
+    if risk_budget is not None and risk_budget > 0:
+        max_position_loss = max(max_position_loss, risk_budget)
+    # 06/08/2026 -- plafond perte/gain (demande de Louis, "un edge tres
+    # solide" point 4, Finding 1 de l'audit du soir : 84.8% de trades
+    # gagnants mais -8454$ net -- perte moyenne ~8x le gain moyen). Aucune
+    # perte ne peut structurellement depasser max_loss_to_target_ratio fois
+    # l'objectif de gain du mode actif, quel que soit max_position_loss
+    # configure/appris/regle manuellement (ex: 100$ regle en urgence ce
+    # soir pour un profit_target de 3$ -- exactement le genre d'asymetrie
+    # que ce plafond empeche desormais). S'applique APRES le plancher
+    # risk_budget ci-dessus : le plafond gagne toujours en cas de conflit,
+    # c'est la garantie non-negociable.
+    profit_target = float(pos_params.get("profit_target", 0) or 0)
+    # Pas de "or 3.0" ici : 0 est une vraie valeur (desactive volontairement
+    # le plafond), pas juste "absent" -- meme piege que celui corrige dans
+    # merge_params() ce soir, evite de le reintroduire ici.
+    loss_ratio_raw = pos_params.get("max_loss_to_target_ratio")
+    loss_ratio = float(loss_ratio_raw) if loss_ratio_raw is not None else 3.0
+    if profit_target > 0 and loss_ratio > 0:
+        max_position_loss = min(max_position_loss, profit_target * loss_ratio) if max_position_loss > 0 else max_position_loss
 
     # Protection catastrophe sur retournement de signal — vérifiée AVANT le
     # plafond brutal (MAX_POSITION_LOSS) pour qu'elle ait réellement une
@@ -5992,6 +6081,7 @@ def auto_trade_step(
                 str(payload.get("session_access", {}).get(position.get("symbol_key"), {}).get("state") or ""),
                 peak,
                 age,
+                risk_budget=compute_risk_budget(float(account.balance) if account else 0.0, float(params.get("risk_pct", 0.35))),
             )
         if close_reason:
             ok, message = close_bot_position(position, close_reason)
@@ -6704,6 +6794,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     log(f"AlphaTrade engine v{VERSION} - data: {DATA_DIR}")
+    apply_strategy_mode_if_changed(str((read_json("params.json", {}) or {}).get("strategy_mode") or "scalping_fast"))
     params = effective_params_for_strategy(merge_params())
 
     if args.learn:
@@ -6801,6 +6892,11 @@ def main() -> int:
     last_command_timestamp = int((read_json("command.json", {}) or {}).get("timestamp") or 0)
     trades: list[dict] = []
     while True:
+        # 06/08/2026 -- verifie a chaque cycle si le mode a change depuis la
+        # derniere fois (ex: bascule faite dans l'UI pendant que le moteur
+        # tourne) -- voir apply_strategy_mode_if_changed(). Ne coute qu'une
+        # lecture JSON quand rien n'a change (return immediat).
+        apply_strategy_mode_if_changed(str((read_json("params.json", {}) or {}).get("strategy_mode") or "scalping_fast"))
         params = effective_params_for_strategy(merge_params())
         cmd = read_json("command.json", {}) or {}
         command_timestamp = int(cmd.get("timestamp") or 0)
