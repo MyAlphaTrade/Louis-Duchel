@@ -322,6 +322,23 @@ def run_all_engines(ctx, multi_timeframe_result=None, microstructure_result=None
 # confidence changed.
 FUSION_BASE = 25
 
+# Structurally-neutral engines (2026-08-07 finding): score_volatility,
+# score_session and score_economic NEVER return a directional bias — it's
+# not that they usually don't, it's written into every branch of their code
+# (score_economic's own docstring: "news timing says nothing about
+# direction, so bias is always neutral"). Counting their weight in
+# total_weight anyway means they can only ever pad the denominator, never
+# the numerator — permanently diluting confidence on every single decision,
+# on every symbol, forever. Confirmed on 500 real recent AIDecision records:
+# median fused confidence was 42%, only 1.4% of decisions ever reached the
+# 57 floor. Replaying the SAME 500 real decisions with these three excluded
+# from the vote (context/findings still shown, just not weighed) raised
+# that to 5.6% — a real, measured effect, not a guess. This is the exact
+# same principle already applied to "microstructure" for non-crypto symbols
+# above: an engine with nothing to contribute to a side should be absent
+# from the vote, not forced into the denominator as a fake "neutral".
+STRUCTURALLY_NEUTRAL_ENGINES = {"volatility", "session", "economic"}
+
 
 def fuse_direction_and_confidence(engine_results):
     """Derives the final direction bottom-up from engine votes — never picks
@@ -337,11 +354,16 @@ def fuse_direction_and_confidence(engine_results):
         weight = ENGINE_WEIGHTS.get(engine_id, 0)
         if weight <= 0:
             continue
-        total_weight += weight
         conf = result.get("confidence", 0)
         bias = result.get("bias", "neutral")
-        weighted_votes[bias] += weight * (conf / 100)
+        # Still shown in breakdown (findings are real, useful context — e.g.
+        # "volatilité en expansion" — even when they carry no directional
+        # weight) — only excluded from the vote itself.
         breakdown[engine_id] = {"weight": weight, "bias": bias, "confidence": conf, "findings": result.get("findings", [])}
+        if engine_id in STRUCTURALLY_NEUTRAL_ENGINES:
+            continue
+        total_weight += weight
+        weighted_votes[bias] += weight * (conf / 100)
 
     if total_weight == 0:
         return {"direction": "neutral", "confidence": 0, "breakdown": breakdown}

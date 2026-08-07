@@ -37,15 +37,37 @@ ACTION_TIERS = [
     (0, "none", "Aucune action"),
 ]
 
-# Below this, force WAIT regardless of direction. Was 60, dropped to 57
-# after a real 90-day XAUUSD H1 replay (see Audit/Replay_Reel_XAUUSD_...)
-# showed the new fusion formula (FUSION_BASE, engine_scoring.py) crossing 60
-# only 0.36x/day — not enough to ever reliably hit a daily goal. Sweeping
-# the floor on the same real data: 57 -> ~1.18 trades/day at 63.5% win rate
-# (vs 60 -> 0.36/day at 71.9%; 55 -> 1.90/day at 56.3%). 57 was chosen as
-# the point closest to "at least one opportunity per day" without falling
-# into the range where win rate drops below ~60%.
-CONFIDENCE_FLOOR = 57
+# Below this, force WAIT regardless of direction. Raised 57 -> 60 on
+# 2026-08-07, recalibrated against the REAL 3-asset live watchlist
+# (XAUUSD/BTCUSD/ETHUSD) using fusion_backtest.py, right after fixing a
+# real dilution bug in engine_scoring.py (volatility/session/economic —
+# three engines that never vote a direction by design — were still
+# counted in the fusion's denominator, permanently capping confidence).
+# That fix alone raised every engine's effective confidence, which
+# silently changed what "57" meant — the old value was calibrated against
+# the pre-fix, more diluted distribution.
+#
+# Full 90-day real sweep post-fix (profit factor / total PnL per asset):
+#   floor   XAUUSD PF   BTCUSD PF   ETHUSD PF   combined PnL (5000$ each)
+#   57      1.32        0.85 (!)    1.04        +160$   <- BTCUSD LOSES money
+#   60      1.10        1.20        1.24        +876$   <- all three >= 1.10
+#   63      2.80        1.05        1.17        +1388$  <- best $, but only
+#                                                            because XAUUSD alone
+#                                                            carries BTC/ETH,
+#                                                            both under the 1.2
+#                                                            validation threshold
+#   66      1.70        0.81 (!)    1.55        +433$
+#   69      8.46 (n=6)  0.33 (!)    1.20        +256$
+#
+# 60 chosen over 63 deliberately: it's the only floor where all three
+# actively-traded assets are individually sound (PF >= 1.10, two >= 1.20),
+# not just the aggregate propped up by XAUUSD's outsized edge — a
+# portfolio that only works because one asset carries the other two is a
+# concentration risk, not "well-tuned". This is a single GLOBAL threshold
+# shared by every symbol; it is a compromise across the current watchlist,
+# not a per-asset optimum — any newly added asset should be re-validated
+# with fusion_backtest.py before being trusted against this same floor.
+CONFIDENCE_FLOOR = 60
 
 
 def _tier_for(confidence):
