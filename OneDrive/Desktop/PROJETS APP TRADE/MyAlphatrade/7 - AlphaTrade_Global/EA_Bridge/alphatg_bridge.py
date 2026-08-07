@@ -57,6 +57,7 @@ import local_functions
 import hyperliquid_connector
 import global_market_intelligence
 import portfolio_risk
+import asset_validation
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -891,6 +892,62 @@ def start_position_manager():
     _position_manager_thread = threading.Thread(target=_position_manager_loop, daemon=True)
     _position_manager_thread.start()
 
+
+# ── Asset Validation (Auto Optimization Lab, 2026-08-07) ──────────────
+# Runs fusion_backtest.py automatically — on adding an asset to the active
+# watchlist, and periodically afterward — instead of requiring someone to
+# launch it by hand. One worker processes one symbol at a time (each real
+# validation takes minutes; queuing avoids piling up concurrent MT5-heavy
+# backtests). Never removes an asset itself — see asset_validation.py's
+# module docstring for why.
+_asset_validation_queue = queue.Queue()
+ASSET_REVALIDATION_CHECK_INTERVAL_SEC = 3600  # how often to check what's due, not how often anything actually re-runs (see asset_validation.ASSET_REVALIDATION_INTERVAL_DAYS)
+
+
+def _enqueue_asset_validation(symbol):
+    log.info("[ASSET_VALIDATION] %s mis en file pour validation automatique", symbol)
+    _asset_validation_queue.put(symbol)
+
+
+def _asset_validation_worker():
+    while True:
+        symbol = _asset_validation_queue.get()
+        try:
+            params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+            params = params_list[0] if params_list else {}
+            snap = get_account_snapshot()
+            capital = (snap.get("equity") if snap else None) or params.get("capital") or 1000
+            risk_percent = params.get("max_risk_percent") or 1
+            log.info("[ASSET_VALIDATION] Démarrage de la validation de %s (capital=%.2f, risk=%.2f%%)...", symbol, capital, risk_percent)
+            result = asset_validation.validate_asset(symbol, fetch_candles_direct, capital=capital, risk_percent=risk_percent)
+            log.info("[ASSET_VALIDATION] %s -> %s", symbol, "passed" if result.get("passed") else result.get("error") or "failed")
+        except Exception as e:
+            log.warning("[ASSET_VALIDATION] Échec inattendu pour %s: %s", symbol, e)
+        finally:
+            _asset_validation_queue.task_done()
+
+
+def start_asset_validation_worker():
+    threading.Thread(target=_asset_validation_worker, daemon=True).start()
+
+
+def _asset_revalidation_scheduler_loop():
+    """Checks hourly which active watchlist assets haven't been validated
+    in ASSET_REVALIDATION_INTERVAL_DAYS and enqueues them — the actual
+    heavy work stays in the worker above, one at a time."""
+    while True:
+        try:
+            if _connection["initialized"]:
+                for symbol in asset_validation.assets_due_for_revalidation():
+                    _enqueue_asset_validation(symbol)
+        except Exception as e:
+            log.warning("[ASSET_VALIDATION] scheduler error: %s", e)
+        time.sleep(ASSET_REVALIDATION_CHECK_INTERVAL_SEC)
+
+
+def start_asset_revalidation_scheduler():
+    threading.Thread(target=_asset_revalidation_scheduler_loop, daemon=True).start()
+
 # ── SSE stream endpoint ──────────────────────────────────────────
 
 @app.route("/stream", methods=["GET"])
@@ -1688,7 +1745,13 @@ def auth_reset_password():
 def entities_collection(entity_type):
     if request.method == "POST":
         data = request.json or {}
-        return jsonify(local_store.create_entity(entity_type, data))
+        record = local_store.create_entity(entity_type, data)
+        # Auto Optimization Lab (2026-08-07): adding a symbol to the active
+        # watchlist queues a real fusion_backtest validation automatically —
+        # no more "add it and hope", see asset_validation.py.
+        if entity_type == "Asset" and record.get("symbol"):
+            _enqueue_asset_validation(record["symbol"])
+        return jsonify(record)
 
     query = None
     raw_filter = request.args.get("filter")
@@ -1878,5 +1941,12 @@ if __name__ == "__main__":
             time.sleep(CRYPTO_INTEL_INTERVAL_SEC)
 
     threading.Thread(target=collect_crypto_intelligence_loop, daemon=True).start()
+
+    # Auto Optimization Lab (2026-08-07): worker starts immediately (it just
+    # blocks on an empty queue until something needs validating — harmless
+    # without MT5) ; the scheduler itself checks _connection["initialized"]
+    # before doing anything, same pattern as the crypto loop above.
+    start_asset_validation_worker()
+    start_asset_revalidation_scheduler()
 
     app.run(host=host, port=port, debug=False, threaded=True)
