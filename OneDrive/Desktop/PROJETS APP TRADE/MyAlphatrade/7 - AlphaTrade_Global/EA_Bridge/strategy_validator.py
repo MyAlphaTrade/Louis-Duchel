@@ -19,12 +19,14 @@ DEFAULT_THRESHOLDS = {
 }
 
 
-def validate_strategy(candles, strategy_name, symbol, capital, risk_percent, thresholds=None):
-    thresholds = thresholds or DEFAULT_THRESHOLDS
-    result = run_backtest(candles, strategy_name, {"symbol": symbol, "capital": capital, "risk_percent": risk_percent})
-    stats = result["stats"]
+def _evaluate_stats(stats, thresholds):
+    """Shared pass/fail evaluation — used both for the 4 standalone coded
+    strategies below and for a full fusion-engine backtest result (see
+    fusion_backtest.py / validate_fusion_backtest), so the same bar applies
+    to both: no strategy or configuration earns a place in production on
+    anything looser than these numbers, regardless of which layer it's
+    validating."""
     reasons = []
-
     if stats["total_trades"] < thresholds["min_trades"]:
         reasons.append(f"Pas assez de trades pour être statistiquement significatif ({stats['total_trades']} < {thresholds['min_trades']})")
     if stats["profit_factor"] < thresholds["min_profit_factor"]:
@@ -33,12 +35,38 @@ def validate_strategy(candles, strategy_name, symbol, capital, risk_percent, thr
         reasons.append(f"Taux de réussite insuffisant ({stats['win_rate']}% < {thresholds['min_win_rate']}%)")
     if stats["max_drawdown"] > thresholds["max_drawdown"]:
         reasons.append(f"Drawdown maximum trop élevé ({stats['max_drawdown']}% > {thresholds['max_drawdown']}%)")
-
     passed = len(reasons) == 0
     if passed:
         reasons.append(f"Validée : profit factor {stats['profit_factor']}, {stats['total_trades']} trades, drawdown max {stats['max_drawdown']}%")
+    return passed, reasons
 
+
+def validate_strategy(candles, strategy_name, symbol, capital, risk_percent, thresholds=None):
+    thresholds = thresholds or DEFAULT_THRESHOLDS
+    result = run_backtest(candles, strategy_name, {"symbol": symbol, "capital": capital, "risk_percent": risk_percent})
+    stats = result["stats"]
+    passed, reasons = _evaluate_stats(stats, thresholds)
     return {"strategy_name": strategy_name, "passed": passed, "stats": stats, "reasons": reasons}
+
+
+def validate_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=None,
+                              capital=1000, risk_percent=1, thresholds=None):
+    """Same pass/fail bar as the 4 standalone strategies, applied to the
+    REAL production decision engine (market_brain's 13-engine fusion) via
+    fusion_backtest.run_fusion_backtest() — Module 5, Fusion Engine
+    Validation. This is what Auto Optimization Lab (Module 4) will check a
+    candidate configuration against before letting it anywhere near a real
+    account: nothing enters production on a result this function marks
+    passed=False."""
+    from fusion_backtest import run_fusion_backtest
+
+    thresholds = thresholds or DEFAULT_THRESHOLDS
+    result = run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=mtf_candles,
+                                  capital=capital, risk_percent=risk_percent)
+    stats = result["stats"]
+    passed, reasons = _evaluate_stats(stats, thresholds)
+    return {"symbol": symbol, "timeframe": primary_timeframe, "passed": passed, "stats": stats,
+            "reasons": reasons, "trades": result["trades"]}
 
 
 def validate_all_strategies(candles, symbol, capital, risk_percent, thresholds=None):

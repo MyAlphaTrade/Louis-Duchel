@@ -227,17 +227,30 @@ def compute_stats(trades, capital):
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, ((peak - equity) / peak) * 100)
 
+    win_rate_frac = (len(wins) / len(trades)) if trades else 0
+    avg_win = (gross_win / len(wins)) if wins else 0
+    avg_loss = (-gross_loss / len(losses)) if losses else 0
+    # Expectancy — the real-world question profit factor and win rate don't
+    # answer on their own: "on average, how much does one trade of this
+    # system actually make or lose?" A system can have a flattering win
+    # rate and still have negative expectancy if losses are large enough,
+    # or a low win rate and strongly positive expectancy if wins are big
+    # enough (Module 5, Fusion Engine Validation, 2026-08-06).
+    expectancy = win_rate_frac * avg_win + (1 - win_rate_frac) * avg_loss
+
     return {
         "total_trades": len(trades),
         "wins": len(wins),
         "losses": len(losses),
-        "win_rate": round((len(wins) / len(trades)) * 1000) / 10 if trades else 0,
+        "win_rate": round(win_rate_frac * 1000) / 10,
         "total_pnl": round(total_pnl * 100) / 100,
         "total_pnl_percent": round((total_pnl / capital) * 10000) / 100,
         "max_drawdown": round(max_drawdown * 100) / 100,
         "profit_factor": (round((gross_win / gross_loss) * 100) / 100) if gross_loss > 0 else (float("inf") if gross_win > 0 else 0),
-        "avg_win": round((gross_win / len(wins)) * 100) / 100 if wins else 0,
-        "avg_loss": round((-gross_loss / len(losses)) * 100) / 100 if losses else 0,
+        "avg_win": round(avg_win * 100) / 100,
+        "avg_loss": round(avg_loss * 100) / 100,
+        "expectancy": round(expectancy * 100) / 100,
+        "expectancy_percent": round((expectancy / capital) * 10000) / 100 if capital else 0,
         "best_trade": max((t["pnl"] for t in trades), default=0),
         "worst_trade": min((t["pnl"] for t in trades), default=0),
     }
