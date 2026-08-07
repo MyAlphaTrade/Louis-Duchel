@@ -19,12 +19,47 @@ uses, plus the common Mongo-style set for forward compatibility):
 import json
 import os
 import secrets
+import shutil
 import sqlite3
 import threading
 from datetime import datetime, timezone
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(_SCRIPT_DIR, "alphatg_local.db")
+
+# Persistent data directory (Task #82, 2026-08-07) — the bridge used to
+# always store alphatg_local.db (and bridge_api_key.txt, see
+# alphatg_bridge.py) right next to its own script, which for the packaged
+# desktop app means resources/app/bridge/: wiped and recreated by every
+# reinstall/update, silently resetting every trade, setting, and the API
+# key. BRIDGE_DATA_DIR lets the Electron launcher point this at a real
+# persistent location (app.getPath('userData')) instead — unset, this is
+# byte-for-byte the old behavior (dev/test runs, or an app build that
+# hasn't been updated to set it yet), so nothing breaks for anyone not
+# using it. DATA_DIR may not exist yet on a brand new install of a
+# persistent location — create it eagerly.
+DATA_DIR = os.environ.get("BRIDGE_DATA_DIR") or _SCRIPT_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def migrate_legacy_file(filename):
+    """One-time migration for an existing install upgrading onto a real
+    BRIDGE_DATA_DIR for the first time: if the persistent location doesn't
+    have `filename` yet but the old script-relative location does, copy it
+    over so existing data survives instead of silently resetting. Copies
+    (never moves) — the old file is harmless leftover, not a risk, and
+    leaving it in place costs nothing while a bug in this one-time step
+    would otherwise destroy the only copy. No-op when BRIDGE_DATA_DIR
+    isn't set (DATA_DIR == _SCRIPT_DIR, nothing actually changed)."""
+    if DATA_DIR == _SCRIPT_DIR:
+        return
+    new_path = os.path.join(DATA_DIR, filename)
+    old_path = os.path.join(_SCRIPT_DIR, filename)
+    if not os.path.exists(new_path) and os.path.exists(old_path):
+        shutil.copy2(old_path, new_path)
+
+
+DB_PATH = os.path.join(DATA_DIR, "alphatg_local.db")
+migrate_legacy_file("alphatg_local.db")
 
 _lock = threading.Lock()
 _conn = sqlite3.connect(DB_PATH, check_same_thread=False)

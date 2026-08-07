@@ -123,8 +123,11 @@ def add_pna_headers(resp):
     return resp
 
 # ── API Key management ───────────────────────────────────────────
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_KEY_FILE = os.path.join(_SCRIPT_DIR, "bridge_api_key.txt")
+# Same persistent directory as the entity DB (Task #82) — travels together
+# with alphatg_local.db so a real BRIDGE_DATA_DIR protects both, and a
+# pre-existing key survives the upgrade via the same one-time migration.
+_KEY_FILE = os.path.join(os.path.dirname(local_store.DB_PATH), "bridge_api_key.txt")
+local_store.migrate_legacy_file("bridge_api_key.txt")
 
 
 def load_or_create_api_key():
@@ -227,6 +230,15 @@ def detect_mt5_terminal():
 
     log.warning("MT5 terminal not found in standard locations.")
     return None
+
+# Magic number stamped on every order Global itself sends (all 4 order
+# routes below) — the same value an MT5 EA would use to tag its own
+# trades. Doubles as the trade-origin signal for _get_recent_trades():
+# a closed deal carrying this magic came from Global's own autonomous/
+# manual-in-app execution; anything else (0, or a different EA's magic)
+# was placed outside the app (MT5 terminal directly, another EA, a
+# manual order on the broker's mobile app, etc.) — see Task #82.
+GLOBAL_MAGIC_NUMBER = 234000
 
 # ── MT5 auto-connection ──────────────────────────────────────────
 _connection = {"initialized": False, "account_type": None, "login": None, "instance_lock_acquired": False}
@@ -768,6 +780,23 @@ def _get_recent_trades(from_str=None, to_str=None):
         else:
             continue
         ref = entry or exit_deal
+        # Origin classification (Task #82) — magic/comment come from the
+        # ENTRY deal (the order that actually opened the position); a
+        # position with no entry deal in this window (opened before the
+        # lookback range) falls back to the exit deal's own magic, which
+        # MT5 still carries even for a deal that only closes a position.
+        # magic==0 is MT5's own convention for a manually-placed order (the
+        # terminal never sets one on its own; only an EA/bot does) — the
+        # same 3-way split "Global IA / externe / manuel" already used by
+        # AlphaTrade Gold, not something invented here.
+        magic = getattr(ref, "magic", 0) or 0
+        comment = getattr(ref, "comment", "") or ""
+        if magic == GLOBAL_MAGIC_NUMBER:
+            origin = "global_ia"
+        elif magic == 0:
+            origin = "manual"
+        else:
+            origin = "external"
         trades.append({
             "id": str(pid),
             "ticket_mt5": str(pid),
@@ -780,6 +809,9 @@ def _get_recent_trades(from_str=None, to_str=None):
             "pnl": round(total_profit, 2),
             "opened_at": datetime.fromtimestamp(entry.time).isoformat() if entry else None,
             "closed_at": datetime.fromtimestamp(exit_deal.time).isoformat() if exit_deal else None,
+            "magic": magic,
+            "comment": comment,
+            "origin": origin,
         })
     trades.sort(key=lambda t: t.get("closed_at") or t.get("opened_at") or "", reverse=True)
     return trades
@@ -1183,7 +1215,7 @@ def send_order():
         "sl": adjusted_sl,
         "tp": adjusted_tp,
         "deviation": 20,
-        "magic": 234000,
+        "magic": GLOBAL_MAGIC_NUMBER,
         "comment": "AT Global",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": filling_const_val,
@@ -1354,7 +1386,7 @@ def send_pending_order():
         "sl": stops["sl"],
         "tp": stops["tp"],
         "deviation": 20,
-        "magic": 234000,
+        "magic": GLOBAL_MAGIC_NUMBER,
         "comment": "AT Global",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": filling_const_val,
@@ -1679,7 +1711,7 @@ def close_position_direct(ticket, volume=None):
         "position": ticket,
         "price": price,
         "deviation": 20,
-        "magic": 234000,
+        "magic": GLOBAL_MAGIC_NUMBER,
         "comment": "AT Global — Close",
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": filling_const_val,
@@ -1740,7 +1772,7 @@ def modify_position_direct(ticket, stop_loss=None, take_profit=None):
         "position": ticket,
         "sl": new_sl,
         "tp": new_tp,
-        "magic": 234000,
+        "magic": GLOBAL_MAGIC_NUMBER,
     }
     result = mt5.order_send(request_data)
 
