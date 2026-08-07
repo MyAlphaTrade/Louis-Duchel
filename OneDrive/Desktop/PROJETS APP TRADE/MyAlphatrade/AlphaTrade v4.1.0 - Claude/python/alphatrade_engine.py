@@ -31,10 +31,13 @@ from scenario_generator import (
     generate_scenario, validate_scenario, evaluate_scenario_health, evaluate_scalp_opportunity,
     scenario_learning_stats, scenario_weight_adjustments, scenario_threshold_adjustments,
     scalp_learning_stats, scalp_threshold_adjustments,
-    SCENARIO_WEIGHTS, volatility_score, simple_atr,
+    SCENARIO_WEIGHTS, volatility_score, simple_atr, split_entries_chronologically,
 )
 from trading_style_engine import recommend_trading_style
-from engine_decision import fuse_agent_reports, build_decision_registry_entry
+from engine_decision import (
+    fuse_agent_reports, build_decision_registry_entry,
+    compute_agent_reliability_weights, label_decision_outcomes,
+)
 from portfolio_brain import (
     basket_exposure, portfolio_risk_assessment, floating_loss_learning_stats, floating_loss_threshold_adjustments,
 )
@@ -266,6 +269,12 @@ DEFAULT_PARAMS = {
     # (comparaison au vrai resultat du pipeline actuel, sur plusieurs
     # centaines de decisions avant toute execution reelle) reste a cabler.
     "engine_decision_enabled": False,
+    # 06/08/2026, demande de Louis ("un edge tres solide", point 3) -- nombre
+    # minimum de decisions liees a un scenario reellement resolu avant que
+    # compute_agent_reliability_weights() s'ecarte du poids egal par defaut.
+    # Meme valeur que scenario_learning_min_samples (coherence), voir
+    # calibrate_decision_engine_weights().
+    "decision_engine_learning_min_samples": 20,
     # v5.1.1 -- 05/08/2026, activation reelle demandee explicitement par
     # Louis (section 2/3 : "plus rien ne doit rester en simulation"). Quand
     # actif, une recommandation qui diverge du mode courant est vraiment
@@ -816,6 +825,28 @@ def load_scenario_weights() -> dict[str, float]:
     except Exception as exc:  # noqa: BLE001 -- calibration optionnelle, ne doit jamais casser le cycle
         log(f"Scenario Learning: lecture scenario_learned_weights.json echouee ({exc}), poids par defaut utilises.", "WARNING")
         return SCENARIO_WEIGHTS
+
+
+def load_decision_engine_weights() -> dict[str, float] | None:
+    """06/08/2026, demande de Louis ("un edge tres solide", point 3) -- meme
+    pattern que load_scenario_weights(), mais None (pas une constante figee)
+    est le repli legitime ici : fuse_agent_reports() traite deja
+    agent_weights=None comme poids egal pour tous, exactement le
+    comportement d'avant ce chantier. Retombe sur None si le fichier est
+    absent, corrompu, ou si compute_agent_reliability_weights() a lui-meme
+    juge l'echantillon insuffisant (voir calibrate_decision_engine_weights())
+    -- jamais d'exception propagee jusqu'au cycle de trading."""
+    try:
+        data = read_json("decision_engine_learned_weights.json", None)
+        if not data:
+            return None
+        learned = data.get("learned_weights")
+        if not isinstance(learned, dict) or not learned:
+            return None
+        return {k: float(v) for k, v in learned.items()}
+    except Exception as exc:  # noqa: BLE001 -- calibration optionnelle, ne doit jamais casser le cycle
+        log(f"Decision Engine: lecture decision_engine_learned_weights.json echouee ({exc}), poids egaux utilises.", "WARNING")
+        return None
 
 
 def log_scenario_event(scenario: Scenario, log_name: str = "scenario_log.jsonl") -> None:
@@ -5294,6 +5325,84 @@ def run_scenario_learning(min_samples: int = 20) -> None:
     )
 
 
+def calibrate_decision_engine_weights(min_samples: int = 20, now: datetime | None = None) -> None:
+    """06/08/2026, demande de Louis ("un edge tres solide", point 3 --
+    ponderer les agents par fiabilite prouvee). Meme discipline que
+    run_scenario_learning() : calcule et PERSISTE seulement, ne s'applique
+    jamais elle-meme (voir load_decision_engine_weights(), lu par
+    auto_trade_step() a chaque cycle).
+
+    decision_registry.jsonl (Phase 1, observation pure) ne resulte encore
+    d'aucune position reelle -- la SEULE facon honnete de savoir "qui avait
+    raison" aujourd'hui est de joindre chaque decision au scenario auquel
+    elle etait liee ce cycle-la (`scenario_id`) et a SA resolution reelle
+    (WIN_SIMULATED/LOSS_SIMULATED, scenario_log.jsonl + scenario_replay_log.jsonl)
+    -- voir label_decision_outcomes()/compute_agent_reliability_weights().
+    Un WIN valide la direction du scenario ; un LOSS valide l'inverse."""
+    now = now or datetime.now(timezone.utc)
+    registry_path = DATA_DIR / "decision_registry.jsonl"
+    if not registry_path.exists():
+        return
+    decision_entries: list[dict] = []
+    for line in registry_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            decision_entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not decision_entries:
+        return
+
+    resolved_scenarios_by_id: dict[str, str] = {}
+    for name in ("scenario_log.jsonl", "scenario_replay_log.jsonl"):
+        path = DATA_DIR / name
+        if not path.exists():
+            continue
+        by_id: dict[str, dict] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            by_id[d["scenario_id"]] = d
+        for scenario_id, d in by_id.items():
+            direction = d.get("direction")
+            if d.get("outcome") == "WIN_SIMULATED" and direction in ("BUY", "SELL"):
+                resolved_scenarios_by_id[scenario_id] = direction
+            elif d.get("outcome") == "LOSS_SIMULATED" and direction in ("BUY", "SELL"):
+                resolved_scenarios_by_id[scenario_id] = "SELL" if direction == "BUY" else "BUY"
+
+    labeled = label_decision_outcomes(decision_entries, resolved_scenarios_by_id)
+    learned_weights = compute_agent_reliability_weights(labeled, min_samples=min_samples)
+    if learned_weights is None:
+        n_usable = sum(1 for e in labeled if e.get("outcome_direction") in ("BUY", "SELL"))
+        log(
+            f"Decision Engine Learning: {n_usable} decisions liees a un scenario resolu, "
+            f"sous le seuil ({min_samples}) -- poids egaux conserves.", "INFO",
+        )
+        return
+
+    previous = read_json("decision_engine_learned_weights.json", None)
+    previous_weights = previous.get("learned_weights") if previous else None
+    for agent, new_value in learned_weights.items():
+        old_value = float((previous_weights or {}).get(agent, 1.0))
+        if abs(float(new_value) - old_value) > 0.01:
+            log_ai_adaptation(
+                "decision_engine_learning", f"agent_weight.{agent}", round(old_value, 3), round(float(new_value), 3),
+                f"Apres {sum(1 for e in labeled if e.get('outcome_direction') in ('BUY', 'SELL'))} "
+                f"decisions liees a un scenario reellement resolu.", now=now,
+            )
+    write_json("decision_engine_learned_weights.json", {
+        "computed_at": now.isoformat(),
+        "n_usable": sum(1 for e in labeled if e.get("outcome_direction") in ("BUY", "SELL")),
+        "learned_weights": learned_weights,
+    })
+    log(
+        f"Decision Engine Learning: {len(learned_weights)} agent(s) -- poids appris mis a jour "
+        f"dans decision_engine_learned_weights.json.", "SUCCESS",
+    )
+
+
 def _apply_calibration_adjustments(
     adjustments: dict, current: dict, source: str, evidence_note: str, *, now: datetime,
 ) -> int:
@@ -5326,6 +5435,20 @@ def _apply_calibration_adjustments(
     if changed:
         write_json("params.json", saved)
     return changed
+
+
+def _walk_forward_confirmed(full_adjustments: dict, calib_adjustments: dict, holdout_adjustments: dict) -> dict:
+    """06/08/2026 -- filtre de confirmation walk-forward (demande de Louis :
+    "un edge tres solide", point 1). Ne garde une cle de `full_adjustments`
+    (calcul habituel sur TOUT l'historique -- reste la source de la valeur
+    reellement appliquee, aucun changement de magnitude) que si le MEME
+    signal (une preuve suffisante existe, meme direction de correction) est
+    aussi trouve INDEPENDAMMENT sur la portion calibration ET sur la portion
+    hold-out (voir split_entries_chronologically()). Un ajustement qui ne
+    tient que sur l'ensemble complet mais disparait des qu'on le teste sur
+    une sous-fenetre est un signal fragile -- probablement du bruit, pas un
+    edge reel."""
+    return {k: v for k, v in full_adjustments.items() if k in calib_adjustments and k in holdout_adjustments}
 
 
 def _record_portfolio_floating_loss(floating_pnl_pct: float, now: datetime) -> None:
@@ -5431,9 +5554,30 @@ def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: d
             "scenario_block_correction_regime": params.get("scenario_block_correction_regime", True),
         }
         adjustments = scenario_threshold_adjustments(stats, current)
+        # 06/08/2026 -- confirmation walk-forward (demande de Louis : "un
+        # edge tres solide", point 1). Si assez de donnees pour un
+        # decoupage propre (2x min_samples, sinon chaque moitie serait
+        # sous le seuil et rejeterait tout par construction -- degrade
+        # proprement vers le comportement historique plutot que de bloquer
+        # toute calibration quand les donnees sont encore rares), on ne
+        # garde que les ajustements confirmes independamment sur la portion
+        # ancienne ET sur la portion recente. Voir _walk_forward_confirmed().
+        walk_forward_applied = adjustments and stats["n_resolved"] >= 2 * min_samples
+        if walk_forward_applied:
+            calib_entries, holdout_entries = split_entries_chronologically(entries)
+            calib_stats = scenario_learning_stats(calib_entries, min_samples=min_samples)
+            holdout_stats = scenario_learning_stats(holdout_entries, min_samples=min_samples)
+            calib_adjustments = scenario_threshold_adjustments(calib_stats, current) if calib_stats["n_resolved"] >= min_samples else {}
+            holdout_adjustments = scenario_threshold_adjustments(holdout_stats, current) if holdout_stats["n_resolved"] >= min_samples else {}
+            adjustments = _walk_forward_confirmed(adjustments, calib_adjustments, holdout_adjustments)
+        evidence_note = f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%)"
+        evidence_note += (
+            ", confirme independamment sur les portions ancienne et recente (walk-forward)."
+            if walk_forward_applied else
+            " (pas encore assez de donnees pour une confirmation walk-forward -- calibration sur l'ensemble complet)."
+        )
         total_changed += _apply_calibration_adjustments(
-            adjustments, current, "scenario_threshold_calibration",
-            f"Apres {stats['n_resolved']} scenarios resolus (winrate global {stats['overall_winrate']}%).", now=now,
+            adjustments, current, "scenario_threshold_calibration", evidence_note, now=now,
         )
 
     # --- Bloc 2 : seuils scalp (task #173) ---------------------------------
@@ -5470,11 +5614,34 @@ def calibrate_scenario_thresholds(params: dict, *, min_samples: int = 20, now: d
             "portfolio_floating_loss_critical_pct": params.get("portfolio_floating_loss_critical_pct", 5.0),
         }
         portfolio_adjustments = floating_loss_threshold_adjustments(portfolio_stats, portfolio_current)
+        # 06/08/2026 -- meme confirmation walk-forward que le Bloc 1 (voir
+        # _walk_forward_confirmed()) -- les jours (cles YYYY-MM-DD) se
+        # trient deja chronologiquement tels quels, pas besoin de
+        # split_entries_chronologically() ici.
+        portfolio_walk_forward_applied = portfolio_adjustments and portfolio_stats["n_days"] >= 2 * portfolio_min_samples
+        if portfolio_walk_forward_applied:
+            common_days = sorted(set(worst_by_day) & set(daily_pnl_by_day))
+            cut = max(0, len(common_days) - round(len(common_days) * 0.3))
+            calib_days, holdout_days = common_days[:cut], common_days[cut:]
+            calib_stats = floating_loss_learning_stats(
+                {d: worst_by_day[d] for d in calib_days}, {d: daily_pnl_by_day[d] for d in calib_days},
+                min_samples=portfolio_min_samples,
+            )
+            holdout_stats = floating_loss_learning_stats(
+                {d: worst_by_day[d] for d in holdout_days}, {d: daily_pnl_by_day[d] for d in holdout_days},
+                min_samples=portfolio_min_samples,
+            )
+            calib_adj = floating_loss_threshold_adjustments(calib_stats, portfolio_current) if calib_stats["n_days"] >= portfolio_min_samples else {}
+            holdout_adj = floating_loss_threshold_adjustments(holdout_stats, portfolio_current) if holdout_stats["n_days"] >= portfolio_min_samples else {}
+            portfolio_adjustments = _walk_forward_confirmed(portfolio_adjustments, calib_adj, holdout_adj)
+        portfolio_evidence = f"Apres {portfolio_stats['n_days']} journees resolues (taux de mauvaise journee global {portfolio_stats['overall_bad_day_rate']}%)"
+        portfolio_evidence += (
+            ", confirme independamment sur les portions ancienne et recente (walk-forward)."
+            if portfolio_walk_forward_applied else
+            " (pas encore assez de journees pour une confirmation walk-forward)."
+        )
         total_changed += _apply_calibration_adjustments(
-            portfolio_adjustments, portfolio_current, "portfolio_floating_loss_calibration",
-            f"Apres {portfolio_stats['n_days']} journees resolues "
-            f"(taux de mauvaise journee global {portfolio_stats['overall_bad_day_rate']}%).",
-            now=now,
+            portfolio_adjustments, portfolio_current, "portfolio_floating_loss_calibration", portfolio_evidence, now=now,
         )
 
     if total_changed:
@@ -5515,6 +5682,10 @@ def run_auto_backtest_if_due(params: dict, symbol_names: dict[str, str], *, now:
     write_json("auto_backtest_state.json", {"last_run_at": now.isoformat()})
     run_scenario_learning(min_samples=int(params.get("scenario_learning_min_samples", 20)))
     calibrate_scenario_thresholds(params, min_samples=int(params.get("scenario_learning_min_samples", 20)), now=now)
+    # 06/08/2026, demande de Louis ("un edge tres solide", point 3) -- meme
+    # cadence que le reste de la calibration automatique, aucun declencheur
+    # separe a gerer.
+    calibrate_decision_engine_weights(min_samples=int(params.get("decision_engine_learning_min_samples", 20)), now=now)
 
     replay_path = DATA_DIR / "scenario_replay_log.jsonl"
     if not replay_path.exists():
@@ -5744,6 +5915,7 @@ def auto_trade_step(
                 },
             }
             current_scenario = CURRENT_SCENARIO
+            de_scenario_id: str | None = None
             if (
                 current_scenario is not None
                 and current_scenario.symbol_key == active
@@ -5755,9 +5927,19 @@ def auto_trade_step(
                     else current_scenario.scenario_confidence
                 )
                 agent_scores["scenario"] = {"action": current_scenario.direction, "confidence": scenario_confidence}
-            fused = fuse_agent_reports(agent_scores)
+                # 06/08/2026, demande de Louis ("un edge tres solide", point
+                # 3) -- garde le lien vers ce scenario pour pouvoir un jour
+                # relier cette decision a son VRAI resultat (voir
+                # calibrate_decision_engine_weights()).
+                de_scenario_id = current_scenario.scenario_id
+            # 06/08/2026 -- poids appris depuis la fiabilite reelle de
+            # chaque agent (None tant qu'il n'y a pas assez de decisions
+            # liees a un scenario resolu -- fuse_agent_reports() traite ca
+            # comme un poids egal, comportement identique a avant).
+            fused = fuse_agent_reports(agent_scores, agent_weights=load_decision_engine_weights())
             entry = build_decision_registry_entry(
                 active, agent_scores, fused, now_iso=datetime.now(timezone.utc).isoformat(),
+                scenario_id=de_scenario_id,
             )
             append_jsonl("decision_registry.jsonl", entry)
             state["engine_decision"] = entry

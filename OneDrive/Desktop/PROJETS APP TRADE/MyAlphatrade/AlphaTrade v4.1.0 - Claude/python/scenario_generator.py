@@ -335,6 +335,34 @@ def scenario_learning_stats(entries: list[dict[str, Any]], min_samples: int = 20
     }
 
 
+def split_entries_chronologically(
+    entries: list[dict[str, Any]], *, holdout_fraction: float = 0.3,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """06/08/2026 -- fondation walk-forward (demande de Louis : "un edge tres
+    solide", point 1 de la reponse donnee). Sans ce decoupage,
+    scenario_threshold_adjustments() se calibre et se valide sur EXACTEMENT
+    les memes donnees -- le piege classique du surapprentissage : un
+    ajustement peut "trouver" un edge qui n'est que du bruit propre a cette
+    fenetre precise, sans jamais etre confirme ailleurs.
+
+    Trie par `created_at` (ISO, present sur toute entree scenario -- voir
+    Scenario.to_dict()) et coupe en deux : la portion la plus ANCIENNE sert
+    de calibration, la portion la plus RECENTE sert de validation
+    (hold-out) -- jamais l'inverse, pour rester fidele a l'ordre reel dans
+    lequel un systeme deployé rencontrerait ces donnees (on ne calibre
+    jamais sur le futur). Entrees sans `created_at` exploitable placees en
+    tete (traitees comme les plus anciennes) plutot que rejetees -- ne doit
+    jamais faire disparaitre silencieusement des echantillons."""
+    def _sort_key(e: dict[str, Any]) -> str:
+        return str(e.get("created_at") or "")
+    ordered = sorted(entries, key=_sort_key)
+    if not ordered:
+        return [], []
+    holdout_fraction = max(0.0, min(0.9, holdout_fraction))
+    cut = max(0, len(ordered) - round(len(ordered) * holdout_fraction))
+    return ordered[:cut], ordered[cut:]
+
+
 def scenario_threshold_adjustments(
     stats: dict[str, Any], current: dict[str, Any], *,
     max_confidence_step: float = 5.0, max_health_step: float = 5.0, min_edge: float = 10.0,

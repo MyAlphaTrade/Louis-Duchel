@@ -18,6 +18,7 @@ from scenario_generator import (
     volatility_score,
     scenario_confidence_score,
     SCENARIO_WEIGHTS,
+    split_entries_chronologically,
 )
 
 NOW = datetime(2026, 8, 4, 10, 0, 0, tzinfo=timezone.utc)  # 10h UTC -> session "london"
@@ -435,6 +436,51 @@ def test_scenario_weight_adjustments_neutral_when_no_signal():
     print("test_scenario_weight_adjustments_neutral_when_no_signal OK")
 
 
+# ---------------------------------------------------------------------------
+# split_entries_chronologically() -- fondation walk-forward (06/08/2026,
+# demande de Louis : "un edge tres solide", point 1)
+# ---------------------------------------------------------------------------
+
+def test_split_entries_chronologically_orders_by_created_at():
+    entries = [
+        {"id": "c", "created_at": "2026-08-03T00:00:00+00:00"},
+        {"id": "a", "created_at": "2026-08-01T00:00:00+00:00"},
+        {"id": "b", "created_at": "2026-08-02T00:00:00+00:00"},
+    ]
+    calib, holdout = split_entries_chronologically(entries, holdout_fraction=0.34)
+    assert [e["id"] for e in calib] == ["a", "b"]
+    assert [e["id"] for e in holdout] == ["c"]
+    print("test_split_entries_chronologically_orders_by_created_at OK")
+
+
+def test_split_entries_chronologically_respects_holdout_fraction():
+    entries = [{"id": i, "created_at": f"2026-08-{i:02d}T00:00:00+00:00"} for i in range(1, 11)]
+    calib, holdout = split_entries_chronologically(entries, holdout_fraction=0.3)
+    assert len(calib) + len(holdout) == 10
+    assert len(holdout) == 3  # 30% de 10, arrondi
+    assert [e["id"] for e in holdout] == [8, 9, 10]  # les plus RECENTES
+    print("test_split_entries_chronologically_respects_holdout_fraction OK")
+
+
+def test_split_entries_chronologically_empty_input():
+    assert split_entries_chronologically([]) == ([], [])
+    print("test_split_entries_chronologically_empty_input OK")
+
+
+def test_split_entries_chronologically_missing_created_at_goes_first():
+    """Une entree sans created_at exploitable ne doit jamais disparaitre --
+    traitee comme la plus ancienne (chaine vide trie avant tout ISO reel)."""
+    entries = [
+        {"id": "known", "created_at": "2026-08-05T00:00:00+00:00"},
+        {"id": "unknown"},
+    ]
+    calib, holdout = split_entries_chronologically(entries, holdout_fraction=0.5)
+    all_ids = {e["id"] for e in calib} | {e["id"] for e in holdout}
+    assert all_ids == {"known", "unknown"}
+    assert calib[0]["id"] == "unknown"
+    print("test_split_entries_chronologically_missing_created_at_goes_first OK")
+
+
 if __name__ == "__main__":
     test_session_label_boundaries()
     test_simple_atr_and_volatility_score()
@@ -467,4 +513,8 @@ if __name__ == "__main__":
     test_scenario_learning_stats_computes_winrate_per_bucket()
     test_scenario_weight_adjustments_bounded_and_directionally_sensible()
     test_scenario_weight_adjustments_neutral_when_no_signal()
+    test_split_entries_chronologically_orders_by_created_at()
+    test_split_entries_chronologically_respects_holdout_fraction()
+    test_split_entries_chronologically_empty_input()
+    test_split_entries_chronologically_missing_created_at_goes_first()
     print("ALL TESTS PASSED")
