@@ -240,6 +240,20 @@ def detect_mt5_terminal():
 # manual order on the broker's mobile app, etc.) — see Task #82.
 GLOBAL_MAGIC_NUMBER = 234000
 
+
+def _classify_trade_origin(magic):
+    """Shared 3-way split ("Global IA / externe / manuel") used for both
+    closed-history deals (_get_recent_trades) and still-open pending orders
+    (/pending_orders) — Task #82. magic==0 is MT5's own convention for a
+    manually-placed order (the terminal never sets one on its own; only an
+    EA/bot does)."""
+    magic = magic or 0
+    if magic == GLOBAL_MAGIC_NUMBER:
+        return "global_ia"
+    if magic == 0:
+        return "manual"
+    return "external"
+
 # ── MT5 auto-connection ──────────────────────────────────────────
 _connection = {"initialized": False, "account_type": None, "login": None, "instance_lock_acquired": False}
 _mt5_lock = threading.Lock()
@@ -791,12 +805,7 @@ def _get_recent_trades(from_str=None, to_str=None):
         # AlphaTrade Gold, not something invented here.
         magic = getattr(ref, "magic", 0) or 0
         comment = getattr(ref, "comment", "") or ""
-        if magic == GLOBAL_MAGIC_NUMBER:
-            origin = "global_ia"
-        elif magic == 0:
-            origin = "manual"
-        else:
-            origin = "external"
+        origin = _classify_trade_origin(magic)
         trades.append({
             "id": str(pid),
             "ticket_mt5": str(pid),
@@ -1487,6 +1496,7 @@ def get_pending_orders_endpoint():
             "placed_at": datetime.fromtimestamp(o.time_setup).isoformat() if o.time_setup else None,
             "comment": o.comment,
             "magic": o.magic,
+            "origin": _classify_trade_origin(o.magic),
         }
         for o in orders
     ]
