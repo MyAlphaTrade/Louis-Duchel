@@ -4489,10 +4489,33 @@ def gold_brain_snapshot(
         ))
     classic_signal = str(decision.get("signal") or "")
     if classic_signal in ("BUY", "SELL"):
+        # 07/08/2026 -- bug reel trouve en verifiant EN EXECUTANT le code
+        # (demande de Louis : "il faut verifier ca vraiment en profondeur"),
+        # PAS visible a la simple lecture : place_order() exige un prix reel
+        # (`price_hint`) pour tout ordre LIMIT/STOP -- sinon rejet immediat
+        # ("Prix requis pour un ordre en attente."). Structure/Smart Money
+        # fournissent deja un vrai niveau de zone dans leur recommandation,
+        # mais ce rapport-ci ("alphatrade_ai_classic", le signal indicateur
+        # classique) n'en avait AUCUN -- des qu'il gagnait l'arbitrage CAIO
+        # en mode "long_analysis" (entry_policy=pending_limit, celui que
+        # Louis appelle "intraday"), l'ordre etait tente puis silencieusement
+        # rejete faute de prix. Exactement le "je selectionne intraday, rien
+        # ne se passe" signale. Corrige : prix ancre sur un vrai repli ATR
+        # (meme fonction que le Scenario Engine, simple_atr()) -- coherent
+        # avec la logique deja utilisee par les autres agents (niveaux de
+        # zone reels), jamais une valeur figee. Un simple prix "au marche"
+        # ne suffirait pas non plus : place_order() exige que le niveau LIMIT
+        # soit reellement du bon cote du prix courant (distance broker
+        # respectee), pas juste present.
+        atr_pullback = simple_atr(candles) * 0.3 if candles else 0.0
+        classic_price = (
+            round(current_price - atr_pullback, 5) if classic_signal == "BUY"
+            else round(current_price + atr_pullback, 5)
+        )
         reports.append(make_agent_report(
             "alphatrade_ai_classic", status="OK",
             confidence=float(analysis.get("confidence") or 0), priority="MEDIUM",
-            recommendation={"action": f"{classic_signal}_MARKET"},
+            recommendation={"action": f"{classic_signal}_MARKET", "price": classic_price},
             arguments=[str(decision.get("reason") or "Signal du pipeline classique.")],
             ttl_seconds=60,
         ))
