@@ -34,6 +34,7 @@ from scenario_generator import (
     SCENARIO_WEIGHTS, volatility_score,
 )
 from trading_style_engine import recommend_trading_style
+from engine_decision import fuse_agent_reports, build_decision_registry_entry
 from portfolio_brain import (
     basket_exposure, portfolio_risk_assessment, floating_loss_learning_stats, floating_loss_threshold_adjustments,
 )
@@ -242,6 +243,16 @@ DEFAULT_PARAMS = {
     # Defaut passe a True le 05/08/2026 (demande explicite de Louis : "plus
     # rien ne doit rester en simulation, active tout").
     "trading_style_engine_enabled": True,
+    # v1.1.5 -- Phase 1 (06/08/2026, demande explicite de Louis : "je
+    # ferais comme Global, mais sans casser Gold... au debut il ne trade
+    # pas. Il observe seulement."). Decision Engine (engine_decision.py) :
+    # fusionne Structure/Smart Money/Indicator/Scenario en UNE decision +
+    # confiance, journalisee dans decision_registry.jsonl -- OBSERVATION
+    # PURE, n'appelle jamais open_position()/place_order(). Defaut False,
+    # meme securite que les autres moteurs d'observation. La Phase Shadow
+    # (comparaison au vrai resultat du pipeline actuel, sur plusieurs
+    # centaines de decisions avant toute execution reelle) reste a cabler.
+    "engine_decision_enabled": False,
     # v5.1.1 -- 05/08/2026, activation reelle demandee explicitement par
     # Louis (section 2/3 : "plus rien ne doit rester en simulation"). Quand
     # actif, une recommandation qui diverge du mode courant est vraiment
@@ -5600,6 +5611,58 @@ def auto_trade_step(
                 apply_trading_style_recommendation(ts_entry, params)
         except Exception as exc:  # noqa: BLE001 -- une erreur d'adaptation ne doit jamais casser le cycle de trading
             log(f"Trading Style Engine: {exc}", "ERROR")
+
+    # v1.1.5 -- Phase 1 (06/08/2026, demande explicite de Louis : "je
+    # ferais comme Global, mais sans casser Gold... au debut il ne trade
+    # pas. Il observe seulement."). Meme regle d'integration que les autres
+    # moteurs d'observation ci-dessus -- flag independant, n'ecrit jamais
+    # sur les positions. Reutilise se_structure/se_smart_money (Scenario
+    # Engine) si deja calcules cette meme boucle, sinon les calcule --
+    # meme pattern que ts_structure ci-dessus, evite un fetch MT5 redondant.
+    if bool(params.get("engine_decision_enabled", False)) and symbol:
+        try:
+            de_timeframe = str(symbol_params.get("timeframe", "M5"))
+            de_candles = se_candles if "se_candles" in locals() else fetch_candles(symbol, de_timeframe, 300)
+            de_price = de_candles[-1]["close"] if de_candles else 0.0
+            de_structure = se_structure if "se_structure" in locals() else structure_analyst_report(
+                de_candles, de_price, timeframe=de_timeframe,
+            )
+            de_smart_money = se_smart_money if "se_smart_money" in locals() else smart_money_analyst_report(de_candles, de_price)
+            indicator_decision = payload.get("simulated_decision", {})
+            agent_scores = {
+                "structure": {
+                    "action": str(de_structure.recommendation.get("action", "WAIT")),
+                    "confidence": de_structure.confidence,
+                },
+                "smart_money": {
+                    "action": str(de_smart_money.recommendation.get("action", "WAIT")),
+                    "confidence": de_smart_money.confidence,
+                },
+                "indicator": {
+                    "action": str(indicator_decision.get("signal") or "WAIT"),
+                    "confidence": float(indicator_decision.get("confidence") or 0),
+                },
+            }
+            current_scenario = CURRENT_SCENARIO
+            if (
+                current_scenario is not None
+                and current_scenario.symbol_key == active
+                and current_scenario.status not in ("INVALIDATED", "EXPIRED", "COMPLETED")
+            ):
+                scenario_confidence = (
+                    current_scenario.scenario_health
+                    if current_scenario.scenario_health is not None
+                    else current_scenario.scenario_confidence
+                )
+                agent_scores["scenario"] = {"action": current_scenario.direction, "confidence": scenario_confidence}
+            fused = fuse_agent_reports(agent_scores)
+            entry = build_decision_registry_entry(
+                active, agent_scores, fused, now_iso=datetime.now(timezone.utc).isoformat(),
+            )
+            append_jsonl("decision_registry.jsonl", entry)
+            state["engine_decision"] = entry
+        except Exception as exc:  # noqa: BLE001 -- observation seule, ne doit jamais casser le cycle de trading
+            log(f"Decision Engine (observation): {exc}", "ERROR")
 
     bot_positions = [p for p in positions if p.get("origin", "").upper() in ("BOT", "ALPHATRADE", "ALPHAKARIS")]
     contexts = position_contexts()
