@@ -109,6 +109,16 @@ class Scenario:
     # Validator (zone_touched/reaction/risk_ok/market_ok) -- pas un historique,
     # juste l'etat de la derniere evaluation (l'historique complet est deja
     # dans `history` via les transitions/notes)
+    is_probe: bool = False  # 06/08/2026 -- casse le catch-22 du regime
+    # CORRECTION (scenario_block_correction_regime=True empechait TOUT
+    # scenario CORRECTION d'exister, donc aucune preuve ne pouvait jamais
+    # s'accumuler pour re-evaluer ce blocage -- voir generate_scenario(),
+    # parametre correction_probe_rate). Un scenario "sonde" suit exactement
+    # le meme cycle de vie/validation/resolution que n'importe quel autre
+    # (donc alimente normalement scenario_log.jsonl et scenario_threshold_
+    # adjustments()), mais ne peut JAMAIS declencher une position ou un
+    # scalp reels -- voir le garde-fou explicite dans execute_scenario_
+    # anchor()/execute_scenario_scalp() (alphatrade_engine.py).
 
     def __post_init__(self) -> None:
         if self.direction not in DIRECTION_VALUES:
@@ -203,6 +213,7 @@ class Scenario:
             "anchor_status": self.anchor_status,
             "executed_scalp_count": self.executed_scalp_count,
             "last_scalp_executed_at": self.last_scalp_executed_at,
+            "is_probe": self.is_probe,
             "maximum_validity_min": self.maximum_validity_min,
             "created_at": self.created_at,
             "last_evaluated_at": self.last_evaluated_at,
@@ -225,6 +236,7 @@ def make_scenario(
     anchor_plan: dict[str, Any] | None = None,
     maximum_validity_min: int = 45,
     now: datetime | None = None,
+    is_probe: bool = False,
 ) -> Scenario:
     """Fabrique standard -- calcule created_at/expires_at de facon coherente
     et journalise automatiquement la creation dans `history` (premiere ligne
@@ -246,6 +258,7 @@ def make_scenario(
         created_at=now.isoformat(),
         last_evaluated_at=now.isoformat(),
         expires_at=expires_at,
+        is_probe=is_probe,
     )
     scenario.history.append(
         ScenarioEvent(at=now.isoformat(), status="CANDIDATE", note="Scenario cree.", scenario_health=None)

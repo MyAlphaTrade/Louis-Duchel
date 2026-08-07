@@ -17,6 +17,7 @@ aucune position reelle n'est ouverte a partir d'un scenario en Phase 2. Ca
 reste la responsabilite du CAIO scenario (Phase 3, non commencee)."""
 from __future__ import annotations
 
+import random
 from datetime import datetime, timezone
 from typing import Any
 
@@ -577,6 +578,7 @@ def generate_scenario(
     now: datetime | None = None,
     weights: dict[str, float] | None = None,
     block_correction_regime: bool = True,
+    correction_probe_rate: float = 0.0,
 ) -> Scenario | None:
     """Scenario Generator (Phase 2). Retourne None si aucune hypothese
     exploitable (agents indisponibles, directions contradictoires, ou aucun
@@ -594,12 +596,32 @@ def generate_scenario(
     aucun scenario n'est genere du tout tant que le regime reste CORRECTION,
     plutot que d'en generer un et esperer qu'un seuil de confiance plus haut
     suffise (la confiance moyenne en CORRECTION, 68,2, n'etait deja pas plus
-    haute que dans les autres regimes -- ce n'est pas un probleme de score)."""
+    haute que dans les autres regimes -- ce n'est pas un probleme de score).
+
+    `correction_probe_rate` (06/08/2026 -- casse un catch-22 trouve lors de
+    l'audit "Jamais ajuste" du panneau Parametres, demande explicite de
+    Louis "corrige tout ca") : tel quel, block_correction_regime empeche
+    aussi bien un vrai trade QU'une preuve de se produire -- scenario_
+    threshold_adjustments() sait deja re-evaluer ce blocage des que
+    `by_trend["CORRECTION"]` contient des resultats (avg_profit > 0 ->
+    autorise), mais cette cle n'existe jamais puisqu'aucun scenario
+    CORRECTION n'est jamais cree. Avec un taux > 0, une fraction des cycles
+    CORRECTION genere quand meme un scenario ("sonde") au lieu de rien --
+    mais SEULEMENT pour la collecte : `is_probe=True` fait qu'il ne peut
+    JAMAIS declencher de position/scalp reels (garde-fou explicite dans
+    execute_scenario_anchor()/execute_scenario_scalp(), alphatrade_engine.py),
+    tout en suivant le meme cycle de vie/validation/resolution que n'importe
+    quel autre scenario -- donc alimente normalement scenario_log.jsonl.
+    Defaut 0.0 : preserve exactement l'ancien comportement pour tout appelant
+    qui ne fournit pas ce parametre."""
     now = now or datetime.now(timezone.utc)
     analysis = analysis or {}
 
+    is_probe = False
     if block_correction_regime and (structure_report.metadata or {}).get("regime") == "CORRECTION":
-        return None
+        if correction_probe_rate <= 0 or random.random() >= correction_probe_rate:
+            return None
+        is_probe = True
 
     usable = [r for r in (structure_report, smart_money_report) if r.is_trustworthy(now)]
     directional = [r for r in usable if _direction_of(r.recommendation.get("action", "")) is not None]
@@ -663,6 +685,7 @@ def generate_scenario(
         anchor_plan={"entry": entry_price, "sl": invalidation_price, "tp": targets[0]["price"]},
         maximum_validity_min=maximum_validity_min,
         now=now,
+        is_probe=is_probe,
     )
 
 

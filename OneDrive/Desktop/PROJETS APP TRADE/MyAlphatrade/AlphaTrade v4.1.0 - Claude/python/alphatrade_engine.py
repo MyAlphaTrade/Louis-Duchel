@@ -31,7 +31,7 @@ from scenario_generator import (
     generate_scenario, validate_scenario, evaluate_scenario_health, evaluate_scalp_opportunity,
     scenario_learning_stats, scenario_weight_adjustments, scenario_threshold_adjustments,
     scalp_learning_stats, scalp_threshold_adjustments,
-    SCENARIO_WEIGHTS, volatility_score,
+    SCENARIO_WEIGHTS, volatility_score, simple_atr,
 )
 from trading_style_engine import recommend_trading_style
 from engine_decision import fuse_agent_reports, build_decision_registry_entry
@@ -213,6 +213,19 @@ DEFAULT_PARAMS = {
     # schema sain vu en UPTREND/DOWNTREND). Defaut True : aucun scenario
     # genere tant que le regime reste CORRECTION. Voir generate_scenario().
     "scenario_block_correction_regime": True,
+    # 06/08/2026 -- casse le catch-22 trouve lors de l'audit du panneau
+    # Parametres ("Jamais ajuste" sur regime CORRECTION, demande explicite de
+    # Louis "corrige tout ca") : block_correction_regime a 100% empeche aussi
+    # bien un vrai trade QU'une preuve de se produire -- aucun scenario
+    # CORRECTION n'a jamais existe depuis l'introduction du blocage, donc
+    # scenario_threshold_adjustments() (qui sait deja re-evaluer ce blocage
+    # des que des donnees existent) n'a jamais eu la moindre chance de le
+    # faire. 0.10 = ~10% des cycles CORRECTION generent quand meme un
+    # scenario "sonde" (is_probe=True, voir generate_scenario()/scenario.py)
+    # -- jamais execute reellement (garde-fou dans execute_scenario_anchor()/
+    # execute_scenario_scalp()), juste suivi jusqu'a resolution pour
+    # accumuler une vraie preuve statistique au fil du temps.
+    "scenario_correction_probe_rate": 0.10,
     # v5.1.1 -- meme analyse (58j, 05/08/2026) : session Londres a un vrai
     # gradient de winrate selon la confiance (33% sous 65, 47-50% au-dessus
     # de 70) -- contrairement a CORRECTION, pas bloquee, juste une barre plus
@@ -2273,6 +2286,10 @@ def mission_state(
     return report
 
 
+_LOT_SIZING_ATR_CACHE: dict[str, tuple[float, float]] = {}
+_LOT_SIZING_ATR_TTL_SEC = 30.0
+
+
 def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dict:
     """05-06/08/2026 -- lot calcule PUREMENT depuis le capital et le risque
     (capital x risk_pct / distance de stop), exactement comme AlphaTrade
@@ -2314,18 +2331,71 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
         broker_step = float(info.volume_step) if info else broker_min or 0.01
         loss_per_lot = 0.0
         risk_lot_cap = 0.0
+        stop_distance_source = "unavailable"
         if mt5 and info and tick:
-            stop_distance = max(
-                float(info.point),
-                money_price_distance(
-                    name,
-                    "BUY",
-                    1.0,
-                    float(tick.ask),
-                    info,
-                    float(symbol_params.get("emergency_loss_limit", 3.0)),
-                ),
-            )
+            stop_distance_source = "atr"
+            # BUG CORRIGE (06/08/2026, deux incidents reels sur le compte
+            # live : positions XAUUSD fermees par MAX_POSITION_LOSS/
+            # MAX_FLOATING_LOSS en 0.7 et 3.3 secondes, lot calcule a
+            # ~0.95-0.97 au lieu d'un lot coherent avec un vrai stop de
+            # marche). Root cause precise, confirmee sur les vrais chiffres
+            # du compte (risk_pct=0.35, max_position_loss=emergency_loss_
+            # limit=15$, solde ~4283$) : l'ancienne formule calculait la
+            # distance de stop AVEC emergency_loss_limit lui-meme (a un
+            # volume de reference fixe de 1.0 lot), puis remesurait la perte
+            # d'1.0 lot a EXACTEMENT cette meme distance -- operation
+            # circulaire qui redonnait TOUJOURS loss_per_lot ~= emergency_
+            # loss_limit, quelle que soit la vraie volatilite du marche.
+            # Resultat : risk_lot_cap = risk_budget / emergency_loss_limit,
+            # un ratio $/$ sans aucun lien avec une vraie distance de prix
+            # (~1.0 lot des que risk_budget et emergency_loss_limit sont
+            # proches, comme c'est le cas ici) -- a un tel volume, un
+            # mouvement de prix parfaitement normal de quelques secondes
+            # suffit a consommer les 15$ de max_position_loss, qui n'a
+            # jamais ete concu pour etre atteint aussi vite.
+            #
+            # `max_position_loss`/`emergency_loss_limit`/`risk_budget`
+            # restent inchanges (ce sont des garde-fous $ legitimes, voir
+            # position_exit_reason()) -- seule la distance de stop utilisee
+            # ICI pour DIMENSIONNER le lot change : elle vient maintenant
+            # d'un ATR reel (meme fonction que le Scenario Engine,
+            # simple_atr()), une vraie mesure de marche, independante des
+            # seuils de protection $. Mise en cache courte (30s) pour ne pas
+            # ajouter un aller-retour MT5 a chaque cycle -- l'ATR M5 ne
+            # varie pas assez vite pour que ce soit un probleme.
+            atr = 0.0
+            try:
+                cached = _LOT_SIZING_ATR_CACHE.get(key)
+                now_ts = time.monotonic()
+                if cached and (now_ts - cached[0]) < _LOT_SIZING_ATR_TTL_SEC:
+                    atr = cached[1]
+                else:
+                    candles = fetch_candles(name, str(symbol_params.get("timeframe", "M5")), 30)
+                    atr = simple_atr(candles, period=14) if candles else 0.0
+                    _LOT_SIZING_ATR_CACHE[key] = (now_ts, atr)
+            except Exception:
+                atr = 0.0
+            if atr > 0:
+                stop_distance = max(float(info.point), atr)
+            else:
+                # Repli (ATR indisponible -- MT5 vient de se connecter, pas
+                # encore assez de bougies, etc.) : ancien calcul, degrade
+                # proprement plutot que de rejeter tout le lot. Signale
+                # explicitement dans le resultat (voir stop_distance_source
+                # ci-dessous) pour rester diagnosticable si ce repli
+                # persiste anormalement longtemps.
+                stop_distance_source = "emergency_loss_limit_fallback"
+                stop_distance = max(
+                    float(info.point),
+                    money_price_distance(
+                        name,
+                        "BUY",
+                        1.0,
+                        float(tick.ask),
+                        info,
+                        float(symbol_params.get("emergency_loss_limit", 3.0)),
+                    ),
+                )
             estimated = mt5.order_calc_profit(
                 mt5.ORDER_TYPE_BUY,
                 name,
@@ -2353,6 +2423,7 @@ def lot_safety_state(params: dict, account, symbol_names: dict[str, str]) -> dic
             "effective_risk_pct": effective_risk_pct,
             "estimated_loss_per_lot": round(loss_per_lot, 2),
             "risk_lot_cap": round(risk_lot_cap, 8),
+            "stop_distance_source": stop_distance_source,
             "rejected": rejected,
             "reason": (
                 "Lot minimal du broker superieur au lot calcule par le risque (capital insuffisant pour ce risque)."
@@ -4530,6 +4601,7 @@ def scenario_engine_step(
     analysis: dict,
     now: datetime | None = None,
     log_name: str = "scenario_log.jsonl",
+    correction_probe_rate: float | None = None,
 ) -> Scenario | None:
     """Market Scenario Engine (v5.1.1, Phase 3) -- orchestre Scenario
     Generator + Scenario Validator + CAIO scenario a chaque cycle, persiste
@@ -4548,7 +4620,15 @@ def scenario_engine_step(
     ecrire dans scenario_replay_log.jsonl plutot que scenario_log.jsonl, sans
     jamais melanger les deux -- le Replay n'appelle JAMAIS
     execute_scenario_anchor() (voir run_scenario_replay(), aucun acces MT5
-    reel pendant un rejeu historique)."""
+    reel pendant un rejeu historique).
+
+    `correction_probe_rate` (06/08/2026) : None (defaut) lit
+    params["scenario_correction_probe_rate"] normalement (cycle live).
+    run_scenario_replay() force explicitement 0.0 -- le rejeu sert de
+    reference de calibration reproductible (meme entree = meme sortie a
+    chaque execution), un tirage aleatoire n'y a pas sa place ; c'est le
+    cycle LIVE, cumule au fil du temps, qui doit rester la seule source des
+    "sondes" CORRECTION."""
     global CURRENT_SCENARIO, LAST_DPM_EVAL_AT
     now = now or datetime.now(timezone.utc)
 
@@ -4565,6 +4645,11 @@ def scenario_engine_step(
             maximum_validity_min=SCENARIO_VALIDITY_MINUTES_BY_TIMEFRAME.get(se_timeframe, 45),
             now=now, weights=load_scenario_weights(),
             block_correction_regime=bool(params.get("scenario_block_correction_regime", True)),
+            correction_probe_rate=float(
+                correction_probe_rate
+                if correction_probe_rate is not None
+                else (params.get("scenario_correction_probe_rate", 0.0) or 0.0)
+            ),
         )
         if scenario is None:
             return None
@@ -4735,6 +4820,13 @@ def execute_scenario_anchor(
         return  # transitoire -- protection de session ou panier Portfolio Brain active
     if positions is not None and hard_position_cap_reached(scenario.symbol_key, positions):
         return  # transitoire -- Phase 0.1, porte unique de comptage (voir docstring)
+    if scenario.is_probe:
+        return  # 06/08/2026 -- scenario "sonde" CORRECTION (voir scenario.py) :
+        # ne DOIT jamais ouvrir de vraie position, seulement suivre son cycle
+        # de vie jusqu'a resolution pour alimenter scenario_threshold_
+        # adjustments(). Transitoire par construction (jamais un echec a
+        # marquer FAILED) -- le scenario continue d'etre valide/suivi/cloture
+        # normalement, seule l'ouverture reelle est court-circuitee ici.
 
     symbol = symbol_names.get(scenario.symbol_key)
     if not symbol or not scenario.targets or scenario.invalidation_price is None:
@@ -4986,6 +5078,9 @@ def execute_scenario_scalp(
         return  # transitoire
     if positions is not None and hard_position_cap_reached(scenario.symbol_key, positions):
         return  # transitoire -- Phase 0.1, porte unique de comptage
+    if scenario.is_probe:
+        return  # 06/08/2026 -- scenario "sonde" CORRECTION, jamais de vrai
+        # scalp non plus -- voir execute_scenario_anchor()/scenario.py.
     max_scalps = max(0, int(params.get("scenario_scalp_max_count", 3)))
     if scenario.executed_scalp_count >= max_scalps:
         return  # plafond definitif pour ce scenario -- pas transitoire, jamais retente
@@ -5111,6 +5206,11 @@ def run_scenario_replay(params: dict, symbol_names: dict[str, str], days: int, s
             params, active, candles_window, current_price,
             structure_report, smart_money_report, risk_report_neutral, None, {},
             now=now_sim, log_name=replay_log,
+            # 06/08/2026 -- le rejeu doit rester une reference de calibration
+            # reproductible (meme entree = meme sortie) ; les "sondes"
+            # CORRECTION (aleatoires) restent reservees au cycle live, voir
+            # docstring de scenario_engine_step().
+            correction_probe_rate=0.0,
         )
         n_cycles += 1
         if scenario is not None:
