@@ -19,7 +19,11 @@ transparency — NOT wired to modulate engine weights or strategy selection
 in live decisions. The project's own standing rule (validate before
 activating — see the crypto-context lesson in Audit/) applies here too:
 any weight modulation by regime needs to be proven on fusion_backtest.py
-first. See regime_experiment.py for that test, run but not yet activated.
+first. That test ran (commit 7a6108f, 2026-08-07, real walk-forward on
+XAUUSD/BTCUSD/ETHUSD over 3 real 90-day windows each): net -37% PnL vs
+today's unmodulated behavior — helps XAUUSD, consistently hurts
+BTCUSD/ETHUSD. The hypothesis below stays coded (tested, documented,
+opt-in) but disabled by default; do not turn it on without new evidence.
 """
 
 from indicators import ema, atr, find_swings, classify_structure
@@ -98,9 +102,10 @@ def classify_market_regime(candles):
 #
 # This is OPT-IN everywhere (engine_scoring.fuse_direction_and_confidence,
 # market_brain.analyze, fusion_backtest.run_fusion_backtest all default to
-# no modulation) — it must be proven on fusion_backtest.py across multiple
-# real time windows before it's ever turned on by default. See
-# regime_experiment.py for that test and its real result.
+# no modulation). Tested via fusion_backtest.py across 3 real assets x 3
+# real 90-day windows (commit 7a6108f, 2026-08-07): net -37% PnL vs no
+# modulation — does not generalize, stays off. See that commit message for
+# the full per-asset, per-window results table.
 TREND_BOOST_ENGINES = ("multi_timeframe", "market_structure", "indicator_fusion")
 RANGE_BOOST_ENGINES = ("fibonacci",)
 BOOST_MULTIPLIER = 1.3

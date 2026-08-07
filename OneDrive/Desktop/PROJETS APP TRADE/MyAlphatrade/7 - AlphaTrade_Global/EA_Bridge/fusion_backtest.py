@@ -88,8 +88,10 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
       degrades gracefully — lower confidence, explicit "historique
       insuffisant" findings — rather than crashing on too little history).
     use_regime_modulation: OFF by default — passed straight through to
-      market_brain.analyze(). See regime_experiment.py for the actual
-      before/after comparison this flag exists to make possible.
+      market_brain.analyze(). This is the exact harness used to run the
+      real walk-forward comparison (commit 7a6108f, 2026-08-07): net -37%
+      PnL with modulation on, across 3 real assets x 3 real 90-day windows.
+      Stays False in every live/default call site.
 
     Returns {"trades": [...], "stats": {...}} — same shape as
     backtest_engine.run_backtest(), stats now include expectancy.

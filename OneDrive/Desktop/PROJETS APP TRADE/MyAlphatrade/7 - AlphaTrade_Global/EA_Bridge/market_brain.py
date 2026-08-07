@@ -261,9 +261,11 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     validated_strategy: {"strategy_name": str, "signal": {"direction","rationale"}|None,
                           "stats": {...}} or None — the live-evaluated active Strategy
     use_regime_modulation: OFF by default everywhere in the real decision
-      path — an experimental flag only fusion_backtest.py's
-      regime_experiment.py flips on, to test market_regime.py's weight
-      hypothesis against real history before it's ever trusted live.
+      path. Tested via fusion_backtest.py in a real walk-forward comparison
+      (commit 7a6108f, 2026-08-07): net -37% PnL across 9 real (symbol,
+      window) cells vs the current unmodulated behavior — the hypothesis
+      doesn't generalize (helps XAUUSD, consistently hurts BTCUSD/ETHUSD).
+      Stays False; kept as a tested, documented, inactive capability.
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
