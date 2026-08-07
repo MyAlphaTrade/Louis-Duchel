@@ -72,7 +72,7 @@ def _pending_order_type(direction, pending_price, price_at_placement):
 
 
 def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=None,
-                         capital=1000, risk_percent=1, warmup_bars=210):
+                         capital=1000, risk_percent=1, warmup_bars=210, use_regime_modulation=False):
     """Replays the real market_brain.analyze() pipeline bar by bar.
 
     primary_candles: full historical candle list for `primary_timeframe`,
@@ -87,6 +87,9 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
       WAIT anyway, it doesn't affect correctness (every engine already
       degrades gracefully — lower confidence, explicit "historique
       insuffisant" findings — rather than crashing on too little history).
+    use_regime_modulation: OFF by default — passed straight through to
+      market_brain.analyze(). See regime_experiment.py for the actual
+      before/after comparison this flag exists to make possible.
 
     Returns {"trades": [...], "stats": {...}} — same shape as
     backtest_engine.run_backtest(), stats now include expectancy.
@@ -174,6 +177,7 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
                 symbol, primary_timeframe, window,
                 multi_tf_candles=window_mtf, validated_strategy=None,
                 capital=capital, risk_percent=risk_percent,
+                use_regime_modulation=use_regime_modulation,
             )
 
             decision = result["decision"]

@@ -84,3 +84,38 @@ def classify_market_regime(candles):
     if slope_in_atr <= -TREND_SLOPE_ATR_THRESHOLD:
         return {"regime": "trend_down", "volatility": volatility, "details": details}
     return {"regime": "range", "volatility": volatility, "details": details}
+
+
+# ── Weight modulation experiment (2026-08-07) ───────────────────────
+# A concrete, testable hypothesis: trend-following engines (multi_timeframe,
+# market_structure, indicator_fusion — all three read continuation/momentum)
+# should matter MORE during a real trend, and LESS during a range, where a
+# reversal-oriented engine (fibonacci, which specifically looks for
+# retracement bounces) should matter more instead. During "transition" —
+# the market itself just signaled uncertainty via a CHOCH — weights are left
+# untouched: leaning either way on an acknowledged uncertain regime is a
+# second, unproven hypothesis stacked on the first, not a simplification.
+#
+# This is OPT-IN everywhere (engine_scoring.fuse_direction_and_confidence,
+# market_brain.analyze, fusion_backtest.run_fusion_backtest all default to
+# no modulation) — it must be proven on fusion_backtest.py across multiple
+# real time windows before it's ever turned on by default. See
+# regime_experiment.py for that test and its real result.
+TREND_BOOST_ENGINES = ("multi_timeframe", "market_structure", "indicator_fusion")
+RANGE_BOOST_ENGINES = ("fibonacci",)
+BOOST_MULTIPLIER = 1.3
+CUT_MULTIPLIER = 0.7
+
+
+def regime_weight_multipliers(regime):
+    """Returns {engine_id: multiplier} — only engines that should change are
+    present; engine_scoring.py treats a missing entry as 1.0 (unchanged)."""
+    if regime in ("trend_up", "trend_down"):
+        multipliers = {eid: BOOST_MULTIPLIER for eid in TREND_BOOST_ENGINES}
+        multipliers.update({eid: CUT_MULTIPLIER for eid in RANGE_BOOST_ENGINES})
+        return multipliers
+    if regime == "range":
+        multipliers = {eid: BOOST_MULTIPLIER for eid in RANGE_BOOST_ENGINES}
+        multipliers.update({eid: CUT_MULTIPLIER for eid in TREND_BOOST_ENGINES})
+        return multipliers
+    return {}

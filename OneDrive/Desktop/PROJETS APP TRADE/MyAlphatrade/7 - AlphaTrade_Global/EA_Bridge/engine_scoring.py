@@ -340,12 +340,20 @@ FUSION_BASE = 25
 STRUCTURALLY_NEUTRAL_ENGINES = {"volatility", "session", "economic"}
 
 
-def fuse_direction_and_confidence(engine_results):
+def fuse_direction_and_confidence(engine_results, weight_multipliers=None):
     """Derives the final direction bottom-up from engine votes — never picks
     a direction first and justifies it after (that was the old LLM pattern).
     Each engine's vote is weighted by (engine importance × its own
     confidence in its bias), so a loud but unimportant engine can't
-    outvote a quiet but important one, and vice versa."""
+    outvote a quiet but important one, and vice versa.
+
+    weight_multipliers: optional {engine_id: float}, defaults to None (every
+    engine's weight is used exactly as ENGINE_WEIGHTS defines it — today's
+    live behavior, unchanged). Only market_regime.py's experiment (opt-in,
+    see its own module docstring) ever passes a real dict here — this
+    stays None everywhere in the normal decision path until that
+    experiment is actually proven on fusion_backtest.py."""
+    weight_multipliers = weight_multipliers or {}
     weighted_votes = {"bullish": 0.0, "bearish": 0.0, "neutral": 0.0}
     total_weight = 0.0
     breakdown = {}
@@ -358,12 +366,15 @@ def fuse_direction_and_confidence(engine_results):
         bias = result.get("bias", "neutral")
         # Still shown in breakdown (findings are real, useful context — e.g.
         # "volatilité en expansion" — even when they carry no directional
-        # weight) — only excluded from the vote itself.
+        # weight) — only excluded from the vote itself. breakdown reports
+        # the BASE weight, not the (experimental) modulated one, so the UI
+        # never shows a number that silently depends on an unproven flag.
         breakdown[engine_id] = {"weight": weight, "bias": bias, "confidence": conf, "findings": result.get("findings", [])}
         if engine_id in STRUCTURALLY_NEUTRAL_ENGINES:
             continue
-        total_weight += weight
-        weighted_votes[bias] += weight * (conf / 100)
+        effective_weight = weight * weight_multipliers.get(engine_id, 1.0)
+        total_weight += effective_weight
+        weighted_votes[bias] += effective_weight * (conf / 100)
 
     if total_weight == 0:
         return {"direction": "neutral", "confidence": 0, "breakdown": breakdown}

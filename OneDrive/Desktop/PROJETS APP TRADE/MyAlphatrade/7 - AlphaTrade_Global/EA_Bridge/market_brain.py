@@ -253,12 +253,17 @@ def _find_actionable_zone(breakdown, decision_bias):
     return None, None
 
 
-def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1):
+def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
+            use_regime_modulation=False):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
     validated_strategy: {"strategy_name": str, "signal": {"direction","rationale"}|None,
                           "stats": {...}} or None — the live-evaluated active Strategy
+    use_regime_modulation: OFF by default everywhere in the real decision
+      path — an experimental flag only fusion_backtest.py's
+      regime_experiment.py flips on, to test market_regime.py's weight
+      hypothesis against real history before it's ever trusted live.
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
@@ -267,8 +272,10 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     # technical regime (trend/range/transition + volatility), computed from
     # the SAME primary-timeframe candles already fetched. Context only: see
     # market_regime.py's module docstring for why this doesn't yet touch
-    # engine weights or the decision itself.
+    # engine weights or the decision itself, except behind the
+    # use_regime_modulation experiment flag above.
     regime = market_regime.classify_market_regime(candles)
+    weight_multipliers = market_regime.regime_weight_multipliers(regime["regime"]) if use_regime_modulation else None
 
     mtf_view = None
     if multi_tf_candles:
@@ -290,7 +297,7 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
 
     microstructure_result = _microstructure_engine_result(symbol) if CRYPTO_CONTEXT_ENABLED else None
     engine_results = es.run_all_engines(ctx, multi_timeframe_result=mtf_engine_result, microstructure_result=microstructure_result)
-    fusion = es.fuse_direction_and_confidence(engine_results)
+    fusion = es.fuse_direction_and_confidence(engine_results, weight_multipliers=weight_multipliers)
     breakdown = fusion["breakdown"]
 
     # --- AI Confidence Engine v2 — comparison mode only, NOT activated. ---
