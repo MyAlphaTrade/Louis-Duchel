@@ -22,6 +22,7 @@ import secrets
 from datetime import datetime, timezone
 
 from local_store import create_entity, list_entities, update_entity
+import learning_engine
 
 DEFAULT_LOCAL_EMAIL = "louismarieduchel@gmail.com"
 DEFAULT_LOCAL_PASSWORD = "Projetalpha1234"
@@ -679,12 +680,24 @@ def trade_manager_close_trade(body, get_entity_fn):
     if trade.get("management_events"):
         conditions.append("Events: " + ", ".join(trade["management_events"]))
 
+    # AI Trade Memory (2026-08-07): which engines actually agreed with this
+    # trade, and what regime surrounded it — see learning_engine.py. signal
+    # can be None (a position opened manually or by an external EA, found
+    # by reconciliation, never went through autoExecute()) — analyze_trade
+    # handles that explicitly rather than assuming a Signal always exists.
+    signal_id = trade.get("signal_id")
+    signal = get_entity_fn("Signal", signal_id) if signal_id else None
+    analysis = learning_engine.analyze_trade(trade, signal, outcome)
+
     create_entity("LearningData", {
         "trade_id": trade_id,
         "outcome": outcome,
         "conditions": conditions,
         "errors": [],
-        "lessons": [],
+        "lessons": analysis["lessons"],
+        "patterns_detected": analysis["patterns_detected"],
+        "successful_conditions": analysis["successful_conditions"],
+        "failed_conditions": analysis["failed_conditions"],
         "accuracy_delta": 0,
         "reviewed": False,
     })

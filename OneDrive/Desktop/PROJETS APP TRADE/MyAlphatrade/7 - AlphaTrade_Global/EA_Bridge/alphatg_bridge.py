@@ -58,6 +58,7 @@ import hyperliquid_connector
 import global_market_intelligence
 import portfolio_risk
 import asset_validation
+import learning_engine
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -1860,6 +1861,12 @@ def call_function(function_name):
         params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
         params = params_list[0] if params_list else {}
         return jsonify({"ok": True, **local_functions.daily_goal_status(params)})
+
+    if function_name == "learningPatterns":
+        # AI Trade Memory (2026-08-07) — read-only diagnostic, see
+        # learning_engine.py's module docstring for why this doesn't
+        # influence any live decision yet.
+        return jsonify({"ok": True, "patterns": learning_engine.pattern_win_rates()})
 
     if function_name == "portfolioRisk":
         # Portfolio Risk Manager (2026-08-06) — checked by the frontend
