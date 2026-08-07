@@ -56,6 +56,7 @@ import local_store
 import local_functions
 import hyperliquid_connector
 import global_market_intelligence
+import portfolio_risk
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -1710,6 +1711,26 @@ def call_function(function_name):
         params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
         params = params_list[0] if params_list else {}
         return jsonify({"ok": True, **local_functions.daily_goal_status(params)})
+
+    if function_name == "portfolioRisk":
+        # Portfolio Risk Manager (2026-08-06) — checked by the frontend
+        # BEFORE creating a Signal/order, in addition to (not instead of)
+        # the per-symbol exposure dedup already in autoExecute(). Real
+        # positions + real equity, read fresh here rather than trusted from
+        # the caller — same principle as build_order's account_equity.
+        symbol = str(body.get("symbol") or "").strip().upper()
+        risk_percent = body.get("risk_percent")
+        snap = get_account_snapshot()
+        equity = snap.get("equity") if snap else None
+        positions = get_open_positions() or []
+        params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+        params = params_list[0] if params_list else {}
+        result = portfolio_risk.portfolio_exposure_check(
+            symbol, positions, equity, risk_percent,
+            max_portfolio_risk_percent=params.get("max_portfolio_risk_percent"),
+            max_positions_per_category=params.get("max_positions_per_category"),
+        )
+        return jsonify({"ok": True, **result})
 
     stub = local_functions.deterministic_stub_response(function_name, body)
     if isinstance(stub, tuple):

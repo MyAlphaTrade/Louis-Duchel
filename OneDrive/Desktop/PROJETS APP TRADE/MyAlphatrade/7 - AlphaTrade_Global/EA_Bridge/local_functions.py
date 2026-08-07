@@ -399,9 +399,20 @@ def build_order(body, account_equity=None):
     stale, absent, or (before this fix) silently wrong for months. Raises
     RealCapitalUnavailable if account_equity isn't a real positive number;
     the caller (alphatg_bridge.py) must turn that into an explicit error
-    response, never send an order sized on a guess."""
+    response, never send an order sized on a guess.
+
+    Adaptive risk (Portfolio Risk Manager, 2026-08-06): risk_percent is
+    scaled down automatically after a real losing streak (see
+    portfolio_risk.consecutive_loss_multiplier) — the system trades smaller
+    while it's actually losing, never larger. This only ever shrinks the
+    trader's own configured risk, it never exceeds it."""
+    import portfolio_risk
+
     direction = "SELL" if body.get("direction") == "SELL" else "BUY"
     symbol = (body.get("symbol") or "").upper()
+    risk_percent = body.get("risk_percent")
+    if risk_percent is not None:
+        risk_percent = risk_percent * portfolio_risk.consecutive_loss_multiplier()
     return {
         "symbol": symbol,
         "direction": direction,
@@ -410,7 +421,7 @@ def build_order(body, account_equity=None):
             entry_price=body.get("entry_price"),
             stop_loss=body.get("stop_loss"),
             capital=account_equity,
-            risk_percent=body.get("risk_percent"),
+            risk_percent=risk_percent,
         ),
         "entry_price": body.get("entry_price"),
         "stop_loss": body.get("stop_loss") or 0,
