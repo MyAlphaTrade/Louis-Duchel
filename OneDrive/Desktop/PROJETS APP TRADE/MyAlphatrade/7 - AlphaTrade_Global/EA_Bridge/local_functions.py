@@ -444,6 +444,27 @@ DEFAULT_BREAK_EVEN_TRIGGER = 1.0   # R-multiple of profit before locking entry
 DEFAULT_PROFIT_PROTECTION_TRIGGER = 1.5  # R-multiple before trailing starts
 TRAIL_DISTANCE_R = 0.5  # how far behind price the trailing stop sits, in R
 
+# Partial take-profit (Professional Position Manager, 2026-08-06): TP1 banks
+# a third of the position early, TP2 banks half of what's left, and the
+# remainder ("TP3") is never closed on a fixed target — it rides the
+# trailing stop above instead, so a genuinely large move isn't capped early.
+# Fractions are of whatever volume is STILL open at the moment each tier
+# fires, not of the original size — so TP1 (33%) then TP2 (50% of the
+# remaining ~67%) leaves close to a third of the original position for TP3,
+# regardless of how the broker's own lot-step rounding worked out on TP1.
+TP1_TRIGGER_R = 1.0
+TP1_CLOSE_FRACTION = 0.33
+TP2_TRIGGER_R = 2.0
+TP2_CLOSE_FRACTION = 0.5
+
+# Emergency close: the one case break-even/trailing/TP can never reach,
+# because all of them need an original stop loss to measure R against.
+# A position with NO recorded stop (opened manually with none, or a Trade
+# record that never got one) has genuinely unbounded downside otherwise —
+# this is a hard %-of-equity floor, not an R-multiple, and it is
+# deliberately the last line of defense, not a substitute for a real SL.
+EMERGENCY_CLOSE_EQUITY_PERCENT = 2.0
+
 
 def _r_multiple(direction, entry_price, current_price, original_risk):
     if original_risk <= 0:
@@ -452,12 +473,21 @@ def _r_multiple(direction, entry_price, current_price, original_risk):
     return moved / original_risk
 
 
-def manage_open_positions(get_positions_fn, modify_fn, params=None):
-    """Runs every cycle alongside reconciliation. For each open MT5
-    position with a matching Trade record, moves the stop to break-even
-    once profit clears break_even_trigger R, then trails it once profit
-    clears profit_protection_trigger R. Never touches a position it can't
-    trace back to a Trade (no original risk to measure R against)."""
+def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=None, equity=None):
+    """Runs on its own fast loop now (see alphatg_bridge.py's
+    _position_manager_loop), independently of the analysis/decision cycle —
+    Professional Position Manager, 2026-08-06. For each open MT5 position
+    with a matching Trade record: partial take-profit at TP1/TP2, then
+    moves the stop to break-even once profit clears break_even_trigger R,
+    then trails it once profit clears profit_protection_trigger R. Never
+    touches a position it can't trace back to a Trade.
+
+    close_fn(ticket, volume=None) -> {"ok": bool, ...}: real partial (or
+    full, if volume is omitted) MT5 close — powers TP1/TP2 and the
+    emergency close. Optional for backward compatibility: omitting it skips
+    partial take-profit and emergency close, break-even/trailing still run.
+    equity: real account equity, used only by the emergency-close check.
+    """
     params = params or {}
     be_trigger = params.get("break_even_trigger") or DEFAULT_BREAK_EVEN_TRIGGER
     trail_trigger = params.get("profit_protection_trigger") or DEFAULT_PROFIT_PROTECTION_TRIGGER
@@ -479,18 +509,61 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None):
         direction = pos["direction"]
         entry_price = trade.get("entry_price") or pos["entry_price"]
         original_sl = trade.get("stop_loss")
-        current_sl = trade.get("trailing_stop") or original_sl
+        events = trade.get("management_events") or []
+
         if not original_sl:
+            # Nothing here to measure R against — the emergency close is the
+            # only protection an unprotected position gets.
+            if close_fn and equity and equity > 0 and pos["profit"] < 0:
+                loss_pct = (-pos["profit"] / equity) * 100
+                if loss_pct >= EMERGENCY_CLOSE_EQUITY_PERCENT:
+                    result = close_fn(pos["ticket"])
+                    if result.get("ok"):
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "emergency_close",
+                                         "reason": f"perte {loss_pct:.2f}% de l'equity sans stop loss"})
+                    else:
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "failed", "error": result.get("error")})
             continue
+
         original_risk = abs(entry_price - original_sl)
         if original_risk <= 0:
             continue
 
         r = _r_multiple(direction, entry_price, pos["current_price"], original_risk)
+        remaining_lot = pos["lot"]
+
+        if close_fn and r >= TP1_TRIGGER_R and "tp1_partial" not in events:
+            close_vol = round(remaining_lot * TP1_CLOSE_FRACTION, 4)
+            result = close_fn(pos["ticket"], volume=close_vol)
+            if result.get("ok"):
+                remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
+                events = events + ["tp1_partial"]
+                update_entity("Trade", trade["id"], {"management_events": events})
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_partial", "closed_volume": result.get("closed_volume")})
+            else:
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_failed", "error": result.get("error")})
+
+        if close_fn and remaining_lot > 0 and r >= TP2_TRIGGER_R and "tp1_partial" in events and "tp2_partial" not in events:
+            close_vol = round(remaining_lot * TP2_CLOSE_FRACTION, 4)
+            result = close_fn(pos["ticket"], volume=close_vol)
+            if result.get("ok"):
+                remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
+                events = events + ["tp2_partial"]
+                update_entity("Trade", trade["id"], {"management_events": events})
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_partial", "closed_volume": result.get("closed_volume")})
+            else:
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_failed", "error": result.get("error")})
+
+        if remaining_lot <= 0:
+            # TP1/TP2 rounding closed what was left entirely (broker minimum
+            # lot step) — nothing left to break-even/trail against.
+            continue
+
         if r < be_trigger:
             continue
         eligible += 1
 
+        current_sl = trade.get("trailing_stop") or original_sl
         at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
 
         new_sl = None
@@ -509,7 +582,7 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None):
             if result.get("ok"):
                 update_entity("Trade", trade["id"], {
                     "trailing_stop": new_sl,
-                    "management_events": (trade.get("management_events") or []) + [event],
+                    "management_events": events + [event],
                 })
                 actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": event, "new_stop_loss": round(new_sl, 5)})
                 protected += 1

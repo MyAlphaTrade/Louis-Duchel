@@ -847,6 +847,50 @@ def start_monitor():
     _monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
     _monitor_thread.start()
 
+
+# ── Position Manager loop (Professional Position Manager, 2026-08-06) ────
+# Boucle 1 of the transformation plan's 3-loop architecture: protection of
+# already-open positions, running on its own ~1s cadence, completely
+# independent of the analysis/decision cycle (Boucle 2, cadenced by the
+# trading profile — 30s to 600s). Before this, break-even/trailing/TP only
+# ran once per analysis cycle, meaning a Swing-profile position could go
+# unprotected for up to 10 minutes after crossing its trigger — exactly the
+# gap the professional audit flagged. This loop is what makes that gap real
+# instead of theoretical: position protection no longer depends on how
+# often the app happens to be scanning for new opportunities.
+POSITION_MANAGER_INTERVAL_SEC = 1.0
+_position_manager_thread = None
+
+
+def _position_manager_loop():
+    log.info("Position Manager thread started (interval=%.1fs)", POSITION_MANAGER_INTERVAL_SEC)
+    while _connection["initialized"]:
+        try:
+            params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+            params = params_list[0] if params_list else {}
+            snap = get_account_snapshot()
+            equity = snap.get("equity") if snap else None
+            result = local_functions.manage_open_positions(
+                get_open_positions, modify_position_direct, params,
+                close_fn=close_position_direct, equity=equity,
+            )
+            if result.get("actions"):
+                log.info("[POSITION_MANAGER] %s", "; ".join(
+                    f"{a['event']} {a['symbol']} (ticket {a['ticket']})" for a in result["actions"]
+                ))
+        except Exception as e:
+            log.warning("Position Manager error: %s", e)
+        time.sleep(POSITION_MANAGER_INTERVAL_SEC)
+    log.info("Position Manager thread stopped (MT5 disconnected)")
+
+
+def start_position_manager():
+    global _position_manager_thread
+    if _position_manager_thread and _position_manager_thread.is_alive():
+        return
+    _position_manager_thread = threading.Thread(target=_position_manager_loop, daemon=True)
+    _position_manager_thread.start()
+
 # ── SSE stream endpoint ──────────────────────────────────────────
 
 @app.route("/stream", methods=["GET"])
@@ -1472,37 +1516,55 @@ def get_history():
     return jsonify({"ok": True, "trades": trades})
 
 
-@app.route("/close_position", methods=["POST"])
-def close_position():
-    if not _connection["initialized"]:
-        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+def close_position_direct(ticket, volume=None):
+    """In-process position close, full or partial — TRADE_ACTION_DEAL in the
+    opposite direction against the position ticket. Shared by the /close_position
+    endpoint and the Position Manager loop (TP1/TP2 partial take-profit,
+    emergency close on an unprotected position).
 
-    data = request.json or {}
-    ticket = int(data.get("ticket", 0))
+    volume=None closes the entire remaining position. A requested partial
+    volume is rounded to the symbol's real lot step, and if what would be
+    LEFT over falls below the broker's minimum tradeable size, closes
+    everything instead of stranding an un-tradeable sliver — the caller
+    finds out via the returned closed_volume, never silently wrong."""
+    if not _connection["initialized"]:
+        return {"ok": False, "error": "MT5 not connected"}
 
     with _mt5_lock:
         positions = mt5.positions_get(ticket=ticket) or []
     if not positions:
-        return jsonify(_structured_error("POSITION_NOT_FOUND", "Position not found: " + str(ticket))), 404
+        return {"ok": False, "error": "Position not found: " + str(ticket)}
 
     pos = positions[0]
+
+    if volume is not None:
+        with _mt5_lock:
+            info = mt5.symbol_info(pos.symbol)
+        vol_step = getattr(info, "volume_step", 0.01) if info else 0.01
+        vol_min = getattr(info, "volume_min", 0.01) if info else 0.01
+        close_volume = round(round(float(volume) / vol_step) * vol_step, 4)
+        remainder = round(pos.volume - close_volume, 4)
+        if close_volume < vol_min or remainder < vol_min:
+            close_volume = pos.volume
+    else:
+        close_volume = pos.volume
+
     trade_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
 
-    # Resolve symbol + filling mode (same robustness as send_order)
     fill_result = get_supported_filling_mode(pos.symbol)
     filling_const_val = fill_result.get("selected_const", mt5.ORDER_FILLING_RETURN)
 
     with _mt5_lock:
         tick = mt5.symbol_info_tick(pos.symbol)
     if tick is None:
-        return jsonify(_structured_error("NO_PRICE", "No price available for " + pos.symbol, symbol=pos.symbol)), 400
+        return {"ok": False, "error": "No price available for " + pos.symbol}
 
     price = tick.bid if trade_type == mt5.ORDER_TYPE_SELL else tick.ask
 
     request_data = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": pos.symbol,
-        "volume": pos.volume,
+        "volume": close_volume,
         "type": trade_type,
         "position": ticket,
         "price": price,
@@ -1517,15 +1579,30 @@ def close_position():
 
     if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
         retcode = result.retcode if result else 0
-        return jsonify(_structured_error(
-            "CLOSE_FAILED",
-            "Close failed: retcode=" + str(retcode) + ", comment=" + str(getattr(result, "comment", "")),
-            symbol=pos.symbol,
-            extra={"retcode": retcode},
-        )), 400
+        return {"ok": False, "error": "retcode=" + str(retcode) + " " + str(getattr(result, "comment", ""))}
 
-    log.info("[CLOSE_OK] ticket=%s symbol=%s closed at %s", ticket, pos.symbol, price)
-    return jsonify({"ok": True, "ticket": str(result.order)})
+    log.info("[CLOSE_OK] ticket=%s symbol=%s volume=%s closed at %s", ticket, pos.symbol, close_volume, price)
+    return {"ok": True, "ticket": str(result.order), "closed_volume": close_volume, "price": price}
+
+
+@app.route("/close_position", methods=["POST"])
+def close_position():
+    if not _connection["initialized"]:
+        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+
+    data = request.json or {}
+    ticket = int(data.get("ticket", 0))
+
+    with _mt5_lock:
+        exists = mt5.positions_get(ticket=ticket)
+    if not exists:
+        return jsonify(_structured_error("POSITION_NOT_FOUND", "Position not found: " + str(ticket))), 404
+
+    symbol = exists[0].symbol
+    result = close_position_direct(ticket, data.get("volume"))
+    if not result["ok"]:
+        return jsonify(_structured_error("CLOSE_FAILED", result["error"], symbol=symbol)), 400
+    return jsonify(result)
 
 
 def modify_position_direct(ticket, stop_loss=None, take_profit=None):
@@ -1702,9 +1779,18 @@ def call_function(function_name):
         return jsonify(payload), status
 
     if function_name == "positionManagement":
+        # Kept callable on demand (manual "check now" from the UI, and for
+        # tests) even though the real, always-on protection is the
+        # independent ~1s Position Manager loop below (start_position_manager)
+        # — not this request/response path anymore.
         params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
         params = params_list[0] if params_list else {}
-        result = local_functions.manage_open_positions(get_open_positions, modify_position_direct, params)
+        snap = get_account_snapshot()
+        equity = snap.get("equity") if snap else None
+        result = local_functions.manage_open_positions(
+            get_open_positions, modify_position_direct, params,
+            close_fn=close_position_direct, equity=equity,
+        )
         return jsonify({"ok": True, **result})
 
     if function_name == "dailyGoalStatus":
@@ -1765,6 +1851,7 @@ if __name__ == "__main__":
         if mt5_auto_connect():
             log.info("Bridge ready — starting real-time monitor...")
             start_monitor()
+            start_position_manager()
         else:
             log.warning("MT5 not connected. Open MT5, log in, then restart this bridge.")
 
