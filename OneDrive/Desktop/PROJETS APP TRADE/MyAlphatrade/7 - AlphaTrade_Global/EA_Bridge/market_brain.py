@@ -14,6 +14,7 @@ import time
 import indicators as ind
 import engine_scoring as es
 import confidence_v2 as cv2
+import market_regime
 from market_analysis import find_order_blocks, find_fvgs
 from local_store import list_entities as _list_entities
 
@@ -262,6 +263,13 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
 
+    # Market Regime AI (2026-08-07) — this instrument's own current
+    # technical regime (trend/range/transition + volatility), computed from
+    # the SAME primary-timeframe candles already fetched. Context only: see
+    # market_regime.py's module docstring for why this doesn't yet touch
+    # engine weights or the decision itself.
+    regime = market_regime.classify_market_regime(candles)
+
     mtf_view = None
     if multi_tf_candles:
         snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in multi_tf_candles.items() if c}
@@ -462,6 +470,7 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         "multi_timeframe_view": mtf_view,
         "validated_strategy_agreement": strategy_agreement,
         "crypto_context": crypto_context,
+        "market_regime": regime,
         "tier": tier,
         "fused_confidence": fusion["confidence"],
         # --- Comparison mode (AI Confidence Engine v2 prep, not active) ---

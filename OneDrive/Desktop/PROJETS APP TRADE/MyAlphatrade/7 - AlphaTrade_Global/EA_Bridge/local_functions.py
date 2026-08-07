@@ -946,6 +946,7 @@ def market_brain_analyze(body, fetch_candles_fn):
         "engine_results": result["engine_results"],
         "conflicts": result["conflicts"],
         "validated_strategy": vs_entity,
+        "market_regime": result["market_regime"],
     })
 
     return {
