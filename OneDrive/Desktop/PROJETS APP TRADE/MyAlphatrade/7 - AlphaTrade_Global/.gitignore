@@ -10,6 +10,9 @@ EA_Bridge/bridge_api_key.txt
 # Local entity database (replaces Base44) — per-machine data, never committed.
 EA_Bridge/alphatg_local.db
 
+# Instance lock (per-machine runtime state, see instance_lock.py) — never committed.
+EA_Bridge/bridge_instance.lock
+
 # Claude Code local permissions cache — accumulates command history that can
 # include secrets typed during a session (e.g. test passwords), never committed.
 .claude/settings.local.json

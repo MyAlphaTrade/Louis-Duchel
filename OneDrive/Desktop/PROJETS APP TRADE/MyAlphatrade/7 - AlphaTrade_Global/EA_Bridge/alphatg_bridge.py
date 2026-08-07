@@ -59,6 +59,7 @@ import global_market_intelligence
 import portfolio_risk
 import asset_validation
 import learning_engine
+import instance_lock
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -228,7 +229,7 @@ def detect_mt5_terminal():
     return None
 
 # ── MT5 auto-connection ──────────────────────────────────────────
-_connection = {"initialized": False, "account_type": None}
+_connection = {"initialized": False, "account_type": None, "login": None, "instance_lock_acquired": False}
 _mt5_lock = threading.Lock()
 
 
@@ -262,7 +263,15 @@ def mt5_auto_connect():
     else:
         account_type = "demo"
 
-    _connection.update({"initialized": True, "account_type": account_type})
+    # Instance lock (2026-08-07) — see instance_lock.py's module docstring
+    # for the real incident this closes. Must run BEFORE _connection is
+    # marked initialized so callers checking _connection["initialized"]
+    # never see a half-registered connection.
+    acquired, holder = instance_lock.acquire_or_check(os.path.dirname(local_store.DB_PATH), info.login)
+    _connection.update({
+        "initialized": True, "account_type": account_type,
+        "login": info.login, "instance_lock_acquired": acquired,
+    })
 
     log.info("=" * 60)
     log.info("MT5 CONNECTED SUCCESSFULLY")
@@ -270,6 +279,15 @@ def mt5_auto_connect():
     log.info("  Server:  %s", info.server)
     log.info("  Type:    %s", account_type)
     log.info("  Balance: %s %s", info.balance, info.currency)
+    if not acquired:
+        log.error("=" * 60)
+        log.error("DUPLICATE BRIDGE DETECTED — another live process (pid %s) is already",
+                   holder.get("pid") if holder else "?")
+        log.error("managing this SAME MT5 account (login %s, last heartbeat %s).",
+                   info.login, holder.get("heartbeat_at") if holder else "?")
+        log.error("Position Manager will NOT start here, and order-mutating requests")
+        log.error("will be refused, to avoid two bridges fighting over the same positions.")
+        log.error("=" * 60)
     log.info("=" * 60)
     return True
 
@@ -277,7 +295,7 @@ def mt5_auto_connect():
 def mt5_disconnect():
     if _connection["initialized"] and mt5 is not None:
         mt5.shutdown()
-    _connection.update({"initialized": False, "account_type": None})
+    _connection.update({"initialized": False, "account_type": None, "login": None, "instance_lock_acquired": False})
     log.info("MT5 disconnected")
 
 # ── Snapshot helper (used by both REST and SSE) ──────────────────
@@ -640,6 +658,20 @@ def _structured_error(error_code, message, symbol=None, extra=None):
     return payload
 
 
+def _reject_if_duplicate_bridge():
+    """Guard for every order-mutating route (send_order, send_pending_order,
+    close_position, modify_position) — see instance_lock.py's module
+    docstring for the real incident this closes. Returns a Flask response
+    tuple to return immediately if this process must not touch orders on
+    the current MT5 account, or None if it's safe to proceed."""
+    if not instance_lock.is_held_by_this_process(os.path.dirname(local_store.DB_PATH), _connection.get("login")):
+        return jsonify(_structured_error(
+            "DUPLICATE_BRIDGE",
+            "Un autre processus pont gère déjà ce compte MT5 — action refusée pour éviter un conflit d'ordres.",
+        )), 409
+    return None
+
+
 # ── Real-time monitor thread ─────────────────────────────────────
 # Polls MT5 every MONITOR_INTERVAL_MS and pushes changes to all SSE clients.
 
@@ -866,8 +898,14 @@ _position_manager_thread = None
 
 def _position_manager_loop():
     log.info("Position Manager thread started (interval=%.1fs)", POSITION_MANAGER_INTERVAL_SEC)
+    db_dir = os.path.dirname(local_store.DB_PATH)
     while _connection["initialized"]:
         try:
+            # Refresh this process's ownership of the account lock every
+            # cycle — see instance_lock.py. Cheap (one small file write);
+            # keeps a crashed process's lock from blocking a legitimate
+            # restart for more than LOCK_STALE_SECONDS.
+            instance_lock.heartbeat(db_dir, _connection["login"])
             params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
             params = params_list[0] if params_list else {}
             snap = get_account_snapshot()
@@ -888,6 +926,14 @@ def _position_manager_loop():
 
 def start_position_manager():
     global _position_manager_thread
+    # Instance lock guard (2026-08-07) — see instance_lock.py's module
+    # docstring for the real incident this prevents. A second bridge
+    # process connected to the same MT5 account must never run its own
+    # Position Manager alongside the one that already holds the lock.
+    if not _connection.get("instance_lock_acquired"):
+        log.error("Position Manager NOT started — another bridge process already holds "
+                   "the instance lock for this MT5 account (see DUPLICATE BRIDGE DETECTED above).")
+        return
     if _position_manager_thread and _position_manager_thread.is_alive():
         return
     _position_manager_thread = threading.Thread(target=_position_manager_loop, daemon=True)
@@ -1067,6 +1113,9 @@ def sync():
 def send_order():
     if not _connection["initialized"]:
         return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+    rejection = _reject_if_duplicate_bridge()
+    if rejection:
+        return rejection
 
     data = request.json or {}
     symbol = data.get("symbol")
@@ -1215,6 +1264,9 @@ def send_pending_order():
     whatever the price is doing right now."""
     if not _connection["initialized"]:
         return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+    rejection = _reject_if_duplicate_bridge()
+    if rejection:
+        return rejection
 
     data = request.json or {}
     symbol = data.get("symbol")
@@ -1647,6 +1699,9 @@ def close_position_direct(ticket, volume=None):
 def close_position():
     if not _connection["initialized"]:
         return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+    rejection = _reject_if_duplicate_bridge()
+    if rejection:
+        return rejection
 
     data = request.json or {}
     ticket = int(data.get("ticket", 0))
@@ -1704,6 +1759,9 @@ def modify_position():
     trail its stop."""
     if not _connection["initialized"]:
         return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
+    rejection = _reject_if_duplicate_bridge()
+    if rejection:
+        return rejection
 
     data = request.json or {}
     ticket = int(data.get("ticket", 0))
