@@ -1101,6 +1101,8 @@ def health():
         "account_type": _connection["account_type"],
         "sse_enabled": True,
         "monitor_interval_ms": MONITOR_INTERVAL_MS,
+        "data_dir": os.path.dirname(local_store.DB_PATH),
+        "db_path": local_store.DB_PATH,
     })
 
 
