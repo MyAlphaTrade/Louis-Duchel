@@ -897,18 +897,17 @@ MULTI_TIMEFRAMES = ["D1", "H4", "H1", "M15", "M5"]
 # only the separate "Auto" profile ever exercised market_brain.select_timeframe();
 # Scalping/Intraday/Swing always sent a single hardcoded default_timeframe
 # (M5/H1/H4) with zero adaptivity, despite tradingProfiles.js declaring a
-# `timeframes` range for each (M1/M5, M15/M30/H1, H4/D1) that was never
-# actually read anywhere. Scoped here to each profile's REAL range —
-# M1/M30 excluded: select_timeframe's own candidate order never included
-# them either (confirmed by audit), and M1's ~5h of real history at 300
-# bars is too little for reliable EMA200/structure reads. Scalping capped
-# at M15 (not H1+) per the 2026-08 audit: "pour du scalping c'est max du
-# M15 en descendant" — SL/TP are already ATR-proportional per timeframe
-# (verified real: M5 TP1=0.2%, H1 TP1=1.0%), so this only needed to be
-# capped, not recalculated.
+# `timeframes` range for each that was never actually read anywhere.
+# Ranges per the trader's own explicit correction (2026-08-12): Scalping
+# M1/M5/M15, Intraday M30/H1, Swing H4 and above (D1 is the highest
+# fetched today — see MULTI_TIMEFRAMES). Scalping capped at M15 (not
+# H1+) per the earlier 2026-08 audit: "pour du scalping c'est max du M15
+# en descendant" — SL/TP are already ATR-proportional per timeframe
+# (verified real: M5 TP1=0.2%, H1 TP1=1.0%), so only the selection range
+# needed fixing, not a recalculation.
 PROFILE_TIMEFRAME_RANGES = {
-    "scalping": ["M5", "M15"],
-    "intraday": ["M15", "H1"],
+    "scalping": ["M1", "M5", "M15"],
+    "intraday": ["M30", "H1"],
     "swing": ["H4", "D1"],
     # "auto" deliberately absent — keeps the full real range (select_timeframe's
     # own default), exact prior behavior for that profile, unchanged.
@@ -916,6 +915,18 @@ PROFILE_TIMEFRAME_RANGES = {
 PROFILE_TIMEFRAME_FALLBACK = {
     "scalping": "M5", "intraday": "H1", "swing": "H4",
 }
+# M1 (scalping) and M30 (intraday) are NOT part of MULTI_TIMEFRAMES, the
+# standard 5-timeframe set that feeds the SHARED "multi_timeframe" fusion
+# ENGINE for every symbol/profile's actual decision. Real regression risk
+# found and avoided while building this: indicators.compute_multi_timeframe_view
+# is an unweighted vote across whatever timeframes it's handed — silently
+# adding M1/M30 to that shared set would have changed the multi_timeframe
+# engine's real dominant_bias/alignment_score for Intraday/Swing/Auto too,
+# not just the profile that needed the extra timeframe. So M1/M30 are
+# fetched separately below, used ONLY to widen the candidate list for
+# select_timeframe's OWN decision — never merged into mtf_candles (the
+# dict actually passed to market_brain.analyze()'s multi_tf_candles).
+EXTRA_TIMEFRAMES_FOR_SELECTION = {"scalping": ["M1"], "intraday": ["M30"]}
 
 
 def market_brain_analyze(body, fetch_candles_fn):
@@ -939,8 +950,20 @@ def market_brain_analyze(body, fetch_candles_fn):
 
     tf_selection = None
     if requested_timeframe == "AUTO":
-        snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in mtf_candles.items()}
-        mtf_view = ind.compute_multi_timeframe_view(snapshots)
+        # Selection-only view: starts from the standard 5-TF set (unchanged,
+        # still what feeds market_brain.analyze()'s SHARED multi_timeframe
+        # engine below via mtf_candles), then widens with this profile's
+        # own extra timeframe (M1/M30) fetched SEPARATELY into a local dict
+        # — never merged into mtf_candles itself, so the shared engine's
+        # dominant_bias/alignment_score for other profiles never changes.
+        selection_snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in mtf_candles.items()}
+        for extra_tf in EXTRA_TIMEFRAMES_FOR_SELECTION.get(trading_profile, []):
+            if extra_tf in selection_snapshots:
+                continue
+            extra_candles, _resolved, _error = fetch_candles_fn(symbol, extra_tf, 300)
+            if extra_candles:
+                selection_snapshots[extra_tf] = ind.compute_snapshot(symbol, extra_tf, extra_candles)
+        mtf_view = ind.compute_multi_timeframe_view(selection_snapshots)
         allowed = PROFILE_TIMEFRAME_RANGES.get(trading_profile)
         fallback = PROFILE_TIMEFRAME_FALLBACK.get(trading_profile, "H1")
         timeframe, tf_rationale = mb.select_timeframe(mtf_view, allowed=allowed, fallback=fallback)
