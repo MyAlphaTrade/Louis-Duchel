@@ -603,6 +603,44 @@ def pre_order_validation(symbol, lot, direction):
     return {"valid": True, "reason": None, "details": details}
 
 
+def compute_real_lot(symbol, entry_price, stop_loss, risk_percent):
+    """Real position sizing for /send_order and /send_pending_order.
+
+    Real incident found during a live audit (2026-08-12): both routes used
+    to read `lot = float(data.get("lot", 0.01))` straight from the request
+    body, and NEITHER frontend caller (AnalysisSessionStore.jsx's
+    autoExecute, QuickExecute.jsx's manual execute) ever actually included
+    a `lot` field — so every real order this app has ever sent through
+    these two routes was sized at a flat 0.01, completely ignoring the
+    account's real equity, the configured risk_percent, and the real
+    per-symbol contract size. local_functions.calculate_lot()/build_order()
+    (Real Capital Risk Engine, 2026-08-06) were correct but only ever
+    wired into the separate tradingConnector "build_order" PREVIEW action,
+    which nothing in the real order-sending path ever called.
+
+    Returns (lot: float|None, error_response: tuple|None) — error_response,
+    when not None, is a ready-to-return (jsonify(...), status_code) pair;
+    the caller should `return error_response` directly."""
+    sym_result = resolve_symbol(symbol)
+    if not sym_result["found"]:
+        return None, (jsonify(_structured_error("SYMBOL_NOT_FOUND", "symbol required", symbol=symbol)), 400)
+    resolved = sym_result["resolved"]
+    with _mt5_lock:
+        info = mt5.symbol_info(resolved)
+    contract_size = getattr(info, "trade_contract_size", None) if info else None
+
+    snap = get_account_snapshot()
+    equity = snap.get("equity") if snap else None
+    try:
+        lot = local_functions.calculate_lot(
+            symbol, entry_price=entry_price, stop_loss=stop_loss,
+            capital=equity, risk_percent=risk_percent, contract_size=contract_size,
+        )
+    except local_functions.RealCapitalUnavailable as e:
+        return None, (jsonify(_structured_error("CAPITAL_UNAVAILABLE", str(e), symbol=symbol)), 400)
+    return lot, None
+
+
 def validate_and_adjust_stops(symbol, direction, entry_price, stop_loss, take_profit):
     """Validate and adjust SL/TP to respect the broker's minimum stops level.
 
@@ -1163,12 +1201,24 @@ def send_order():
     data = request.json or {}
     symbol = data.get("symbol")
     direction = data.get("direction", "BUY")
-    lot = float(data.get("lot", 0.01))
     stop_loss = float(data.get("stop_loss", 0))
     take_profit_1 = float(data.get("take_profit_1", 0))
 
     if not symbol:
         return jsonify(_structured_error("SYMBOL_NOT_FOUND", "symbol required")), 400
+
+    # Real Capital Risk Engine (2026-08-12 fix) — compute the lot server-side
+    # from real equity/risk/contract size unless the caller explicitly
+    # supplied one (manual override). See compute_real_lot()'s docstring for
+    # the real incident this closes: neither real frontend caller ever sent
+    # a `lot`, so every order used to fall through to a flat 0.01.
+    explicit_lot = data.get("lot")
+    if explicit_lot:
+        lot = float(explicit_lot)
+    else:
+        lot, lot_error = compute_real_lot(symbol, data.get("entry_price"), stop_loss, data.get("risk_percent"))
+        if lot_error:
+            return lot_error
 
     # ── Pre-order validation checklist ──
     validation = pre_order_validation(symbol, lot, direction)
@@ -1314,7 +1364,6 @@ def send_pending_order():
     data = request.json or {}
     symbol = data.get("symbol")
     direction = (data.get("direction") or "BUY").upper()
-    lot = float(data.get("lot", 0.01))
     stop_loss = float(data.get("stop_loss", 0))
     take_profit = float(data.get("take_profit_1", data.get("take_profit", 0)))
     expiration = data.get("expiration")  # optional ISO datetime string; GTC if absent
@@ -1327,6 +1376,17 @@ def send_pending_order():
         entry_price = float(data.get("entry_price"))
     except (TypeError, ValueError):
         return jsonify(_structured_error("INVALID_REQUEST", "entry_price is required for a pending order")), 400
+
+    # Real Capital Risk Engine (2026-08-12 fix) — see compute_real_lot()'s
+    # docstring and send_order()'s identical fix just above for the real
+    # incident this closes (flat 0.01 lot on every real order).
+    explicit_lot = data.get("lot")
+    if explicit_lot:
+        lot = float(explicit_lot)
+    else:
+        lot, lot_error = compute_real_lot(symbol, entry_price, stop_loss, data.get("risk_percent"))
+        if lot_error:
+            return lot_error
 
     validation = pre_order_validation(symbol, lot, direction)
     if not validation["valid"]:

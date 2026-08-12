@@ -377,14 +377,24 @@ class RealCapitalUnavailable(Exception):
     never a value supplied by the caller."""
 
 
-def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None):
+def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None, contract_size=None):
+    """contract_size: pass the REAL value read live from MT5
+    (symbol_info().trade_contract_size) whenever the caller has an active
+    connection — see alphatg_bridge.py's compute_real_lot(). Falls back to
+    the hardcoded CONTRACT_SIZES table only when no live value is
+    available (backtests replaying historical bars, or the standalone
+    tradingConnector "build_order" preview action) — that table is known
+    incomplete (e.g. Deriv synthetic indices like Boom/Crash/Volatility
+    aren't in it, silently defaulting to a Forex-scale 100000 that badly
+    mis-sizes those instruments — real incident, 2026-08-12)."""
     if not capital or capital <= 0:
         raise RealCapitalUnavailable(
             "Capital réel indisponible (equity MT5 introuvable) — impossible de calculer une taille de position en toute sécurité."
         )
     risk_percent = risk_percent if risk_percent is not None else 1
     risk_amount = capital * (risk_percent / 100)
-    contract_size = CONTRACT_SIZES.get((symbol or "").upper(), 100000)
+    if not contract_size:
+        contract_size = CONTRACT_SIZES.get((symbol or "").upper(), 100000)
     sl_distance = abs((entry_price or 0) - (stop_loss or 0))
     if sl_distance <= 0:
         return 0.01
