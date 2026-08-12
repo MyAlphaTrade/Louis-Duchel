@@ -483,12 +483,11 @@ tr:hover td { background: rgba(0,200,150,0.03); }
     <label>Client</label>
     <input type="text" id="activateUserName" disabled>
     <label>Forfait</label>
-    <select id="activatePlan">
-      <option value="starter">Starter — 29.99 $/mois</option>
-      <option value="pro">Pro — 79.99 $/mois</option>
-      <option value="elite">Elite — 299.99 $/mois</option>
-      <option value="premium">Premium — 999.99 $/mois</option>
-    </select>
+    <!-- Options générées dynamiquement par populatePlanSelect() -- voir
+         openActivate() ; plus jamais codées en dur ici, sinon un forfait
+         ajouté (ex: Global, 09/08/2026) reste invisible dans ce menu même
+         s'il existe déjà dans currentForfaits partout ailleurs dans l'app. -->
+    <select id="activatePlan"></select>
     <label>Cycle de facturation</label>
     <select id="activateCycle">
       <option value="monthly">Mensuel</option>
@@ -542,12 +541,8 @@ tr:hover td { background: rgba(0,200,150,0.03); }
     <label>Mot de passe temporaire</label>
     <input type="text" id="addPassword" value="AlphaTrade2026!">
     <label>Forfait</label>
-    <select id="addPlan" style="width:100%;padding:8px 12px;font-size:14px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
-      <option value="starter">Starter</option>
-      <option value="pro">Pro</option>
-      <option value="elite">Elite</option>
-      <option value="premium">Premium</option>
-    </select>
+    <!-- Options générées dynamiquement par populatePlanSelect() -- voir openAddModal() -->
+    <select id="addPlan" style="width:100%;padding:8px 12px;font-size:14px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text)"></select>
     <label>Durée d'abonnement</label>
     <select id="addDuration" style="width:100%;padding:8px 12px;font-size:14px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
       <option value="7">7 jours (test)</option>
@@ -929,6 +924,21 @@ window.onload = async () => {
 // "Paramètres forfaits" affichent désormais le vrai nom édité dans l'onglet
 // Forfaits (au lieu d'un libellé figé "Basique ⚡" etc.) -- renommer un
 // forfait s'y répercute automatiquement.
+// Comble les clés de FORFAITS_DEFAULT absentes d'un blob venant du serveur
+// (ex: sauvegardé avant l'ajout du forfait Global le 05/08/2026) sans jamais
+// écraser une clé déjà personnalisée par l'admin -- trouvé le 10/08/2026 :
+// currentForfaits remplaçait entièrement les valeurs par défaut par la
+// réponse serveur (`currentForfaits = d.forfaits`), donc un forfait ajouté
+// plus tard au code restait invisible partout tant que personne ne
+// resauvegardait manuellement l'onglet Forfaits.
+function withMissingDefaults(forfaits) {
+  const merged = JSON.parse(JSON.stringify(forfaits));
+  for (const [key, def] of Object.entries(FORFAITS_DEFAULT)) {
+    if (!merged[key]) merged[key] = JSON.parse(JSON.stringify(def));
+  }
+  return merged;
+}
+
 async function ensureForfaitsLoaded() {
   if (Object.keys(currentForfaits).length) return;
   if (!token) { currentForfaits = JSON.parse(JSON.stringify(FORFAITS_DEFAULT)); return; }
@@ -936,7 +946,7 @@ async function ensureForfaitsLoaded() {
     const r = await fetch(`${API}/admin/forfaits`, { headers: { Authorization: 'Bearer ' + token } });
     if (r.ok) {
       const d = await r.json();
-      if (d.forfaits && Object.keys(d.forfaits).length) currentForfaits = JSON.parse(JSON.stringify(d.forfaits));
+      if (d.forfaits && Object.keys(d.forfaits).length) currentForfaits = withMissingDefaults(d.forfaits);
     }
   } catch (_) {}
   if (!Object.keys(currentForfaits).length) currentForfaits = JSON.parse(JSON.stringify(FORFAITS_DEFAULT));
@@ -1017,7 +1027,7 @@ function switchTab(name, btn) {
 function renderForfaitsGrid(data) {
   const grid = document.getElementById('forfaitsGrid');
   if (!grid) return;
-  currentForfaits = data ? JSON.parse(JSON.stringify(data)) : JSON.parse(JSON.stringify(FORFAITS_DEFAULT));
+  currentForfaits = data ? withMissingDefaults(data) : JSON.parse(JSON.stringify(FORFAITS_DEFAULT));
   const keys = Object.keys(currentForfaits);
   grid.innerHTML = keys.map(key => {
     const f = currentForfaits[key];
@@ -1563,9 +1573,29 @@ async function loadStatsTab() {
 }
 
 // ── ACTIONS ───────────────────────────────────────────────────────────────
+// Remplit un <select> de forfait à partir des vraies données (currentForfaits,
+// avec repli sur FORFAITS_DEFAULT si rien n'est encore chargé) -- jamais une
+// liste figée dans le HTML, sinon un forfait ajouté (ex: Global) reste
+// invisible ici même s'il existe partout ailleurs dans l'app (bug trouvé le
+// 10/08/2026 : Basique et Global manquaient dans "Changer forfait"/"Créer un
+// compte"). Volontairement PAS filtré par `available` -- un forfait retiré
+// de la vente publique (Global : usage interne/collaborateurs) doit rester
+// assignable manuellement par l'admin ; seule la page publique doit le
+// masquer, pas cet outil de gestion.
+function populatePlanSelect(select, selected) {
+  const source = Object.keys(currentForfaits).length ? currentForfaits : FORFAITS_DEFAULT;
+  const previous = selected || select.value;
+  select.innerHTML = Object.entries(source).map(([key, f]) => {
+    const price = f.price_monthly != null ? ` — ${f.price_monthly.toFixed(2)} $/mois` : '';
+    return `<option value="${key}">${f.name || key}${price}</option>`;
+  }).join('');
+  if (previous && source[previous]) select.value = previous;
+}
+
 function openActivate(id, name) {
   document.getElementById('activateUserId').value = id;
   document.getElementById('activateUserName').value = name;
+  populatePlanSelect(document.getElementById('activatePlan'));
   document.getElementById('activateModal').classList.add('open');
 }
 function openPromo(id, name) {
@@ -1573,7 +1603,10 @@ function openPromo(id, name) {
   document.getElementById('promoUserName').value = name;
   document.getElementById('promoModal').classList.add('open');
 }
-function openAddModal() { document.getElementById('addModal').classList.add('open'); }
+function openAddModal() {
+  populatePlanSelect(document.getElementById('addPlan'));
+  document.getElementById('addModal').classList.add('open');
+}
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 async function doActivate() {
