@@ -119,7 +119,7 @@ def add_pna_headers(resp):
     resp.headers["Access-Control-Allow-Private-Network"] = "true"
     resp.headers["Access-Control-Allow-Origin"] = _cors_origin_header()
     resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
     return resp
 
 # ── API Key management ───────────────────────────────────────────
@@ -153,7 +153,7 @@ def check_auth():
         resp.headers["Access-Control-Allow-Private-Network"] = "true"
         resp.headers["Access-Control-Allow-Origin"] = _cors_origin_header()
         resp.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
         resp.headers["Access-Control-Max-Age"] = "86400"
         return resp
 
