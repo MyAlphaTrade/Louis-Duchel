@@ -893,6 +893,30 @@ def strategy_orchestrator(body):
 
 MULTI_TIMEFRAMES = ["D1", "H4", "H1", "M15", "M5"]
 
+# Task #90 — real per-profile adaptive timeframe selection. Audit finding:
+# only the separate "Auto" profile ever exercised market_brain.select_timeframe();
+# Scalping/Intraday/Swing always sent a single hardcoded default_timeframe
+# (M5/H1/H4) with zero adaptivity, despite tradingProfiles.js declaring a
+# `timeframes` range for each (M1/M5, M15/M30/H1, H4/D1) that was never
+# actually read anywhere. Scoped here to each profile's REAL range —
+# M1/M30 excluded: select_timeframe's own candidate order never included
+# them either (confirmed by audit), and M1's ~5h of real history at 300
+# bars is too little for reliable EMA200/structure reads. Scalping capped
+# at M15 (not H1+) per the 2026-08 audit: "pour du scalping c'est max du
+# M15 en descendant" — SL/TP are already ATR-proportional per timeframe
+# (verified real: M5 TP1=0.2%, H1 TP1=1.0%), so this only needed to be
+# capped, not recalculated.
+PROFILE_TIMEFRAME_RANGES = {
+    "scalping": ["M5", "M15"],
+    "intraday": ["M15", "H1"],
+    "swing": ["H4", "D1"],
+    # "auto" deliberately absent — keeps the full real range (select_timeframe's
+    # own default), exact prior behavior for that profile, unchanged.
+}
+PROFILE_TIMEFRAME_FALLBACK = {
+    "scalping": "M5", "intraday": "H1", "swing": "H4",
+}
+
 
 def market_brain_analyze(body, fetch_candles_fn):
     import backtest_engine as bt
@@ -917,7 +941,9 @@ def market_brain_analyze(body, fetch_candles_fn):
     if requested_timeframe == "AUTO":
         snapshots = {tf: ind.compute_snapshot(symbol, tf, c) for tf, c in mtf_candles.items()}
         mtf_view = ind.compute_multi_timeframe_view(snapshots)
-        timeframe, tf_rationale = mb.select_timeframe(mtf_view)
+        allowed = PROFILE_TIMEFRAME_RANGES.get(trading_profile)
+        fallback = PROFILE_TIMEFRAME_FALLBACK.get(trading_profile, "H1")
+        timeframe, tf_rationale = mb.select_timeframe(mtf_view, allowed=allowed, fallback=fallback)
         tf_selection = {"timeframe": timeframe, "rationale": tf_rationale}
     else:
         timeframe = requested_timeframe

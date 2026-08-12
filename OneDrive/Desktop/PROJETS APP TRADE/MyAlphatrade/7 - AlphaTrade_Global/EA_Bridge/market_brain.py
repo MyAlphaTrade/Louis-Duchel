@@ -184,18 +184,30 @@ def apply_global_intelligence_context(decision, confidence, symbol, decision_bia
     return decision, confidence, "neutral"
 
 
-def select_timeframe(multi_tf_view):
+def select_timeframe(multi_tf_view, allowed=None, fallback="H1"):
     """Deterministic replacement for the old LLM timeframe picker: choose
     the timeframe whose own bias agrees with the dominant multi-timeframe
     bias (real confluence), preferring the most reactive (shortest) one
-    among ties so entries aren't needlessly delayed."""
+    among ties so entries aren't needlessly delayed.
+
+    allowed: optional ordered list restricting the candidate timeframes to
+    a profile's real scope (Task #90 — audit found Scalping/Intraday/Swing
+    never got adaptive selection at all, always a single hardcoded
+    default_timeframe; only the separate "Auto" profile ever called this
+    function). None (unchanged) keeps the full real range — exact prior
+    behavior for the "auto" profile, which stays unscoped.
+    fallback: timeframe returned when there's no multi-timeframe data, or
+    none of `allowed` confirms the dominant bias. Defaults to "H1"
+    (unchanged prior behavior) — callers that scope `allowed` should also
+    pass their own profile's proven-safe default here instead.
+    """
+    order = list(allowed) if allowed else ["M5", "M15", "H1", "H4", "D1"]
     if not multi_tf_view or multi_tf_view["timeframes_analyzed"] == 0:
-        return "H1", "Aucune donnée multi-timeframe — repli sur H1 par défaut."
+        return fallback, f"Aucune donnée multi-timeframe — repli sur {fallback} par défaut."
     dominant = multi_tf_view["dominant_bias"]
-    order = ["M5", "M15", "H1", "H4", "D1"]
-    agreeing = [t["timeframe"] for t in multi_tf_view["timeframes"] if t["bias"] == dominant]
+    agreeing = [t["timeframe"] for t in multi_tf_view["timeframes"] if t["bias"] == dominant and t["timeframe"] in order]
     if not agreeing:
-        return "H1", "Aucun timeframe ne confirme un biais dominant clair — repli sur H1."
+        return fallback, f"Aucun timeframe autorisé ({', '.join(order)}) ne confirme le biais dominant {dominant} — repli sur {fallback}."
     chosen = next((tf for tf in order if tf in agreeing), agreeing[0])
     return chosen, f"Timeframe {chosen} choisi — confirme le biais dominant {dominant} ({multi_tf_view['alignment_score']}% d'alignement)."
 
