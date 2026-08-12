@@ -468,6 +468,17 @@ TP1_CLOSE_FRACTION = 0.33
 TP2_TRIGGER_R = 2.0
 TP2_CLOSE_FRACTION = 0.5
 
+# Scalping override (2026-08-12, found in a live audit with Louis): a
+# trailing "runner" left after TP2 is the right call for Swing/Intraday —
+# it's how a genuinely large move isn't capped early. For Scalping it's the
+# opposite of the point: the whole idea is to bank a small target and free
+# the symbol up fast for the next entry, not let one position linger. TP2
+# closes the position ENTIRELY for a trade opened under Scalping, instead
+# of leaving TP1_CLOSE_FRACTION*TP2_CLOSE_FRACTION-ish of the original open.
+# Gated on trade["trading_profile"] captured at OPEN time (not whatever the
+# global setting is NOW) — see AnalysisSessionStore.jsx's Trade.create().
+SCALPING_TP2_CLOSE_FRACTION = 1.0
+
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
 # A position with NO recorded stop (opened manually with none, or a Trade
@@ -555,7 +566,8 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
                 actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_failed", "error": result.get("error")})
 
         if close_fn and remaining_lot > 0 and r >= TP2_TRIGGER_R and "tp1_partial" in events and "tp2_partial" not in events:
-            close_vol = round(remaining_lot * TP2_CLOSE_FRACTION, 4)
+            tp2_fraction = SCALPING_TP2_CLOSE_FRACTION if trade.get("trading_profile") == "scalping" else TP2_CLOSE_FRACTION
+            close_vol = round(remaining_lot * tp2_fraction, 4)
             result = close_fn(pos["ticket"], volume=close_vol)
             if result.get("ok"):
                 remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
