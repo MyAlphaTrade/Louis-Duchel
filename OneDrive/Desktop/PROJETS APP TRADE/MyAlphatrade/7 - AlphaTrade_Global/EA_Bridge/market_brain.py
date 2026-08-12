@@ -254,7 +254,7 @@ def _find_actionable_zone(breakdown, decision_bias):
 
 
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
-            use_regime_modulation=False):
+            use_regime_modulation=False, use_category_modulation=False):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
@@ -266,6 +266,15 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
       window) cells vs the current unmodulated behavior — the hypothesis
       doesn't generalize (helps XAUUSD, consistently hurts BTCUSD/ETHUSD).
       Stays False; kept as a tested, documented, inactive capability.
+    use_category_modulation: OFF by default everywhere (Task #89/Q6). Tested
+      via fusion_backtest.py walk-forward (2026-08-12): confirmed zero effect
+      on XAUUSD/BTCUSD/ETHUSD (9/9 windows byte-identical, as designed —
+      see engine_scoring.category_weight_multipliers's docstring), but the
+      hypothesis itself (cut smart_money/liquidity/volume, boost
+      pattern_recognition/indicator_fusion/volatility for Deriv synthetic
+      indices) came back NEGATIVE on real Boom 1000 Index data across all 3
+      tested windows. Stays False; kept as a tested, documented, inactive
+      capability, same treatment as use_regime_modulation.
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
@@ -277,7 +286,18 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     # engine weights or the decision itself, except behind the
     # use_regime_modulation experiment flag above.
     regime = market_regime.classify_market_regime(candles)
-    weight_multipliers = market_regime.regime_weight_multipliers(regime["regime"]) if use_regime_modulation else None
+    regime_multipliers = market_regime.regime_weight_multipliers(regime["regime"]) if use_regime_modulation else {}
+    category_multipliers = es.category_weight_multipliers(symbol) if use_category_modulation else {}
+    if regime_multipliers or category_multipliers:
+        # Key-wise product, not override: if a future combination of both
+        # experiments is ever tested together, each engine's weight should
+        # reflect BOTH active effects, not whichever flag happened to be
+        # applied last. Today only one of these is ever True in practice.
+        weight_multipliers = {}
+        for engine_id in set(regime_multipliers) | set(category_multipliers):
+            weight_multipliers[engine_id] = regime_multipliers.get(engine_id, 1.0) * category_multipliers.get(engine_id, 1.0)
+    else:
+        weight_multipliers = None
 
     mtf_view = None
     if multi_tf_candles:

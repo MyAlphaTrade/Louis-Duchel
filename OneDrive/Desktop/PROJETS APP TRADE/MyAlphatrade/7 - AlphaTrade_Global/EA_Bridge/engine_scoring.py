@@ -15,6 +15,7 @@ weight of 6, after being a zero-weight stub since this file's creation.
 """
 
 import logging
+import re
 
 from indicators import ema, rsi, macd, atr, bollinger_bands, find_swings, classify_structure, fibonacci_levels, bias_from_snapshot
 from market_analysis import bos_choch, find_fvgs, find_order_blocks, find_liquidity_zones, detect_sweep, detect_candlestick_pattern
@@ -50,6 +51,80 @@ ENGINE_WEIGHTS = {
     "volatility": 5,
     "session": 4,
 }
+
+
+def _infer_asset_category(raw):
+    """Mirrors local_functions._infer_asset_category / portfolio_risk.py's
+    own copy exactly (duplicated, not imported, same reasoning as
+    portfolio_risk.py's own comment: keep this leaf module import-independent)."""
+    s = re.sub(r"\s+", "", (raw or "").upper())
+    if re.match(r"^(BOOM|CRASH|STEP)", s) or re.search(r"VIX\d", s):
+        return "synthetic"
+    if "INDEX" in s:
+        return "indices"
+    if re.match(r"^(BTC|ETH|SOL|XRP|ADA|DOGE|BNB|LTC|AVAX|LINK|DOT|MATIC|ATOM|TRX|NEAR|APT|FIL|ICP|ARB|OP|INJ|SUI|TIA|RNDR|FTM)", s):
+        return "crypto"
+    if re.match(r"^X(AU|AG|PT|PD)", s):
+        return "metals"
+    if re.search(r"(OIL|GAS|COPPER|WHEAT|CORN|SOY|COFFEE|SUGAR|COCOA)", s):
+        return "commodities"
+    return "forex"
+
+
+# Task #89 (Q6) — modulation par catégorie d'actif, opt-in (use_category_modulation
+# param sur market_brain.analyze(), défaut False partout, TESTÉE ET INVALIDÉE).
+# Même mécanique que market_regime.regime_weight_multipliers (BOOST/CUT sur
+# ENGINE_WEIGHTS avant fusion), même discipline : jamais activé sans preuve.
+#
+# Hypothèse testée : les indices synthétiques Deriv (Boom/Crash/Step) sont des
+# processus purement algorithmiques sans carnet d'ordres institutionnel réel —
+# donc smart_money (order blocks/FVG suppose une empreinte institutionnelle
+# réelle), liquidity (sweeps suppose de vraies zones de liquidité) et volume
+# (le volume broker sur un synthétique est un proxy de ticks, pas un vrai
+# volume de marché) devraient être moins fiables pour cette catégorie, au
+# profit de pattern_recognition/indicator_fusion/volatility (purement
+# statistiques/techniques).
+#
+# Résultat réel (fusion_backtest.py, walk-forward, 2026-08-12) :
+# - Non-régression : XAUUSD/BTCUSD/ETHUSD, 3 fenêtres réelles de 30j chacune
+#   (9 cellules) — résultat BYTE-IDENTIQUE modulation ON vs OFF dans les 9,
+#   confirmé : category_weight_multipliers retourne {} pour metals/crypto/
+#   forex/indices/commodities, donc ce flag ne peut structurellement pas les
+#   affecter, quelle que soit sa valeur.
+# - Boom 1000 Index, 3 fenêtres réelles de 30j (seul instrument où {} n'est
+#   PAS retourné) : modulation négative dans les 3 — PnL relatif -12.7%,
+#   -9.4%, -3.3% ; profit factor et win rate en baisse à chaque fenêtre.
+#   Hypothèse invalidée, comme l'expérience de régime (commit 7a6108f) : la
+#   théorie ne se vérifie pas sur données réelles. (Les montants PnL absolus
+#   de ce backtest sont hors échelle — fusion_backtest.py utilise encore le
+#   contract_size par défaut de CONTRACT_SIZES, incomplet pour les
+#   synthétiques — mais la comparaison RELATIVE base vs modulé, qui utilise
+#   la même valeur erronée des deux côtés, reste valide.)
+# Reste désactivé partout ; conservé comme capacité testée, documentée,
+# inactive — même traitement que market_regime.py.
+#
+# Toutes les catégories (forex/metals/crypto/indices/commodities/synthetic) :
+# {} — cette modulation n'est donc active nulle part par défaut.
+SYNTHETIC_CUT_ENGINES = ("smart_money", "liquidity", "volume")
+SYNTHETIC_BOOST_ENGINES = ("pattern_recognition", "indicator_fusion", "volatility")
+CATEGORY_CUT_MULTIPLIER = 0.7
+CATEGORY_BOOST_MULTIPLIER = 1.3
+
+
+def category_weight_multipliers(symbol):
+    """Returns a {engine_name: multiplier} dict to apply on top of
+    ENGINE_WEIGHTS before fusion, or {} for categories left untouched.
+    Mirrors market_regime.regime_weight_multipliers's contract exactly so
+    market_brain.py can combine both key-wise."""
+    category = _infer_asset_category(symbol)
+    if category != "synthetic":
+        return {}
+    multipliers = {}
+    for name in SYNTHETIC_CUT_ENGINES:
+        multipliers[name] = CATEGORY_CUT_MULTIPLIER
+    for name in SYNTHETIC_BOOST_ENGINES:
+        multipliers[name] = CATEGORY_BOOST_MULTIPLIER
+    return multipliers
 
 
 def _clamp(v, lo=0, hi=100):

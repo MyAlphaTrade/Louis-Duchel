@@ -72,7 +72,8 @@ def _pending_order_type(direction, pending_price, price_at_placement):
 
 
 def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=None,
-                         capital=1000, risk_percent=1, warmup_bars=210, use_regime_modulation=False):
+                         capital=1000, risk_percent=1, warmup_bars=210, use_regime_modulation=False,
+                         use_category_modulation=False):
     """Replays the real market_brain.analyze() pipeline bar by bar.
 
     primary_candles: full historical candle list for `primary_timeframe`,
@@ -92,6 +93,13 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
       real walk-forward comparison (commit 7a6108f, 2026-08-07): net -37%
       PnL with modulation on, across 3 real assets x 3 real 90-day windows.
       Stays False in every live/default call site.
+    use_category_modulation: OFF by default — passed straight through to
+      market_brain.analyze() (Task #89/Q6). Same harness, used to validate
+      the per-asset-category engine weighting before any activation: a
+      non-regression run on non-synthetic symbols (expected byte-identical
+      to modulation off, since category_weight_multipliers returns {} for
+      them) plus a real comparison run on a synthetic index (e.g.
+      Boom1000Index).
 
     Returns {"trades": [...], "stats": {...}} — same shape as
     backtest_engine.run_backtest(), stats now include expectancy.
@@ -180,6 +188,7 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
                 multi_tf_candles=window_mtf, validated_strategy=None,
                 capital=capital, risk_percent=risk_percent,
                 use_regime_modulation=use_regime_modulation,
+                use_category_modulation=use_category_modulation,
             )
 
             decision = result["decision"]
