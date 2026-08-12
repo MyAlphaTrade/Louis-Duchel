@@ -240,6 +240,17 @@ def detect_mt5_terminal():
 # manual order on the broker's mobile app, etc.) — see Task #82.
 GLOBAL_MAGIC_NUMBER = 234000
 
+# Price-freshness guard for /send_order (2026-08-12) — see the check itself
+# for the full reasoning. 0.3 = price allowed to drift up to 30% of the
+# planned SL distance since the decision was made before the order is
+# refused as stale; chosen as a real, non-trivial fraction of the risk unit
+# (not a few points of noise) without being so tight that ordinary quote
+# jitter during the real network round trips (Signal.create, daily-goal,
+# portfolio-risk checks) would reject good orders. Not yet calibrated
+# against real historical drift data — a reasonable first value, revisit
+# with real logs of how often/how far this actually fires in practice.
+STALE_ENTRY_MAX_RISK_FRACTION = 0.3
+
 
 def _classify_trade_origin(magic):
     """Shared 3-way split ("Global IA / externe / manuel") used for both
@@ -1236,6 +1247,33 @@ def send_order():
     normalized_lot = details["normalized_lot"]
     filling_const_val = details.get("filling_const", mt5.ORDER_FILLING_RETURN)
     price = details["tick_price"]
+
+    # Price-freshness check (2026-08-12, found in a live audit with Louis) —
+    # SL/TP were computed at DECISION time against a specific price, but the
+    # actual entry always uses the LIVE tick above (correct — a market order
+    # must fill at the real current price, never a stale one). Between the
+    # decision and this request there are several real network round trips
+    # (Signal.create, daily-goal check, portfolio-risk check), each taking
+    # real time. If price has drifted far enough since the decision that the
+    # planned SL/TP no longer describe the risk this order was actually
+    # sized for, firing anyway means trading a materially different setup
+    # than what confidence/risk_percent were calculated against. No prior
+    # check existed for this at all. Pending orders are exempt — waiting for
+    # price to reach a planned level is the entire point of a LIMIT/STOP.
+    requested_entry = data.get("entry_price")
+    if requested_entry and stop_loss:
+        planned_risk = abs(float(requested_entry) - stop_loss)
+        drift = abs(price - float(requested_entry))
+        if planned_risk > 0 and drift > planned_risk * STALE_ENTRY_MAX_RISK_FRACTION:
+            log.warning("[PRICE_DRIFT] %s rejected: planned_entry=%s current=%s drift=%.5f (%.0f%% of planned risk %.5f)",
+                        symbol, requested_entry, price, drift, (drift / planned_risk) * 100, planned_risk)
+            return jsonify(_structured_error(
+                "PRICE_DRIFT",
+                f"Prix trop éloigné du plan depuis la décision ({symbol}: prévu {requested_entry}, actuel {price}) "
+                f"— le risque calculé ne correspond plus à la position réelle. Ordre refusé, sera réévalué au prochain cycle.",
+                symbol=symbol,
+                extra={"planned_entry": requested_entry, "current_price": price, "planned_risk": planned_risk, "drift": drift},
+            )), 400
 
     # Simulation mode: validated as if real (real symbol/price/lot/market
     # hours above), but never reaches mt5.order_send — no real order, no
