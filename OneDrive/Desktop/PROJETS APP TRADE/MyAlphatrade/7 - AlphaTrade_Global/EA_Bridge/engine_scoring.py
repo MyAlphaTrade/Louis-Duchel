@@ -58,7 +58,7 @@ def _infer_asset_category(raw):
     own copy exactly (duplicated, not imported, same reasoning as
     portfolio_risk.py's own comment: keep this leaf module import-independent)."""
     s = re.sub(r"\s+", "", (raw or "").upper())
-    if re.match(r"^(BOOM|CRASH|STEP)", s) or re.search(r"VIX\d", s):
+    if re.match(r"^(BOOM|CRASH|STEP|VOLATILITY)", s) or re.search(r"VIX\d", s):
         return "synthetic"
     if "INDEX" in s:
         return "indices"

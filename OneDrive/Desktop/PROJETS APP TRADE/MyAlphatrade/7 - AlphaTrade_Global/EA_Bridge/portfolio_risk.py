@@ -51,7 +51,7 @@ def _infer_asset_category(raw):
     it is deliberately a leaf module other things depend on, not the reverse)."""
     import re
     s = re.sub(r"\s+", "", (raw or "").upper())
-    if re.match(r"^(BOOM|CRASH|STEP)", s) or re.search(r"VIX\d", s):
+    if re.match(r"^(BOOM|CRASH|STEP|VOLATILITY)", s) or re.search(r"VIX\d", s):
         return "synthetic"
     if "INDEX" in s:
         return "indices"
