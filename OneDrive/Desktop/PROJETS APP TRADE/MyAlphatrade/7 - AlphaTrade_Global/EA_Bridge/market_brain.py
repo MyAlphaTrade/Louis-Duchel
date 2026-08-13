@@ -31,6 +31,27 @@ PENDING_ORDER_MAX_ATR = 1.5
 # a worse price than acting now — treat it as "there", not "approaching".
 IMMEDIATE_ENTRY_MAX_ATR = 0.15
 
+# Task #96 — momentum catch-up for entry_type, opt-in (use_momentum_catchup
+# =False everywhere, testing in progress). Real finding, 2026-08-13: replayed
+# real production decisions and found XAUUSD BUY targeting a pending zone at
+# 4356.84 while price ran continuously AWAY from it for hours (4360 -> 4364
+# -> 4358 -> 4394 -> 4413 -> 4422 -> 4433, ~5 real ATRs of net displacement)
+# — the zone-only logic above has no fallback: a real, sustained, in-favor
+# move that never pulls back to the ideal zone just gets re-targeted forever,
+# never taken. MOMENTUM_DISPLACEMENT_LOOKBACK/MIN_ATR below define a second,
+# independent path to "immediate": real recent price displacement in the
+# decision's own direction, regardless of distance to any zone — the move
+# itself is treated as the validation a clean setup would otherwise provide.
+#
+# MIN_ATR=3.0 (not the original 1.5, see analyze()'s own docstring for the
+# real walk-forward numbers behind this choice): 1.5 fired too often and
+# came back net negative, same pattern as the three invalidated experiments
+# elsewhere in this file; 3.0 — closer to the real incident's ~5 ATR
+# magnitude, a genuinely rare and decisive signal — came back net positive
+# on real H1 data, though modest and uneven across symbols/windows.
+MOMENTUM_DISPLACEMENT_LOOKBACK = 10
+MOMENTUM_DISPLACEMENT_MIN_ATR = 3.0
+
 ACTION_TIERS = [
     (90, "premium", "Configuration premium"),
     (75, "potential", "Signal potentiel"),
@@ -266,7 +287,8 @@ def _find_actionable_zone(breakdown, decision_bias):
 
 
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
-            use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False):
+            use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False,
+            use_momentum_catchup=False):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
@@ -304,6 +326,25 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
       doubled trade count (94->160) with degraded quality on XAUUSD in
       particular. Stays False; kept as a tested, documented, inactive
       capability.
+    use_momentum_catchup: OFF by default everywhere (Task #96, testing in
+      progress, tentatively promising but not yet proven). Real finding,
+      2026-08-13: replayed real production decisions and found a real
+      XAUUSD BUY targeting a pending zone for hours while price ran
+      continuously away from it (~5 real ATRs of net displacement, never
+      taken) — the zone-only entry_type logic below has no fallback for a
+      real, sustained, in-favor move that never pulls back. See
+      MOMENTUM_DISPLACEMENT_LOOKBACK/MIN_ATR above for the mechanism.
+      Tested via fusion_backtest.py walk-forward (2026-08-13), H1 only, 9
+      real windows on XAUUSD/BTCUSD/ETHUSD: a loose 1.5 ATR threshold was
+      net NEGATIVE (-213 PnL, more trades, worse quality — same pattern as
+      the three invalidated experiments above); tightened to
+      MOMENTUM_DISPLACEMENT_MIN_ATR=3.0 (closer to the real incident's ~5
+      ATR magnitude — a rarer, more decisive signal) came back net POSITIVE
+      but modest and uneven (+34.51 PnL, +3 trades; a real +146 swing on
+      XAUUSD's first window, a real -60 swing on ETHUSD's — not a clean win
+      everywhere). Stays False pending broader validation (real per-profile
+      timeframes M1/M5/M15/M30/H4/D1, not just H1) — kept as a tested,
+      documented, tentatively-promising-but-inactive capability.
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
@@ -401,9 +442,25 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         zone_engine, zone = _find_actionable_zone(breakdown, decision_bias)
         pending_zone = _find_pending_entry_zone(ctx, atr_val, decision_bias)
 
-        if pending_zone is None or pending_zone["distance_atr"] <= IMMEDIATE_ENTRY_MAX_ATR:
-            # No real zone to plan around, or price is already there — an
-            # immediate entry is the honest read of the situation.
+        # Task #96 (opt-in) — a real, sustained move in the decision's own
+        # direction is validation enough to enter now, even with no clean
+        # zone nearby (or one price already left behind): compares current
+        # price to MOMENTUM_DISPLACEMENT_LOOKBACK bars ago, in ATR units.
+        # Deliberately overrides the zone-distance branches below rather
+        # than being a 4th tier — the real finding (Task #96) was price
+        # running AWAY from a pending zone for hours while the zone-only
+        # logic kept re-targeting it forever, never taking the move.
+        momentum_override = False
+        if use_momentum_catchup and atr_val and len(candles) > MOMENTUM_DISPLACEMENT_LOOKBACK:
+            reference_price = candles[-1 - MOMENTUM_DISPLACEMENT_LOOKBACK]["close"]
+            displacement = (current_price - reference_price) if decision_bias == "bullish" else (reference_price - current_price)
+            if (displacement / atr_val) >= MOMENTUM_DISPLACEMENT_MIN_ATR:
+                momentum_override = True
+
+        if momentum_override or pending_zone is None or pending_zone["distance_atr"] <= IMMEDIATE_ENTRY_MAX_ATR:
+            # No real zone to plan around, price is already there, or a real
+            # sustained move validates entering now — an immediate entry is
+            # the honest read of the situation.
             ideal_entry = current_price
             entry_type = "immediate"
         elif pending_zone["distance_atr"] <= PENDING_ORDER_MAX_ATR:
