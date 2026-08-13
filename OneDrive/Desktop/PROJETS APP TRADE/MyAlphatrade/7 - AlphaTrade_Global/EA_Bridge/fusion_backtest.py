@@ -73,7 +73,7 @@ def _pending_order_type(direction, pending_price, price_at_placement):
 
 def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=None,
                          capital=1000, risk_percent=1, warmup_bars=210, use_regime_modulation=False,
-                         use_category_modulation=False):
+                         use_category_modulation=False, use_abstention_exclusion=False):
     """Replays the real market_brain.analyze() pipeline bar by bar.
 
     primary_candles: full historical candle list for `primary_timeframe`,
@@ -100,6 +100,9 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
       to modulation off, since category_weight_multipliers returns {} for
       them) plus a real comparison run on a synthetic index (e.g.
       Boom1000Index).
+    use_abstention_exclusion: OFF by default — passed straight through to
+      market_brain.analyze() (Task #95). Same harness, used to validate the
+      abstention-based fusion before any activation.
 
     Returns {"trades": [...], "stats": {...}} — same shape as
     backtest_engine.run_backtest(), stats now include expectancy.
@@ -189,6 +192,7 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
                 capital=capital, risk_percent=risk_percent,
                 use_regime_modulation=use_regime_modulation,
                 use_category_modulation=use_category_modulation,
+                use_abstention_exclusion=use_abstention_exclusion,
             )
 
             decision = result["decision"]

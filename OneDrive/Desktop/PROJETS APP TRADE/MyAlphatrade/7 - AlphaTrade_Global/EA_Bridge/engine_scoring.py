@@ -414,8 +414,53 @@ FUSION_BASE = 25
 # from the vote, not forced into the denominator as a fake "neutral".
 STRUCTURALLY_NEUTRAL_ENGINES = {"volatility", "session", "economic"}
 
+# Task #95 — abstention-based confidence, opt-in (exclude_abstentions=False
+# everywhere in the live decision path, TESTING IN PROGRESS, not yet proven).
+#
+# Real finding (2026-08-12, investigating why BTCUSD real confidence stayed
+# capped ~42-53% during a genuine, regime-classifier-confirmed trend_down):
+# several engines (market_structure, fibonacci, volume, pattern_recognition)
+# are "setup-dependent" by design — they need a clean zone/pattern to have
+# just formed to express real confidence, and correctly sit at low-confidence
+# neutral otherwise. Confirmed on real BTCUSD data (Aug 8-12, 1239 decisions):
+# market_structure neutral 83% of the time, fibonacci 90%, volume 96%,
+# pattern_recognition 85%. Unlike STRUCTURALLY_NEUTRAL_ENGINES (which can
+# NEVER vote directionally, excluded above since 2026-08-07), these engines
+# CAN vote directionally and sometimes do — but when they don't, their full
+# weight still inflates total_weight (the denominator) without helping
+# either side, capping confidence even when the engines that DO have a
+# genuine, persistent directional opinion (indicator_fusion bearish 78% of
+# the time in the same real window, entry_planner bearish 73%, smart_money
+# bearish 71%) agree.
+#
+# Hypothesis: treat a neutral vote from any (non-structurally-neutral)
+# engine as an ABSTENTION for the bullish/bearish ratio specifically — its
+# weight stops diluting the side that DOES have an opinion. Guarded by
+# MIN_PARTICIPATION_FRACTION: only trust a ratio computed among a minority
+# of the total weight if a real majority of it actually voted; below that,
+# falls back to today's exact behavior (full total_weight denominator) —
+# never lets one or two loud engines dominate just because everything else
+# stayed quiet. "neutral"'s own score is untouched either way, so WAIT
+# remains exactly as viable an outcome as today when genuinely nothing has
+# conviction — this only reshapes bullish vs bearish, never adds false
+# direction where none exists.
+#
+# Résultat réel (fusion_backtest.py, walk-forward, 2026-08-12, 9 fenêtres
+# réelles de 30j sur XAUUSD/BTCUSD/ETHUSD) : PnL total -442 (472,07 baseline
+# vs 30,09 modulé) — INVALIDÉE au global, même verdict que les deux
+# expériences précédentes (régime, catégorie). Le nombre de trades a
+# quasiment doublé (94→160, +70%) avec une qualité souvent dégradée (ex.
+# XAUUSD fenêtre 90→60j : taux de réussite 71,4%→14,3%). Effet mitigé par
+# actif — hausse nette sur BTCUSD (+15) et ETHUSD (+99), forte baisse sur
+# XAUUSD (-320) — mais l'augmentation du volume de trades n'est en soi pas
+# un signe positif : plus de trades ouverts n'a pas voulu dire plus de
+# vraies opportunités captées, surtout visible dans la baisse du taux de
+# réussite. Reste désactivée partout ; conservée comme capacité testée,
+# documentée, inactive — même traitement que les deux précédentes.
+EXCLUDE_ABSTENTIONS_MIN_PARTICIPATION = 0.4
 
-def fuse_direction_and_confidence(engine_results, weight_multipliers=None):
+
+def fuse_direction_and_confidence(engine_results, weight_multipliers=None, exclude_abstentions=False):
     """Derives the final direction bottom-up from engine votes — never picks
     a direction first and justifies it after (that was the old LLM pattern).
     Each engine's vote is weighted by (engine importance × its own
@@ -427,7 +472,11 @@ def fuse_direction_and_confidence(engine_results, weight_multipliers=None):
     live behavior, unchanged). Only market_regime.py's experiment (opt-in,
     see its own module docstring) ever passes a real dict here — this
     stays None everywhere in the normal decision path until that
-    experiment is actually proven on fusion_backtest.py."""
+    experiment is actually proven on fusion_backtest.py.
+
+    exclude_abstentions: OFF by default everywhere (Task #95, testing in
+    progress). See the module-level comment above EXCLUDE_ABSTENTIONS_MIN_PARTICIPATION
+    for the real finding and reasoning behind this."""
     weight_multipliers = weight_multipliers or {}
     weighted_votes = {"bullish": 0.0, "bearish": 0.0, "neutral": 0.0}
     total_weight = 0.0
@@ -458,6 +507,36 @@ def fuse_direction_and_confidence(engine_results, weight_multipliers=None):
         bias: FUSION_BASE + (vote / total_weight) * (100 - FUSION_BASE)
         for bias, vote in weighted_votes.items()
     }
+
+    if exclude_abstentions:
+        # participating_weight = total_weight minus whatever weight sits on
+        # engines currently voting neutral — the denominator only, not the
+        # numerator. Each engine's own (weight × confidence) contribution to
+        # weighted_votes[bullish/bearish] is untouched, so an engine that is
+        # only 67% confident still can't singlehandedly push the fused score
+        # to 100 just because nothing opposed it — first version of this
+        # formula divided by (bullish+bearish) instead of participating_weight
+        # and did exactly that (5 real engines, all 80%-confident, zero
+        # opposition -> fused to 100%, overstating every individual engine's
+        # own certainty). Dividing by participating_weight instead makes this
+        # a strict generalization of the existing formula: when there are no
+        # abstentions at all (neutral_weight=0), participating_weight equals
+        # total_weight and the result is mathematically identical to today's
+        # behavior — confirmed by test, not just reasoned.
+        neutral_weight = sum(
+            (weight_multipliers.get(eid, 1.0) * ENGINE_WEIGHTS.get(eid, 0))
+            for eid, r in engine_results.items()
+            if eid not in STRUCTURALLY_NEUTRAL_ENGINES and r.get("bias", "neutral") == "neutral"
+        )
+        participating_weight = total_weight - neutral_weight
+        if participating_weight > 0 and participating_weight >= total_weight * EXCLUDE_ABSTENTIONS_MIN_PARTICIPATION:
+            for bias in ("bullish", "bearish"):
+                scores[bias] = FUSION_BASE + (weighted_votes[bias] / participating_weight) * (100 - FUSION_BASE)
+        # Below the participation floor: deliberately falls through to the
+        # standard total_weight-based scores computed above — never trusts a
+        # ratio computed among a small, unrepresentative minority of the
+        # total weight.
+
     dominant = max(scores, key=scores.get)
     confidence = round(scores[dominant])
     return {"direction": dominant, "confidence": confidence, "breakdown": breakdown}

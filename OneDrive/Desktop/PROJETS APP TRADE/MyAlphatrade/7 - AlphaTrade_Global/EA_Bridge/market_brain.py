@@ -266,7 +266,7 @@ def _find_actionable_zone(breakdown, decision_bias):
 
 
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
-            use_regime_modulation=False, use_category_modulation=False):
+            use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
@@ -287,6 +287,23 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
       indices) came back NEGATIVE on real Boom 1000 Index data across all 3
       tested windows. Stays False; kept as a tested, documented, inactive
       capability, same treatment as use_regime_modulation.
+    use_abstention_exclusion: OFF by default everywhere (Task #95, testing
+      in progress). Real finding, 2026-08-12: replaying real BTCUSD decisions
+      during a regime-classifier-confirmed real trend_down showed confidence
+      capped ~42-53% even with several engines in genuine, persistent
+      bearish agreement (indicator_fusion/entry_planner/smart_money) —
+      because "setup-dependent" engines (market_structure/fibonacci/volume/
+      pattern_recognition) correctly sit at low-confidence neutral most of
+      the time absent a clean zone/pattern, and their weight still dilutes
+      the fusion denominator even though they contribute to neither side.
+      See engine_scoring.fuse_direction_and_confidence's exclude_abstentions
+      param for the mechanism and its own docstring's module-level comment
+      for the real result: tested via fusion_backtest.py walk-forward
+      (2026-08-12), net -442 PnL across 9 real windows — INVALIDATED, same
+      verdict as use_regime_modulation and use_category_modulation. Nearly
+      doubled trade count (94->160) with degraded quality on XAUUSD in
+      particular. Stays False; kept as a tested, documented, inactive
+      capability.
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
@@ -331,7 +348,7 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
 
     microstructure_result = _microstructure_engine_result(symbol) if CRYPTO_CONTEXT_ENABLED else None
     engine_results = es.run_all_engines(ctx, multi_timeframe_result=mtf_engine_result, microstructure_result=microstructure_result)
-    fusion = es.fuse_direction_and_confidence(engine_results, weight_multipliers=weight_multipliers)
+    fusion = es.fuse_direction_and_confidence(engine_results, weight_multipliers=weight_multipliers, exclude_abstentions=use_abstention_exclusion)
     breakdown = fusion["breakdown"]
 
     # --- AI Confidence Engine v2 — comparison mode only, NOT activated. ---
