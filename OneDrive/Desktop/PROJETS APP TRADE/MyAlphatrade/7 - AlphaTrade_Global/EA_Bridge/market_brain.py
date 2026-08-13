@@ -52,6 +52,38 @@ IMMEDIATE_ENTRY_MAX_ATR = 0.15
 MOMENTUM_DISPLACEMENT_LOOKBACK = 10
 MOMENTUM_DISPLACEMENT_MIN_ATR = 3.0
 
+# Dynamic lot sizing for Scalping (2026-08-13, real trader spec — Louis,
+# explicit: "je ne voudrais pas que ce soit un lot fixe"). The lot must NOT
+# be a flat fraction of capital: it scales UP when confidence is genuinely
+# high AND the instrument is in a real volatility expansion (more real $ per
+# pip available to capture on a fast move), and scales DOWN otherwise.
+# Different application from use_regime_modulation above (which modulates
+# ENGINE CONFIDENCE WEIGHTS and was invalidated, -37% PnL, 2026-08-07) — this
+# modulates POSITION SIZE only, the decision/confidence itself is never
+# touched by it. ACTIVE for Scalping only (profile_key="scalping"), not an
+# opt-in experiment flag like the ones above — real trader spec. Not yet
+# walk-forward tested at the time this was written; validate via
+# profile_backtest.py before treating the exact multiplier values as final,
+# same discipline as everything else in this file.
+DYNAMIC_LOT_CONFIDENCE_MIN_MULT = 0.7   # at the profile's own min_confidence floor
+DYNAMIC_LOT_CONFIDENCE_MAX_MULT = 1.6   # at confidence = 100
+# Reuses market_regime.py's own volatility classification (same
+# VOLATILITY_EXPANSION_RATIO/COMPRESSION_RATIO thresholds already tested
+# there) — applied here to position size instead of engine weights.
+DYNAMIC_LOT_VOLATILITY_MULT = {"expansion": 1.3, "normal": 1.0, "compression": 0.7}
+
+
+def _dynamic_risk_multiplier(confidence, min_confidence, volatility):
+    """confidence/min_confidence in the same 0-100 scale as everywhere else
+    in this file. Returns a multiplier to apply to a profile's own BASE
+    risk_percent — never the risk_percent itself, so a caller with no
+    dynamic-sizing concept can still ignore this and use the flat base."""
+    span = max(1, 100 - min_confidence)
+    conf_frac = max(0.0, min(1.0, (confidence - min_confidence) / span))
+    conf_mult = DYNAMIC_LOT_CONFIDENCE_MIN_MULT + conf_frac * (DYNAMIC_LOT_CONFIDENCE_MAX_MULT - DYNAMIC_LOT_CONFIDENCE_MIN_MULT)
+    vol_mult = DYNAMIC_LOT_VOLATILITY_MULT.get(volatility, 1.0)
+    return conf_mult * vol_mult
+
 ACTION_TIERS = [
     (90, "premium", "Configuration premium"),
     (75, "potential", "Signal potentiel"),
@@ -288,12 +320,28 @@ def _find_actionable_zone(breakdown, decision_bias):
 
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
             use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False,
-            use_momentum_catchup=False):
+            use_momentum_catchup=False, profile_key=None, profile_min_confidence=None,
+            profile_base_risk_percent=None):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
     validated_strategy: {"strategy_name": str, "signal": {"direction","rationale"}|None,
                           "stats": {...}} or None — the live-evaluated active Strategy
+    profile_min_confidence / profile_base_risk_percent: the CALLING profile's
+      own real config (see local_functions.PROFILE_MIN_CONFIDENCE /
+      PROFILE_BASE_RISK_PERCENT) — only consumed by the dynamic lot-sizing
+      formula below (Scalping only); unrelated to the legacy risk_percent
+      param above, which this function has never used for any computation.
+    profile_key: None (default, unchanged behavior) | "scalping" | "intraday" | "swing".
+      ACTIVE, not an experiment flag — real trader spec, 2026-08-13: Scalping
+      never plans a pending (LIMIT/STOP) order, ever. Intraday/Swing are fine
+      waiting for price to reach a real zone; Scalping's whole point is
+      maximizing DIRECT entries — an analysis validated live, right now, or
+      nothing this cycle. See the pending_zone branch below: for
+      profile_key="scalping" the "close enough to plan a pending order"
+      branch is skipped entirely, falling through to wait_confirmation
+      instead (re-evaluated fresh next cycle, exactly like the "too far"
+      case already did for every profile).
     use_regime_modulation: OFF by default everywhere in the real decision
       path. Tested via fusion_backtest.py in a real walk-forward comparison
       (commit 7a6108f, 2026-08-07): net -37% PnL across 9 real (symbol,
@@ -433,6 +481,17 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     current_price = snapshot["current_price"]
     atr_val = snapshot["atr14"] or (current_price * 0.001)
 
+    # Dynamic lot sizing (Scalping only, see _dynamic_risk_multiplier above)
+    # — computed on the FINAL confidence (after validated-strategy/global-
+    # intelligence adjustments above), using this instrument's own real
+    # current volatility read (regime, computed earlier in this function).
+    effective_risk_percent = None
+    if profile_key == "scalping" and decision != "WAIT" and profile_base_risk_percent:
+        risk_multiplier = _dynamic_risk_multiplier(
+            confidence, profile_min_confidence or CONFIDENCE_FLOOR, regime["volatility"],
+        )
+        effective_risk_percent = round(profile_base_risk_percent * risk_multiplier, 3)
+
     entry_type, entry_zone_low, entry_zone_high, ideal_entry = "wait_confirmation", None, None, None
     stop_loss = take_profit_1 = take_profit_2 = break_even = None
     decision_bias = fusion["direction"]
@@ -463,12 +522,15 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             # the honest read of the situation.
             ideal_entry = current_price
             entry_type = "immediate"
-        elif pending_zone["distance_atr"] <= PENDING_ORDER_MAX_ATR:
+        elif profile_key != "scalping" and pending_zone["distance_atr"] <= PENDING_ORDER_MAX_ATR:
             # A real order block, FVG or golden pocket sits close enough to
             # be worth waiting for — plan the entry there instead of paying
             # the current, worse price. The bridge classifies this as a
             # LIMIT or STOP order on its own by comparing this price to the
             # current one (see alphatg_bridge.py send_pending_order).
+            # Never taken for Scalping (see analyze()'s own docstring) — it
+            # falls through to the wait_confirmation branch just below,
+            # exactly like a zone that's too far to plan around at all.
             ideal_entry = pending_zone["price"]
             entry_type = "pending_order"
         else:
@@ -530,6 +592,8 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             entry_plan_note = ""
         elif entry_type == "pending_order":
             entry_plan_note = f" Entrée différée à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR du prix actuel) plutôt qu'au marché."
+        elif profile_key == "scalping":
+            entry_plan_note = f" Zone la plus proche à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR) — le Scalping n'attend jamais un ordre en attente, réévaluation en direct au prochain cycle."
         else:
             entry_plan_note = f" Zone la plus proche à {ideal_entry:.2f} ({pending_zone['distance_atr']:.1f} ATR) — trop loin pour un ordre en attente, en attente que le prix se rapproche."
 
@@ -568,6 +632,7 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
         "current_price": current_price,
         "timeframe": timeframe,
         "entry_type": entry_type,
+        "effective_risk_percent": effective_risk_percent,
         "entry_zone_low": entry_zone_low,
         "entry_zone_high": entry_zone_high,
         "ideal_entry": ideal_entry,

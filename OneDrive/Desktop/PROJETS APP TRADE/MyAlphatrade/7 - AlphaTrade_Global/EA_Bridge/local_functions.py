@@ -468,16 +468,18 @@ TP1_CLOSE_FRACTION = 0.33
 TP2_TRIGGER_R = 2.0
 TP2_CLOSE_FRACTION = 0.5
 
-# Scalping override (2026-08-12, found in a live audit with Louis): a
-# trailing "runner" left after TP2 is the right call for Swing/Intraday —
-# it's how a genuinely large move isn't capped early. For Scalping it's the
-# opposite of the point: the whole idea is to bank a small target and free
-# the symbol up fast for the next entry, not let one position linger. TP2
-# closes the position ENTIRELY for a trade opened under Scalping, instead
-# of leaving TP1_CLOSE_FRACTION*TP2_CLOSE_FRACTION-ish of the original open.
-# Gated on trade["trading_profile"] captured at OPEN time (not whatever the
-# global setting is NOW) — see AnalysisSessionStore.jsx's Trade.create().
-SCALPING_TP2_CLOSE_FRACTION = 1.0
+# Scalping — real trader spec (2026-08-13), supersedes the 2026-08-12
+# TP2-closes-entirely override above (that override is now unreachable and
+# has been removed, see below): TP1/TP2 partial legging is an Intraday/Swing
+# behavior ("let a winner run a bit"). Scalping's whole point is the
+# opposite — a fast, full in-and-out. A Scalping trade is never partially
+# closed: it holds its FULL size, gets break-even protection like any other
+# profile, then the moment price moves far enough to trail
+# (profit_protection_trigger R), the WHOLE position is banked immediately
+# instead of moving the stop and continuing to hold — see the
+# is_scalping branch inside manage_open_positions below. Gated on
+# trade["trading_profile"] captured at OPEN time (not whatever the global
+# setting is NOW) — see AnalysisSessionStore.jsx's Trade.create().
 
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
@@ -553,34 +555,39 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
 
         r = _r_multiple(direction, entry_price, pos["current_price"], original_risk)
         remaining_lot = pos["lot"]
+        is_scalping = trade.get("trading_profile") == "scalping"
 
-        if close_fn and r >= TP1_TRIGGER_R and "tp1_partial" not in events:
-            close_vol = round(remaining_lot * TP1_CLOSE_FRACTION, 4)
-            result = close_fn(pos["ticket"], volume=close_vol)
-            if result.get("ok"):
-                remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
-                events = events + ["tp1_partial"]
-                update_entity("Trade", trade["id"], {"management_events": events})
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_partial", "closed_volume": result.get("closed_volume")})
-            else:
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_failed", "error": result.get("error")})
+        # TP1/TP2 partial legging — never for Scalping (real trader spec,
+        # 2026-08-13): a scalp holds its full size until the trailing
+        # branch below either protects it at break-even or banks it
+        # entirely — it never legs out in tiers like Intraday/Swing.
+        if not is_scalping:
+            if close_fn and r >= TP1_TRIGGER_R and "tp1_partial" not in events:
+                close_vol = round(remaining_lot * TP1_CLOSE_FRACTION, 4)
+                result = close_fn(pos["ticket"], volume=close_vol)
+                if result.get("ok"):
+                    remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
+                    events = events + ["tp1_partial"]
+                    update_entity("Trade", trade["id"], {"management_events": events})
+                    actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_partial", "closed_volume": result.get("closed_volume")})
+                else:
+                    actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp1_failed", "error": result.get("error")})
 
-        if close_fn and remaining_lot > 0 and r >= TP2_TRIGGER_R and "tp1_partial" in events and "tp2_partial" not in events:
-            tp2_fraction = SCALPING_TP2_CLOSE_FRACTION if trade.get("trading_profile") == "scalping" else TP2_CLOSE_FRACTION
-            close_vol = round(remaining_lot * tp2_fraction, 4)
-            result = close_fn(pos["ticket"], volume=close_vol)
-            if result.get("ok"):
-                remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
-                events = events + ["tp2_partial"]
-                update_entity("Trade", trade["id"], {"management_events": events})
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_partial", "closed_volume": result.get("closed_volume")})
-            else:
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_failed", "error": result.get("error")})
+            if close_fn and remaining_lot > 0 and r >= TP2_TRIGGER_R and "tp1_partial" in events and "tp2_partial" not in events:
+                close_vol = round(remaining_lot * TP2_CLOSE_FRACTION, 4)
+                result = close_fn(pos["ticket"], volume=close_vol)
+                if result.get("ok"):
+                    remaining_lot = round(remaining_lot - (result.get("closed_volume") or close_vol), 4)
+                    events = events + ["tp2_partial"]
+                    update_entity("Trade", trade["id"], {"management_events": events})
+                    actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_partial", "closed_volume": result.get("closed_volume")})
+                else:
+                    actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "tp2_failed", "error": result.get("error")})
 
-        if remaining_lot <= 0:
-            # TP1/TP2 rounding closed what was left entirely (broker minimum
-            # lot step) — nothing left to break-even/trail against.
-            continue
+            if remaining_lot <= 0:
+                # TP1/TP2 rounding closed what was left entirely (broker minimum
+                # lot step) — nothing left to break-even/trail against.
+                continue
 
         if r < be_trigger:
             continue
@@ -588,6 +595,21 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
 
         current_sl = trade.get("trailing_stop") or original_sl
         at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
+
+        # Scalping full close on trail trigger (real trader spec,
+        # 2026-08-13): once price has moved far enough to trail, a scalp
+        # banks the WHOLE position right now and frees the symbol for the
+        # next entry, instead of moving the stop and continuing to hold
+        # like Intraday/Swing does below.
+        if is_scalping and close_fn and r >= trail_trigger:
+            result = close_fn(pos["ticket"])
+            if result.get("ok"):
+                update_entity("Trade", trade["id"], {"management_events": events + ["scalping_trail_close"]})
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "scalping_trail_close", "closed_volume": remaining_lot})
+                protected += 1
+            else:
+                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "scalping_trail_close_failed", "error": result.get("error")})
+            continue
 
         new_sl = None
         event = None
@@ -928,6 +950,21 @@ PROFILE_TIMEFRAME_FALLBACK = {
 # dict actually passed to market_brain.analyze()'s multi_tf_candles).
 EXTRA_TIMEFRAMES_FOR_SELECTION = {"scalping": ["M1"], "intraday": ["M30"]}
 
+# Mirrors Dist/src/lib/tradingProfiles.js's min_confidence/max_risk_percent
+# exactly (2026-08-13) — same cross-language duplication already established
+# for PROFILE_TIMEFRAME_RANGES above. Only consumed by market_brain.py's
+# dynamic lot-sizing formula (Scalping only, see analyze()'s
+# profile_min_confidence/profile_base_risk_percent params) — NOT used to
+# gate min_confidence itself, which stays enforced entirely on the JS side
+# (AnalysisSessionStore.jsx's getEffectiveSettings), unchanged.
+# max_risk_percent for scalping raised 0.5 -> 0.8 (real trader spec,
+# 2026-08-13): the dynamic multiplier below already scales this UP or DOWN
+# per trade (0.7x-1.6x on confidence, 0.7x-1.3x on volatility) — 0.8 is the
+# real base it multiplies from, not a fixed lot. See tradingProfiles.js for
+# the JS-side mirror actually used to size real orders.
+PROFILE_MIN_CONFIDENCE = {"scalping": 80, "intraday": 70, "swing": 75}
+PROFILE_BASE_RISK_PERCENT = {"scalping": 0.8, "intraday": 1.0, "swing": 1.5}
+
 
 def market_brain_analyze(body, fetch_candles_fn):
     import backtest_engine as bt
@@ -996,7 +1033,10 @@ def market_brain_analyze(body, fetch_candles_fn):
         }
 
     result = mb.analyze(symbol, timeframe, primary_candles, multi_tf_candles=mtf_candles,
-                         validated_strategy=validated_strategy, capital=capital, risk_percent=risk_percent)
+                         validated_strategy=validated_strategy, capital=capital, risk_percent=risk_percent,
+                         profile_key=trading_profile,
+                         profile_min_confidence=PROFILE_MIN_CONFIDENCE.get(trading_profile),
+                         profile_base_risk_percent=PROFILE_BASE_RISK_PERCENT.get(trading_profile))
 
     vs_entity = None
     if validated_strategy:
@@ -1015,6 +1055,7 @@ def market_brain_analyze(body, fetch_candles_fn):
         "timeframe": result["timeframe"],
         "current_price": result["current_price"],
         "entry_type": result["entry_type"],
+        "effective_risk_percent": result.get("effective_risk_percent"),
         "entry_zone_low": result["entry_zone_low"],
         "entry_zone_high": result["entry_zone_high"],
         "ideal_entry": result["ideal_entry"],
