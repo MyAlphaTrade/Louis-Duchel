@@ -1235,7 +1235,11 @@ def score_position_management(get_positions_fn, modify_fn, params):
 def score_risk_management(params):
     capital = params.get("capital") or 1000
     max_daily_loss_pct = params.get("max_daily_loss_percent") or 2
-    max_daily_trades = params.get("max_daily_trades") or 3
+    # max_daily_trades peut être explicitement None (ex: Scalping, 2026-08-14 —
+    # pas de plafond de trades, seul l'objectif $ journalier gouverne). Ne pas
+    # confondre avec "absent" (params.get(...) or 3) qui affichait à tort "/3".
+    max_daily_trades = params.get("max_daily_trades", 3)
+    trades_display = "illimité" if max_daily_trades is None else str(max_daily_trades)
 
     today_trades = _today_closed_trades()
     today_pnl = sum(t.get("pnl") or 0 for t in today_trades)
@@ -1245,7 +1249,7 @@ def score_risk_management(params):
 
     findings = [
         f"Budget de perte journalier utilisé : {loss_used_pct}% ({today_pnl:.2f}$ sur limite -{loss_budget:.2f}$)",
-        f"Trades clôturés aujourd'hui : {len(today_trades)}/{max_daily_trades}",
+        f"Trades clôturés aujourd'hui : {len(today_trades)}/{trades_display}",
         f"Positions ouvertes : {len(open_positions)}",
     ]
     return {"confidence": max(0, 100 - loss_used_pct), "bias": "neutral", "findings": findings}
