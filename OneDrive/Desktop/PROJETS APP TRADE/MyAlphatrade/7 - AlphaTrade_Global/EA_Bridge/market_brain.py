@@ -15,6 +15,7 @@ import indicators as ind
 import engine_scoring as es
 import confidence_v2 as cv2
 import market_regime
+import hyperliquid_connector
 from market_analysis import find_order_blocks, find_fvgs
 from local_store import list_entities as _list_entities
 
@@ -156,6 +157,34 @@ CRYPTO_CONTEXT_ENABLED = True
 CRYPTO_CONTEXT_MAX_AGE_SEC = 1800  # ignore a snapshot older than this — stale data is worse than none
 MACRO_REGIME_BOOST = 5       # smaller effect for the unmeasured cross-asset regime hypothesis
 
+# Microstructure engine confidence (2026-08-14, real investigation, Louis:
+# "pourquoi les positions sur SOL/BTC ne se déclenchent presque jamais").
+# This used to read confidence from CryptoIntelSnapshot's
+# crypto_intelligence_score.per_coin[coin].score — a composite 0-100 "how
+# EXTREME is the current condition" reading from global_market_intelligence.py.
+# That module's own docstring says explicitly: "OBSERVATION ONLY... does
+# not touch decision.confidence... stays observational until measured
+# against real outcomes" — its normalizers are calibrated against
+# genuinely extreme reference points (e.g. a 5%+ daily move counted as
+# "maximal" momentum), so under normal conditions it naturally sits low
+# REGARDLESS of whether the directional read itself is real. Confirmed on
+# 319 real BTC snapshots: median score 16, max ever recorded 47 — while
+# `pressure` (the actual bias this engine votes) was directionally
+# non-neutral 79% of the time in the same sample. Using that score as this
+# engine's own confidence dragged BTC/ETH's fused confidence down
+# structurally for a reason unrelated to real signal quality — this is the
+# highest-weighted engine of all (15, engine_scoring.ENGINE_WEIGHTS).
+#
+# Fixed: confidence now comes directly from the SAME real order-book
+# imbalance (OBI) that `pressure` itself is derived from
+# (hyperliquid_connector.OBI_PRESSURE_THRESHOLD=0.15 is the bare minimum
+# |OBI| for a directional read at all) — scaled linearly from that
+# threshold (base confidence) to a fully one-sided book, |OBI|=1.0 (max
+# confidence). A genuine measure of how strongly the order book leans
+# right now, not how extreme today's broader market conditions are.
+MICROSTRUCTURE_CONFIDENCE_BASE = 35
+MICROSTRUCTURE_CONFIDENCE_MAX = 85
+
 
 def _crypto_symbol_coin(symbol):
     """BTCUSD/ETHUSD-style MT5 symbols map directly to a Hyperliquid coin —
@@ -195,10 +224,17 @@ def _microstructure_engine_result(symbol):
     pressure = coin_data.get("pressure")
     if pressure in (None, "unknown"):
         return None
-    coin_score = (snapshot.get("crypto_intelligence_score") or {}).get("per_coin", {}).get(coin, {})
-    confidence = coin_score.get("score", 50)
     obi = (coin_data.get("order_book") or {}).get("obi")
-    obi_str = f"{obi:.2f}" if obi is not None else "n/d"
+    if obi is None:
+        # pressure was derived from this same obi (hyperliquid_connector.
+        # _pressure_from_obi) — if it's now missing, the pressure read
+        # itself isn't trustworthy either; don't vote on stale/partial data.
+        return None
+    threshold = hyperliquid_connector.OBI_PRESSURE_THRESHOLD
+    span = max(1e-9, 1.0 - threshold)
+    frac = max(0.0, min(1.0, (abs(obi) - threshold) / span))
+    confidence = round(MICROSTRUCTURE_CONFIDENCE_BASE + frac * (MICROSTRUCTURE_CONFIDENCE_MAX - MICROSTRUCTURE_CONFIDENCE_BASE))
+    obi_str = f"{obi:.2f}"
     return {
         "id": "microstructure", "bias": pressure, "confidence": confidence,
         "findings": [f"Hyperliquid {coin}: OBI {obi_str}, funding {coin_data.get('funding_rate')}, OI {coin_data.get('open_interest') or 0:.0f}"],
