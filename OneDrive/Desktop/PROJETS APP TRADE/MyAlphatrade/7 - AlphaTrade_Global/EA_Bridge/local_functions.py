@@ -481,6 +481,42 @@ TP2_CLOSE_FRACTION = 0.5
 # trade["trading_profile"] captured at OPEN time (not whatever the global
 # setting is NOW) — see AnalysisSessionStore.jsx's Trade.create().
 
+# Scalping break-even, dollar-based (2026-08-13, real trader spec — Louis,
+# refined twice the same day: first "pas nettement au point d'entrée",
+# then explicit real numbers: "dès qu'on atteint 1$ ou 2$ on déclenche le
+# BE mais au-dessus du point d'entrée, genre 0,5$ au-dessus"). Both the
+# trigger and the buffer are real account-currency dollars, not an
+# R-multiple — matches how the trader actually thinks about Scalping ("10
+# trades a 5$ = 50$/jour"), and stays correct regardless of dynamic lot
+# sizing (2026-08-13) changing how many $ sit behind 1R trade to trade.
+# Confirmed necessary with real backtest data the same day: 7/7 sampled
+# Scalping trades were positive at some point (one reached 2.38R) before
+# closing at exactly $0 under the OLD at-entry, R-triggered break-even.
+# Intraday/Swing keep the original R-multiple break_even_trigger (see
+# DEFAULT_BREAK_EVEN_TRIGGER) — this pair is Scalping-only.
+BREAK_EVEN_TRIGGER_USD = 1.5
+BREAK_EVEN_BUFFER_USD = 0.5
+
+# Scalping quick-profit lock (2026-08-13, real trader spec — Louis: "avec
+# seulement 10 trade de 5$ de gain ça fait 50$", "le BE est pour sécuriser
+# mais ça ne doit pas empêcher qu'il gère mieux les positions trailing
+# profit... s'il y a retracement léger qu'il ferme vite, si c'est brusque
+# c'est à ce moment que le BE va intervenir"). Checked FIRST, above
+# break-even: once REAL floating profit clears QUICK_PROFIT_LOCK_USD,
+# tighten the trail aggressively right away instead of waiting for a wider
+# R-multiple — many small real $ wins compound, and a light pullback should
+# bank the gain fast rather than risk giving it all back waiting for a
+# bigger move. Real continued momentum still lets the tight trail keep
+# sliding up — this never caps the upside, only how fast a give-back gets
+# cut short. A genuinely violent reversal that jumps straight past this
+# tight level in one move falls back to whatever break-even already locked
+# in below — this SUPERSEDES the old flat "close everything at
+# profit_protection_trigger R" behavior for Scalping (now redundant: at
+# typical Scalping risk sizes, this dollar trigger fires well before that
+# R-multiple would anyway).
+QUICK_PROFIT_LOCK_USD = 5.0
+QUICK_PROFIT_TRAIL_DISTANCE_R = 0.15
+
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
 # A position with NO recorded stop (opened manually with none, or a Trade
@@ -589,27 +625,70 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
                 # lot step) — nothing left to break-even/trail against.
                 continue
 
-        if r < be_trigger:
-            continue
-        eligible += 1
-
         current_sl = trade.get("trailing_stop") or original_sl
         at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
 
-        # Scalping full close on trail trigger (real trader spec,
-        # 2026-08-13): once price has moved far enough to trail, a scalp
-        # banks the WHOLE position right now and frees the symbol for the
-        # next entry, instead of moving the stop and continuing to hold
-        # like Intraday/Swing does below.
-        if is_scalping and close_fn and r >= trail_trigger:
-            result = close_fn(pos["ticket"])
-            if result.get("ok"):
-                update_entity("Trade", trade["id"], {"management_events": events + ["scalping_trail_close"]})
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "scalping_trail_close", "closed_volume": remaining_lot})
-                protected += 1
-            else:
-                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "scalping_trail_close_failed", "error": result.get("error")})
+        if is_scalping:
+            # Scalping — exactly two tiers now (2026-08-13, real trader
+            # spec, both in real dollars — see QUICK_PROFIT_LOCK_USD /
+            # BREAK_EVEN_TRIGGER_USD's own comments), REPLACES the old
+            # R-multiple break_even/profit_protection_trigger path below
+            # (still used by Intraday/Swing) entirely for Scalping:
+            #   1. Quick-profit lock (checked first, tightest): >= 5$ real
+            #      floating profit -> tight trail, closes fast on a light
+            #      pullback, keeps riding a real continued move.
+            #   2. Break-even floor: >= 1,5$ real floating profit -> stop
+            #      moved to entry + 0,5$ (never exactly at entry). This is
+            #      the safety net a violent reversal falls back to if it
+            #      blows straight past the tight trail above.
+            profit_usd = pos["profit"] or 0
+            contract_size = CONTRACT_SIZES.get((pos.get("symbol") or "").upper(), 100000)
+            lot = pos.get("lot") or 0
+
+            if close_fn and profit_usd >= QUICK_PROFIT_LOCK_USD:
+                tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
+                candidate = (pos["current_price"] - tight_offset) if direction == "BUY" else (pos["current_price"] + tight_offset)
+                better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                eligible += 1
+                if better:
+                    result = modify_fn(pos["ticket"], stop_loss=round(candidate, 5))
+                    if result.get("ok"):
+                        update_entity("Trade", trade["id"], {
+                            "trailing_stop": candidate,
+                            "management_events": events + ["quick_profit_lock"],
+                        })
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "quick_profit_lock", "new_stop_loss": round(candidate, 5)})
+                        protected += 1
+                    else:
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "quick_profit_lock_failed", "error": result.get("error")})
+                else:
+                    # Already tighter than what the quick-lock would offer
+                    # (a previous cycle already ratcheted it there).
+                    protected += 1
+                continue
+
+            if profit_usd >= BREAK_EVEN_TRIGGER_USD:
+                eligible += 1
+                if not at_breakeven_or_better and lot > 0:
+                    buffer_offset = BREAK_EVEN_BUFFER_USD / (lot * contract_size)
+                    be_level = (entry_price + buffer_offset) if direction == "BUY" else (entry_price - buffer_offset)
+                    result = modify_fn(pos["ticket"], stop_loss=round(be_level, 5))
+                    if result.get("ok"):
+                        update_entity("Trade", trade["id"], {
+                            "trailing_stop": be_level,
+                            "management_events": events + ["break_even"],
+                        })
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "break_even", "new_stop_loss": round(be_level, 5)})
+                        protected += 1
+                    else:
+                        actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "break_even_failed", "error": result.get("error")})
+                else:
+                    protected += 1
             continue
+
+        if r < be_trigger:
+            continue
+        eligible += 1
 
         new_sl = None
         event = None

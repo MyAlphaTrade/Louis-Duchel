@@ -73,6 +73,8 @@ from local_functions import (
     TP1_TRIGGER_R, TP1_CLOSE_FRACTION, TP2_TRIGGER_R, TP2_CLOSE_FRACTION,
     DEFAULT_BREAK_EVEN_TRIGGER,
     DEFAULT_PROFIT_PROTECTION_TRIGGER, TRAIL_DISTANCE_R, _r_multiple,
+    BREAK_EVEN_TRIGGER_USD, BREAK_EVEN_BUFFER_USD,
+    QUICK_PROFIT_LOCK_USD, QUICK_PROFIT_TRAIL_DISTANCE_R,
 )
 import indicators as ind
 import market_brain as mb
@@ -158,6 +160,7 @@ def _finalize_trade(trades, open_position, exit_price, exit_date, exit_reason, c
         "rationale": open_position["rationale"], "confidence": open_position["confidence"],
         "exit_reason": exit_reason, "chosen_timeframe": open_position["chosen_timeframe"],
         "applied_risk_percent": open_position.get("applied_risk_percent"),
+        "max_favorable_r": round(open_position.get("max_favorable_r", 0.0), 3),
     })
     return pnl
 
@@ -234,6 +237,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     "original_risk": original_risk, "remaining_lot": pending_order["lot"], "events": set(),
                     "confidence": pending_order["confidence"], "rationale": pending_order["rationale"],
                     "chosen_timeframe": pending_order["chosen_timeframe"], "take_profit_1": pending_order.get("take_profit_1"),
+                    "max_favorable_r": 0.0,
                 }
                 pending_order = None
             else:
@@ -250,13 +254,34 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             events = open_position["events"]
             remaining_lot = open_position["remaining_lot"]
 
+            # 0. Max favorable excursion (diagnostic only, real trader
+            # question 2026-08-13: "were these losing/break-even trades ever
+            # profitable before failing?") — tracked from this bar's REAL
+            # high/low, not just its close, so a wick that touched a better
+            # price than the close still counts. Never influences any real
+            # decision below, purely recorded on the finished trade.
+            favorable_r_this_bar = _r_multiple(direction, entry_price, bar["high"] if direction == "BUY" else bar["low"], original_risk)
+            if favorable_r_this_bar > open_position["max_favorable_r"]:
+                open_position["max_favorable_r"] = favorable_r_this_bar
+
             # 1. Real stop-loss check FIRST (this bar's high/low against
             # whatever the current stop is — original, break-even, or
             # trailing) — conservative, matches fusion_backtest.py's own
             # SL-first-on-ambiguity convention.
             hit_sl = (bar["low"] <= current_sl) if direction == "BUY" else (bar["high"] >= current_sl)
             if hit_sl:
-                reason = "break_even" if current_sl == entry_price else ("trailing_stop" if "trailing_stop" in events or "break_even" in events else "stop_loss")
+                # Event-driven, not a price comparison (2026-08-13): with
+                # BREAK_EVEN_BUFFER_R, current_sl no longer equals
+                # entry_price exactly on a break-even, so the old
+                # `current_sl == entry_price` check would misclassify it.
+                if "quick_profit_lock" in events:
+                    reason = "quick_profit_lock"
+                elif "trailing_stop" in events:
+                    reason = "trailing_stop"
+                elif "break_even" in events:
+                    reason = "break_even"
+                else:
+                    reason = "stop_loss"
                 _finalize_trade(trades, open_position, current_sl, now, reason, remaining_lot, contract_size, capital)
                 open_position = None
                 continue
@@ -270,9 +295,6 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             # its full size until step 3 either protects it at break-even
             # or banks it entirely on the trailing trigger — no partial
             # legging.
-            r_now = _r_multiple(direction, entry_price, bar["close"], original_risk)
-            at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
-
             if profile_key != "scalping":
                 if "tp1_partial" not in events:
                     tp1_price = _price_at_r(entry_price, direction, original_risk, TP1_TRIGGER_R)
@@ -298,23 +320,54 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     continue
                 open_position["remaining_lot"] = remaining_lot
 
-            # 3. Break-even / trailing — evaluated against this bar's
-            # close as the "current price" proxy (a continuous live tick
-            # feed isn't available in a bar backtest; close is the same
-            # proxy fusion_backtest.py itself uses elsewhere). Scalping
-            # banks the WHOLE position the moment the trailing trigger is
-            # reached instead of moving the stop and continuing to hold —
-            # mirrors local_functions.manage_open_positions's is_scalping
-            # branch exactly.
-            if r_now >= trail_trigger:
-                if profile_key == "scalping":
-                    _finalize_trade(trades, open_position, bar["close"], now, "scalping_trail_close", remaining_lot, contract_size, capital)
-                    open_position = None
-                    daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
+            # 3. Break-even / trailing / quick-profit-lock — evaluated
+            # against this bar's REAL favorable-side extreme (high for BUY,
+            # low for SELL), not just its close (2026-08-13 fix): mirrors
+            # the live position manager's own continuous tick-by-tick
+            # monitoring (local_functions.manage_open_positions runs on its
+            # own fast loop against real current_price, never a bar close).
+            # Real finding the same day: several trades wicked well past
+            # be_trigger/trail_trigger intrabar, then closed back below it —
+            # a close-only check would have missed the real protection
+            # window entirely.
+            favorable_price = bar["high"] if direction == "BUY" else bar["low"]
+            at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
+            sign = 1 if direction == "BUY" else -1
+
+            if profile_key == "scalping":
+                # Scalping — exactly two dollar-based tiers now
+                # (2026-08-13, mirrors local_functions.manage_open_positions's
+                # own is_scalping branch exactly — see that function's
+                # comment for the full real-trader-spec rationale), REPLACES
+                # the R-multiple path below entirely for Scalping:
+                #   1. Quick-profit lock (checked first, tightest): real $
+                #      profit >= QUICK_PROFIT_LOCK_USD -> tight trail.
+                #   2. Break-even floor: real $ profit >= BREAK_EVEN_TRIGGER_USD
+                #      -> stop moved to entry + BREAK_EVEN_BUFFER_USD (never
+                #      exactly at entry).
+                profit_usd = (
+                    (favorable_price - entry_price) * remaining_lot * contract_size
+                    if direction == "BUY"
+                    else (entry_price - favorable_price) * remaining_lot * contract_size
+                )
+                if profit_usd >= QUICK_PROFIT_LOCK_USD:
+                    tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
+                    candidate = favorable_price - sign * tight_offset
+                    better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                    if better:
+                        open_position["current_sl"] = candidate
+                        events.add("quick_profit_lock")
                     continue
+                if profit_usd >= BREAK_EVEN_TRIGGER_USD and not at_be_or_better and remaining_lot > 0:
+                    buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
+                    open_position["current_sl"] = entry_price + sign * buffer_offset
+                    events.add("break_even")
+                continue
+
+            r_now = _r_multiple(direction, entry_price, favorable_price, original_risk)
+            if r_now >= trail_trigger:
                 trail_offset = original_risk * TRAIL_DISTANCE_R
-                sign = 1 if direction == "BUY" else -1
-                candidate = bar["close"] - sign * trail_offset
+                candidate = favorable_price - sign * trail_offset
                 better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
                 beyond_entry = (candidate > entry_price) if direction == "BUY" else (candidate < entry_price)
                 if better and beyond_entry:
@@ -370,6 +423,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                 "remaining_lot": lot, "events": set(), "confidence": result["confidence"],
                 "rationale": rationale, "chosen_timeframe": result["timeframe"],
                 "take_profit_1": result.get("take_profit_1"), "applied_risk_percent": applied_risk_percent,
+                "max_favorable_r": 0.0,
             }
         else:  # pending_order — real LIMIT/STOP order, waits for a genuine price touch
             planned_price = result["ideal_entry"]
