@@ -994,6 +994,58 @@ def start_monitor():
 POSITION_MANAGER_INTERVAL_SEC = 1.0
 _position_manager_thread = None
 
+# Real order type constants -> BUY/SELL, matching get_pending_orders_direct's
+# own "type" strings — a plain STOP/LIMIT distinction doesn't matter here,
+# only which side the order (and its take_profit) sits on.
+_PENDING_BUY_TYPES = ("BUY_LIMIT", "BUY_STOP")
+
+
+def _cancel_stale_pending_orders_by_tp():
+    """Fast half of Task #104's staleness check (2026-08-14, real trader
+    finding: pending orders could sit unreviewed for a full scan cycle —
+    up to 10 minutes for Swing — before AnalysisSessionStore.jsx's
+    reversal/TP-already-reached check next ran, unlike open positions
+    which get checked every second here). The REVERSAL half needs a fresh
+    market_brain.analyze() call (expensive, ~100-300ms/symbol) so it stays
+    on the normal scan cycle. This half needs no re-analysis at all — a
+    pending order's own take_profit is already known the moment it's
+    placed — just compare it to the REAL current price, exactly as cheap
+    as the SL/TP checks manage_open_positions already does every second
+    for open positions. Cancels an order whose own TP was already reached
+    before it ever filled — the opportunity it was planned around is
+    already over, filling now would mean entering into a move that's
+    likely already spent (or reversing)."""
+    orders = get_pending_orders_direct()
+    if not orders:
+        return
+    symbols = {o["symbol"] for o in orders if o.get("take_profit")}
+    if not symbols:
+        return
+    with _mt5_lock:
+        ticks = {sym: mt5.symbol_info_tick(sym) for sym in symbols}
+    for o in orders:
+        tp = o.get("take_profit")
+        if not tp:
+            continue
+        tick = ticks.get(o["symbol"])
+        if not tick:
+            continue
+        is_buy = o["type"] in _PENDING_BUY_TYPES
+        # Same side an eventual exit would use (closing a BUY sells at
+        # bid, closing a SELL buys back at ask) — the honest read of
+        # "could this have already been banked at tp or better".
+        current_price = tick.bid if is_buy else tick.ask
+        tp_reached = (current_price >= tp) if is_buy else (current_price <= tp)
+        if not tp_reached:
+            continue
+        result = cancel_pending_order_direct(o["ticket"])
+        if result.get("ok"):
+            log.info("[STALE_PENDING_CANCELLED] ticket=%s symbol=%s reason=tp_already_reached tp=%s current=%s",
+                      o["ticket"], o["symbol"], tp, current_price)
+        else:
+            log.warning("[STALE_PENDING_CANCEL_FAILED] ticket=%s symbol=%s error=%s",
+                         o["ticket"], o["symbol"], result.get("error"))
+
 
 def _position_manager_loop():
     log.info("Position Manager thread started (interval=%.1fs)", POSITION_MANAGER_INTERVAL_SEC)
@@ -1017,6 +1069,7 @@ def _position_manager_loop():
                 log.info("[POSITION_MANAGER] %s", "; ".join(
                     f"{a['event']} {a['symbol']} (ticket {a['ticket']})" for a in result["actions"]
                 ))
+            _cancel_stale_pending_orders_by_tp()
         except Exception as e:
             log.warning("Position Manager error: %s", e)
         time.sleep(POSITION_MANAGER_INTERVAL_SEC)
@@ -1579,10 +1632,13 @@ def send_pending_order():
     })
 
 
-@app.route("/pending_orders", methods=["GET"])
-def get_pending_orders_endpoint():
-    if not _connection["initialized"]:
-        return jsonify({"ok": False, "error": "MT5 not connected"}), 400
+def get_pending_orders_direct():
+    """Read current pending (LIMIT/STOP) orders from MT5. Thread-safe.
+    Shared by the /pending_orders endpoint and the Position Manager loop's
+    stale-order check (Task #105) — same in-process pattern as
+    get_open_positions() above."""
+    if not _connection["initialized"] or mt5 is None:
+        return None
 
     with _mt5_lock:
         orders = mt5.orders_get() or []
@@ -1593,7 +1649,7 @@ def get_pending_orders_endpoint():
         mt5.ORDER_TYPE_BUY_STOP: "BUY_STOP",
         mt5.ORDER_TYPE_SELL_STOP: "SELL_STOP",
     }
-    result = [
+    return [
         {
             "ticket": str(o.ticket),
             "symbol": o.symbol,
@@ -1609,35 +1665,48 @@ def get_pending_orders_endpoint():
         }
         for o in orders
     ]
-    return jsonify({"ok": True, "orders": result})
 
 
-@app.route("/cancel_order", methods=["POST"])
-def cancel_pending_order():
+@app.route("/pending_orders", methods=["GET"])
+def get_pending_orders_endpoint():
+    orders = get_pending_orders_direct()
+    if orders is None:
+        return jsonify({"ok": False, "error": "MT5 not connected"}), 400
+    return jsonify({"ok": True, "orders": orders})
+
+
+def cancel_pending_order_direct(ticket):
+    """In-process pending-order cancel (TRADE_ACTION_REMOVE) — shared by
+    the /cancel_order endpoint and the Position Manager loop's stale-order
+    check (Task #105), same pattern as close_position_direct/
+    modify_position_direct below."""
     if not _connection["initialized"]:
-        return jsonify(_structured_error("CONNECTION_LOST", "MT5 not connected")), 400
-
-    data = request.json or {}
+        return {"ok": False, "error": "MT5 not connected"}
     try:
-        ticket = int(data.get("ticket", 0))
+        ticket = int(ticket)
     except (TypeError, ValueError):
-        ticket = 0
+        return {"ok": False, "error": "ticket is required"}
     if not ticket:
-        return jsonify(_structured_error("INVALID_REQUEST", "ticket is required")), 400
+        return {"ok": False, "error": "ticket is required"}
 
     request_data = {"action": mt5.TRADE_ACTION_REMOVE, "order": ticket}
     result = mt5.order_send(request_data)
 
     if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
         retcode = result.retcode if result else 0
-        return jsonify(_structured_error(
-            "CANCEL_FAILED",
-            "Cancel failed: retcode=" + str(retcode) + ", comment=" + str(result.comment if result else "N/A"),
-            extra={"retcode": retcode, "ticket": ticket},
-        )), 400
+        return {"ok": False, "error": "Cancel failed: retcode=" + str(retcode) + ", comment=" + str(result.comment if result else "N/A"), "retcode": retcode}
 
     log.info("[PENDING_ORDER_CANCELLED] ticket=%s", ticket)
-    return jsonify({"ok": True, "ticket": str(ticket)})
+    return {"ok": True, "ticket": str(ticket)}
+
+
+@app.route("/cancel_order", methods=["POST"])
+def cancel_pending_order():
+    data = request.json or {}
+    result = cancel_pending_order_direct(data.get("ticket", 0))
+    if not result.get("ok"):
+        return jsonify(_structured_error("CANCEL_FAILED" if "retcode" in result else "INVALID_REQUEST", result.get("error", ""), extra={"ticket": data.get("ticket")})), 400
+    return jsonify(result)
 
 
 @app.route("/positions", methods=["GET"])
