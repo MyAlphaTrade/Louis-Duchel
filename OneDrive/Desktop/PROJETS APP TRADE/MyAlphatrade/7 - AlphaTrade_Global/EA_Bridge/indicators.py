@@ -127,6 +127,78 @@ def bollinger_bands(closes, period=20, std_dev_mult=2):
     return {"middle": middle, "upper": upper, "lower": lower}
 
 
+def chaikin_money_flow(candles, period=20):
+    """Chaikin Money Flow (Marc Chaikin, 1980s) — estimates real buy/sell
+    pressure from OHLCV bars without needing a trade-side tape (which MT5
+    CFD/forex symbols never provide — only tick_volume, a quote-change
+    count used here as the standard retail volume proxy).
+
+    money_flow_multiplier = ((close-low) - (high-close)) / (high-low)
+        +1 when the bar closes at its high (pure buying pressure),
+        -1 when it closes at its low (pure selling pressure).
+    CMF = sum(multiplier * tick_volume, period) / sum(tick_volume, period)
+
+    2026-08-14, real-trader spec (Louis) — a proven, decades-old formula
+    used here as an OBSERVATION-ONLY engine (see engine_scoring.score_order_flow):
+    not in ENGINE_WEIGHTS yet, contributes 0 to the live decision until
+    validated against real historical data (never activated without proof,
+    same discipline as Task #89/#95).
+    """
+    out = [None] * len(candles)
+    if len(candles) < period:
+        return out
+    mfv = []  # money-flow volume per bar
+    for c in candles:
+        rng = c["high"] - c["low"]
+        mult = ((c["close"] - c["low"]) - (c["high"] - c["close"])) / rng if rng > 0 else 0.0
+        mfv.append(mult * c["tick_volume"])
+    vol_sum = sum(c["tick_volume"] for c in candles[:period])
+    mfv_sum = sum(mfv[:period])
+    out[period - 1] = (mfv_sum / vol_sum) if vol_sum > 0 else 0.0
+    for i in range(period, len(candles)):
+        vol_sum += candles[i]["tick_volume"] - candles[i - period]["tick_volume"]
+        mfv_sum += mfv[i] - mfv[i - period]
+        out[i] = (mfv_sum / vol_sum) if vol_sum > 0 else 0.0
+    return out
+
+
+def session_vwap(candles, session_start_iso=None):
+    """Volume-weighted average price, anchored to the start of the current
+    trading day (or `session_start_iso` if given) — tick_volume-weighted,
+    same proxy as chaikin_money_flow. Also returns a 1-std-dev band so
+    "price N% away from VWAP" can be read as extension, not just direction.
+
+    2026-08-14, real-trader spec — observation-only, see chaikin_money_flow.
+    """
+    out_vwap = [None] * len(candles)
+    out_upper = [None] * len(candles)
+    out_lower = [None] * len(candles)
+    if not candles:
+        return {"vwap": out_vwap, "upper": out_upper, "lower": out_lower}
+
+    anchor_date = (session_start_iso or candles[0]["time"])[:10]
+    cum_pv = 0.0
+    cum_v = 0.0
+    cum_pv2 = 0.0  # for variance: sum(volume * (typical_price - vwap)^2), computed via sum(v*tp^2)
+    for i, c in enumerate(candles):
+        if c["time"][:10] != anchor_date:
+            anchor_date = c["time"][:10]
+            cum_pv = cum_v = cum_pv2 = 0.0
+        typical = (c["high"] + c["low"] + c["close"]) / 3
+        vol = c["tick_volume"] or 0
+        cum_pv += typical * vol
+        cum_pv2 += typical * typical * vol
+        cum_v += vol
+        if cum_v > 0:
+            vwap = cum_pv / cum_v
+            variance = max(0.0, cum_pv2 / cum_v - vwap * vwap)
+            std = math.sqrt(variance)
+            out_vwap[i] = vwap
+            out_upper[i] = vwap + std
+            out_lower[i] = vwap - std
+    return {"vwap": out_vwap, "upper": out_upper, "lower": out_lower}
+
+
 def find_swings(candles, lookback=3):
     """A swing high/low is a local extreme relative to `lookback` candles on each side."""
     swings = []

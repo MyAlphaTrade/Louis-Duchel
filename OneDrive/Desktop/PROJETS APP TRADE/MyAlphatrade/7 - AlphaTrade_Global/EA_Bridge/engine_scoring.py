@@ -17,7 +17,7 @@ weight of 6, after being a zero-weight stub since this file's creation.
 import logging
 import re
 
-from indicators import ema, rsi, macd, atr, bollinger_bands, find_swings, classify_structure, fibonacci_levels, bias_from_snapshot
+from indicators import ema, rsi, macd, atr, bollinger_bands, find_swings, classify_structure, fibonacci_levels, bias_from_snapshot, chaikin_money_flow, session_vwap
 from market_analysis import bos_choch, find_fvgs, find_order_blocks, find_liquidity_zones, detect_sweep, detect_candlestick_pattern
 from economic_calendar import score_economic
 
@@ -151,6 +151,8 @@ def build_context(candles, symbol=None):
         "bollinger": bollinger_bands(closes, 20, 2),
         "swings": swings,
         "structure": classify_structure(swings),
+        "cmf20": chaikin_money_flow(candles, 20),
+        "vwap": session_vwap(candles),
     }
 
 
@@ -295,6 +297,76 @@ def score_volume(ctx):
     return {"id": "volume", "bias": bias, "confidence": conf, "findings": [f"Volume {ratio:.1f}x la moyenne sur une bougie {bias}"]}
 
 
+def score_order_flow(ctx):
+    """OBSERVATION-ONLY engine (2026-08-14, real-trader spec — Louis asked
+    for a flux-based read of the market using free data we already have,
+    after a trader he follows recommended calibrating on proven formulas
+    instead of stacking generic indicators). Combines Chaikin Money Flow
+    (real buy/sell pressure from OHLCV, decades-old formula) with price's
+    position relative to the session VWAP (institutional fair-value
+    reference). Deliberately absent from ENGINE_WEIGHTS — computed and
+    logged every cycle, visible in the breakdown, contributes 0 to the
+    live decision until validated against real historical data (same
+    discipline as Task #89/#95: never trusted without proof).
+
+    Hypothesis being tested: does this flip direction EARLIER than
+    market_structure/indicator_fusion (which only react to closed candles)
+    — i.e. does it address the "late entry" complaint (XAUUSD entering
+    after the move already validated) that #104/#105 only partially cover
+    (those cancel stale orders after the fact; this would improve the
+    entry signal itself).
+
+    First real test (2026-08-14, XAUUSD M15, ~1500 real candles / 3.5
+    weeks, isolated directional-accuracy of non-neutral calls over the
+    next 8 bars): order_flow 47.7% (811 calls) vs market_structure 41.8%
+    (594) vs indicator_fusion 51.4% (1132) — INCONCLUSIVE/NEGATIVE, no
+    edge shown, stays disabled. Note market_structure itself (already
+    live, weight 14) scored worse than order_flow on this same isolated
+    metric — a reminder that single-engine isolated hit-rate isn't the
+    same as an engine's real contribution once fused+confidence-weighted,
+    so this result doesn't fully indict the concept, but it does not
+    clear the bar to activate it either. Sample is narrow (one symbol,
+    one 3.5-week window) — same caveat as the confidence-threshold test
+    earlier this session. Do not re-enable without a wider, real
+    walk-forward test first."""
+    candles = ctx["candles"]
+    cmf = ctx["cmf20"][-1] if ctx["cmf20"] else None
+    vwap = ctx["vwap"]["vwap"][-1] if ctx["vwap"]["vwap"] else None
+    price = candles[-1]["close"] if candles else None
+    candle_time = candles[-1]["time"] if candles else None
+
+    if cmf is None or vwap is None or price is None:
+        result = {"id": "order_flow", "bias": "neutral", "confidence": 10,
+                   "findings": ["Historique insuffisant pour le flux d'ordres (CMF/VWAP)"]}
+    else:
+        # +-0.05 threshold is Chaikin's own published rule of thumb, not
+        # invented here.
+        cmf_bias = "bullish" if cmf > 0.05 else "bearish" if cmf < -0.05 else "neutral"
+        price_bias = "bullish" if price > vwap else "bearish" if price < vwap else "neutral"
+        if cmf_bias == "neutral":
+            result = {"id": "order_flow", "bias": "neutral", "confidence": 20,
+                       "findings": [f"CMF(20)={cmf:.2f} — pression acheteuse/vendeuse insuffisante pour trancher"]}
+        elif cmf_bias == price_bias:
+            conf = _clamp(45 + min(abs(cmf), 0.3) / 0.3 * 35)
+            side = "au-dessus" if price_bias == "bullish" else "en-dessous"
+            result = {"id": "order_flow", "bias": cmf_bias, "confidence": conf,
+                       "findings": [f"CMF(20)={cmf:.2f} et prix {side} du VWAP journalier — flux et prix s'accordent {cmf_bias}"]}
+        else:
+            conf = _clamp(25 + min(abs(cmf), 0.3) / 0.3 * 15)
+            result = {"id": "order_flow", "bias": cmf_bias, "confidence": conf,
+                       "findings": [f"CMF(20)={cmf:.2f} {cmf_bias} mais prix du côté opposé au VWAP — signal contradictoire, confiance réduite"]}
+
+    diag_log.info(
+        "order_flow candle_time=%s cmf20=%s vwap=%s price=%s bias=%s confidence=%s",
+        candle_time,
+        f"{cmf:.3f}" if cmf is not None else None,
+        f"{vwap:.2f}" if vwap is not None else None,
+        f"{price:.2f}" if price is not None else None,
+        result["bias"], result["confidence"],
+    )
+    return result
+
+
 def score_liquidity(ctx):
     zones = find_liquidity_zones(ctx["swings"])
     sweep = detect_sweep(ctx["candles"], zones)
@@ -355,6 +427,7 @@ ENGINE_SCORERS = {
     "fibonacci": score_fibonacci,
     "indicator_fusion": score_indicator_fusion,
     "volume": score_volume,
+    "order_flow": score_order_flow,  # observation-only, absent from ENGINE_WEIGHTS (see score_order_flow docstring)
     "liquidity": score_liquidity,
     "volatility": score_volatility,
     "session": score_session,
@@ -484,8 +557,6 @@ def fuse_direction_and_confidence(engine_results, weight_multipliers=None, exclu
 
     for engine_id, result in engine_results.items():
         weight = ENGINE_WEIGHTS.get(engine_id, 0)
-        if weight <= 0:
-            continue
         conf = result.get("confidence", 0)
         bias = result.get("bias", "neutral")
         # Still shown in breakdown (findings are real, useful context — e.g.
@@ -493,8 +564,15 @@ def fuse_direction_and_confidence(engine_results, weight_multipliers=None, exclu
         # weight) — only excluded from the vote itself. breakdown reports
         # the BASE weight, not the (experimental) modulated one, so the UI
         # never shows a number that silently depends on an unproven flag.
+        # Also how an observation-only engine (absent from ENGINE_WEIGHTS
+        # entirely, e.g. order_flow, 2026-08-14) stays VISIBLE in the Journal
+        # Global breakdown while contributing 0 to the fused decision — same
+        # discipline as Task #89/#95: computed and exposed, never silently
+        # influential without proof. Previously weight<=0 skipped breakdown
+        # too, which would have hidden order_flow entirely — moved the
+        # weight<=0 check below breakdown[] instead.
         breakdown[engine_id] = {"weight": weight, "bias": bias, "confidence": conf, "findings": result.get("findings", [])}
-        if engine_id in STRUCTURALLY_NEUTRAL_ENGINES:
+        if weight <= 0 or engine_id in STRUCTURALLY_NEUTRAL_ENGINES:
             continue
         effective_weight = weight * weight_multipliers.get(engine_id, 1.0)
         total_weight += effective_weight
