@@ -142,24 +142,34 @@ def category_weight_multipliers(symbol):
 # walk-forward test — regime modulation (-37%), category modulation
 # (invalidated), abstention exclusion (-442) all failed the same test.
 #
-# Same-day test on BTCUSD/ETHUSD (single window, not walk-forward) was
-# mixed — BTCUSD +99, ETHUSD -267 — so this stays scoped to XAUUSD only,
-# not a general "fewer engines is better" conclusion.
+# First same-day single-window test on BTCUSD/ETHUSD (not walk-forward)
+# was mixed — BTCUSD +99, ETHUSD -267. Re-tested properly (2026-08-14,
+# 6 real ~30-day H1 windows, ~7 real months, Jan-Aug 2026):
+#   BTCUSD: baseline 69.67$ (112 trades) -> restricted 344.50$ (193
+#     trades), +274.83 (~5x), 4/6 windows improved (+174/+102/+48/+132 vs
+#     -109/-1) — same distributed-gain profile as XAUUSD. ACTIVATED.
+#   ETHUSD: baseline 59.85$ -> restricted -197.50$, -257.35 — confirms
+#     the first single-window result, clearly bad. Stays OFF for ETHUSD.
 #
-# Disclosed caveat (Louis asked directly, 2026-08-14): fusion_backtest.py
-# is single-position-at-a-time and H1-only (see its own module docstring's
-# "Known, disclosed scope limits") — it does NOT model the live app's
-# pyramiding (2 concurrent Intraday/Swing positions, unlimited Scalping
-# trades/day, shipped earlier today) or a faster Scalping-paced timeframe.
-# No trade-count cap was applied in the test; the low count (182 over ~9
-# months) is a real structural backtest limitation, not evidence of how
-# many opportunities the live app can actually act on — the true live $
-# throughput is expected to differ (likely higher) from this backtested
-# figure. The DIRECTIONAL finding (this restriction improves XAUUSD
-# per-trade quality) is what's being trusted here, not the absolute $
-# amount.
-ZONE_ONLY_SYMBOLS = {"XAUUSD"}
-ZONE_ONLY_KEEP_ENGINES = {"smart_money", "liquidity"}
+# BTCUSD additionally keeps "microstructure" active (real Hyperliquid
+# order-book data, weight 15, the highest of any engine, fixed this same
+# day — see MICROSTRUCTURE_CONFIDENCE_BASE/MAX above) — Louis asked
+# directly (2026-08-14) to combine it with FVG+OB+S/R for BTC specifically.
+# NOT re-validated in combination via fusion_backtest.py: that harness
+# force-disables microstructure for its entire run (CRYPTO_CONTEXT_ENABLED
+# = False) because it only ever reads the SINGLE MOST RECENT real
+# Hyperliquid snapshot — no genuine historical order-book series is
+# stored to replay bar-by-bar, so "backtesting" it would leak today's
+# live snapshot into every past bar (same disclosed reason "economic" is
+# excluded — see fusion_backtest.py's own module docstring). Kept active
+# for BTC on the strength of its OWN prior real validation instead (79%
+# real directional accuracy of `pressure` on 319 real BTC snapshots,
+# 2026-08-14, documented above this file's MICROSTRUCTURE_CONFIDENCE_BASE)
+# — not re-proven in this specific combination, disclosed as such.
+ZONE_ONLY_CONFIG = {
+    "XAUUSD": {"smart_money", "liquidity"},
+    "BTCUSD": {"smart_money", "liquidity", "microstructure"},
+}
 ZONE_ONLY_CUT_MULTIPLIER = 0.0
 
 
@@ -170,9 +180,10 @@ def zone_only_weight_multipliers(symbol):
     from ENGINE_WEIGHTS itself (not a hardcoded name list) so a future new
     weighted engine is automatically zeroed out too, never silently left
     active by omission."""
-    if (symbol or "").upper() not in ZONE_ONLY_SYMBOLS:
+    keep = ZONE_ONLY_CONFIG.get((symbol or "").upper())
+    if keep is None:
         return {}
-    return {name: ZONE_ONLY_CUT_MULTIPLIER for name in ENGINE_WEIGHTS if name not in ZONE_ONLY_KEEP_ENGINES}
+    return {name: ZONE_ONLY_CUT_MULTIPLIER for name in ENGINE_WEIGHTS if name not in keep}
 
 
 def _clamp(v, lo=0, hi=100):

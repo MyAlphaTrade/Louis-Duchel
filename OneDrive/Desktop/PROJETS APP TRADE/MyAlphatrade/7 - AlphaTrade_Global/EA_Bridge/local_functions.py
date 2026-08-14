@@ -1140,10 +1140,11 @@ def market_brain_analyze(body, fetch_candles_fn):
 
     result = mb.analyze(symbol, timeframe, primary_candles, multi_tf_candles=mtf_candles,
                          validated_strategy=validated_strategy, capital=capital, risk_percent=risk_percent,
-                         use_zone_only_gold=True,  # ACTIF (XAUUSD only — see market_brain.analyze's docstring
-                         # for the real walk-forward result, 2026-08-14, +638.46/+92% sur 6 fenêtres réelles).
-                         # True ici ne change rien pour tout symbole != XAUUSD (le filtre est dans
-                         # engine_scoring.zone_only_weight_multipliers, pas ici).
+                         use_zone_only_fusion=True,  # ACTIF (XAUUSD + BTCUSD — voir market_brain.analyze's docstring
+                         # pour les résultats walk-forward réels, 2026-08-14 : XAUUSD +638.46/+92%,
+                         # BTCUSD +274.83/~5x, sur 6 fenêtres réelles chacun. ETHUSD testé et rejeté.
+                         # True ici ne change rien pour tout symbole absent de ZONE_ONLY_CONFIG (le filtre
+                         # est dans engine_scoring.zone_only_weight_multipliers, pas ici).
                          profile_key=trading_profile,
                          profile_min_confidence=PROFILE_MIN_CONFIDENCE.get(trading_profile),
                          profile_base_risk_percent=PROFILE_BASE_RISK_PERCENT.get(trading_profile))
