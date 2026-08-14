@@ -41,7 +41,13 @@ CONSECUTIVE_LOSS_RISK_MULTIPLIER = 0.5
 
 CONTRACT_SIZES = {
     "XAUUSD": 100, "EURUSD": 100000, "GBPUSD": 100000, "USDJPY": 100000,
-    "BTCUSD": 1, "ETHUSD": 1, "SP500": 50, "NAS100": 20,
+    "BTCUSD": 1, "ETHUSD": 1, "SOLUSD": 1, "SP500": 50, "NAS100": 20,
+    # SOLUSD added 2026-08-14 — real incident: absent here made
+    # _position_open_risk() fall back to the 100000 Forex default,
+    # overstating a real SOL position's risk by ~5 orders of magnitude
+    # (one real case showed 10311% of equity "at risk"), permanently
+    # blocking every further SOLUSD order via PORTFOLIO_RISK_CAP. Real
+    # value confirmed live: symbol_info("SOLUSD").trade_contract_size=1.0.
 }
 
 

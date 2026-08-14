@@ -639,6 +639,14 @@ def compute_real_lot(symbol, entry_price, stop_loss, risk_percent):
     with _mt5_lock:
         info = mt5.symbol_info(resolved)
     contract_size = getattr(info, "trade_contract_size", None) if info else None
+    # 2026-08-14 real incident (SOLUSD): calculate_lot() used to floor every
+    # lot at a flat 0.01 regardless of symbol — SOLUSD's real broker
+    # minimum is 0.5, so a correctly risk-sized lot landed under that and
+    # got rejected outright (INVALID_VOLUME) on every single attempt, 64
+    # real times over 5 days. Same live-symbol_info() pattern as
+    # contract_size above.
+    volume_min = getattr(info, "volume_min", None) if info else None
+    volume_step = getattr(info, "volume_step", None) if info else None
 
     snap = get_account_snapshot()
     equity = snap.get("equity") if snap else None
@@ -646,6 +654,7 @@ def compute_real_lot(symbol, entry_price, stop_loss, risk_percent):
         lot = local_functions.calculate_lot(
             symbol, entry_price=entry_price, stop_loss=stop_loss,
             capital=equity, risk_percent=risk_percent, contract_size=contract_size,
+            volume_min=volume_min, volume_step=volume_step,
         )
     except local_functions.RealCapitalUnavailable as e:
         return None, (jsonify(_structured_error("CAPITAL_UNAVAILABLE", str(e), symbol=symbol)), 400)

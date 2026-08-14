@@ -17,6 +17,7 @@ Ported faithfully from:
 """
 
 import hashlib
+import math
 import re
 import secrets
 from datetime import datetime, timezone
@@ -34,6 +35,9 @@ CONTRACT_SIZES = {
     "USDJPY": 100000,
     "BTCUSD": 1,
     "ETHUSD": 1,
+    "SOLUSD": 1,  # 2026-08-14, real incident: absent here made this fall
+    # back to the 100000 Forex default, wildly overstating SOLUSD's real
+    # exposure/risk (confirmed live: symbol_info().trade_contract_size=1.0)
     "SP500": 50,
     "NAS100": 20,
 }
@@ -377,7 +381,8 @@ class RealCapitalUnavailable(Exception):
     never a value supplied by the caller."""
 
 
-def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None, contract_size=None):
+def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None, contract_size=None,
+                   volume_min=None, volume_step=None):
     """contract_size: pass the REAL value read live from MT5
     (symbol_info().trade_contract_size) whenever the caller has an active
     connection — see alphatg_bridge.py's compute_real_lot(). Falls back to
@@ -386,7 +391,20 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     tradingConnector "build_order" preview action) — that table is known
     incomplete (e.g. Deriv synthetic indices like Boom/Crash/Volatility
     aren't in it, silently defaulting to a Forex-scale 100000 that badly
-    mis-sizes those instruments — real incident, 2026-08-12)."""
+    mis-sizes those instruments — real incident, 2026-08-12).
+
+    volume_min / volume_step: pass the REAL broker minimums, also read
+    live from MT5 (symbol_info().volume_min/.volume_step) — same call site
+    as contract_size above. Real incident, 2026-08-14: this function used
+    to floor every calculated lot at a flat 0.01 regardless of symbol.
+    SOLUSD's real broker minimum is 0.5 (vs 0.01 for BTCUSD, 0.1 for
+    ETHUSD) — a lot correctly sized to the account's real risk_percent
+    landed under 0.5 every time and got rejected outright by the broker
+    (INVALID_VOLUME, retcode 10014) rather than "rounded up" to something
+    valid — confirmed via 64 real rejections over 5 real days in
+    production logs; the bot never once placed a SOLUSD order itself.
+    Falls back to 0.01/0.01 only when no live value is available, same
+    disclosed-limitation category as contract_size's own fallback."""
     if not capital or capital <= 0:
         raise RealCapitalUnavailable(
             "Capital réel indisponible (equity MT5 introuvable) — impossible de calculer une taille de position en toute sécurité."
@@ -395,11 +413,20 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     risk_amount = capital * (risk_percent / 100)
     if not contract_size:
         contract_size = CONTRACT_SIZES.get((symbol or "").upper(), 100000)
+    min_vol = volume_min if volume_min else 0.01
+    step = volume_step if volume_step else 0.01
     sl_distance = abs((entry_price or 0) - (stop_loss or 0))
     if sl_distance <= 0:
-        return 0.01
+        return min_vol
     lot = risk_amount / (sl_distance * contract_size)
-    return max(0.01, round(lot * 100) / 100)
+    # Snap DOWN to the real broker step (never round up past the risk
+    # budget the trader actually configured), then floor at the real
+    # broker minimum — a lot below volume_min isn't "small", the broker
+    # rejects it outright, so silently sending 0.01 for a symbol whose
+    # real minimum is higher just guarantees the order fails every time.
+    steps = math.floor(lot / step) if step > 0 else 0
+    lot = steps * step
+    return round(max(min_vol, lot), 4)
 
 
 def build_order(body, account_equity=None):
