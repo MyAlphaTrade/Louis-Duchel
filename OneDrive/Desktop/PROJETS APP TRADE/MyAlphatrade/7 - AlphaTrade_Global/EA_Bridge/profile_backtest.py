@@ -474,6 +474,10 @@ def _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capi
     return mb.analyze(
         symbol, timeframe, primary_candles, multi_tf_candles=mtf_candles,
         validated_strategy=None, capital=capital, risk_percent=risk_percent,
-        use_momentum_catchup=use_momentum_catchup, profile_key=profile_key,
+        use_momentum_catchup=use_momentum_catchup,
+        use_zone_only_gold=True,  # mirrors the real live call site (local_functions.market_brain_analyze) —
+        # XAUUSD only, see market_brain.analyze's docstring. Kept in sync so this harness never silently
+        # diverges from what the live app actually does.
+        profile_key=profile_key,
         profile_min_confidence=min_confidence, profile_base_risk_percent=risk_percent,
     )

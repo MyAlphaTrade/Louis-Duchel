@@ -356,7 +356,7 @@ def _find_actionable_zone(breakdown, decision_bias):
 
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
             use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False,
-            use_momentum_catchup=False, profile_key=None, profile_min_confidence=None,
+            use_momentum_catchup=False, use_zone_only_gold=False, profile_key=None, profile_min_confidence=None,
             profile_base_risk_percent=None):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
@@ -429,6 +429,19 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
       everywhere). Stays False pending broader validation (real per-profile
       timeframes M1/M5/M15/M30/H4/D1, not just H1) — kept as a tested,
       documented, tentatively-promising-but-inactive capability.
+    use_zone_only_gold: True in the real live call site (unlike every
+      experiment above, which all stay False everywhere) — the gating by
+      symbol happens inside engine_scoring.zone_only_weight_multipliers
+      itself (XAUUSD only), so passing True elsewhere has zero effect.
+      Real walk-forward result (2026-08-14, 6 real ~30-day XAUUSD H1
+      windows): +638.46 PnL (+92%) restricting fusion to smart_money
+      (FVG+OB) + liquidity (S/R) only, 4/6 windows improved. First
+      experiment in this file to survive real validation. See
+      zone_only_weight_multipliers's own docstring for the full result and
+      its disclosed caveat (fusion_backtest.py doesn't model the live
+      app's pyramiding/scalping-frequency, so the backtested $ figure
+      understates real live throughput — the DIRECTIONAL finding is what's
+      trusted, not the absolute amount).
     """
     snapshot = ind.compute_snapshot(symbol, timeframe, candles)
     ctx = es.build_context(candles, symbol=symbol)
@@ -442,14 +455,21 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
     regime = market_regime.classify_market_regime(candles)
     regime_multipliers = market_regime.regime_weight_multipliers(regime["regime"]) if use_regime_modulation else {}
     category_multipliers = es.category_weight_multipliers(symbol) if use_category_modulation else {}
-    if regime_multipliers or category_multipliers:
-        # Key-wise product, not override: if a future combination of both
-        # experiments is ever tested together, each engine's weight should
-        # reflect BOTH active effects, not whichever flag happened to be
-        # applied last. Today only one of these is ever True in practice.
+    zone_only_multipliers = es.zone_only_weight_multipliers(symbol) if use_zone_only_gold else {}
+    if regime_multipliers or category_multipliers or zone_only_multipliers:
+        # Key-wise product, not override: if a future combination of
+        # several of these is ever tested together, each engine's weight
+        # should reflect ALL active effects, not whichever flag happened to
+        # be applied last. In practice regime/category stay False
+        # everywhere (never combine with anything), and zone_only_gold only
+        # ever fires for XAUUSD where the other two are already {}.
         weight_multipliers = {}
-        for engine_id in set(regime_multipliers) | set(category_multipliers):
-            weight_multipliers[engine_id] = regime_multipliers.get(engine_id, 1.0) * category_multipliers.get(engine_id, 1.0)
+        for engine_id in set(regime_multipliers) | set(category_multipliers) | set(zone_only_multipliers):
+            weight_multipliers[engine_id] = (
+                regime_multipliers.get(engine_id, 1.0)
+                * category_multipliers.get(engine_id, 1.0)
+                * zone_only_multipliers.get(engine_id, 1.0)
+            )
     else:
         weight_multipliers = None
 

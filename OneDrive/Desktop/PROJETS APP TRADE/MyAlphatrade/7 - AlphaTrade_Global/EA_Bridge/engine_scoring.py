@@ -127,6 +127,54 @@ def category_weight_multipliers(symbol):
     return multipliers
 
 
+# Zone-only fusion (2026-08-14, real-trader spec — Louis) — ACTIVE for
+# XAUUSD, unlike every other modulation experiment in this file (all
+# stayed False/inactive). Restricts the fusion to smart_money (FVG+Order
+# Blocks) and liquidity (S/R zones + sweeps) only, every other engine's
+# weight zeroed out — the question tested was literally "what if we only
+# used FVG/OB/S/R and let those set the confidence".
+#
+# Real result (fusion_backtest.py walk-forward, 2026-08-14, 6 independent
+# real ~30-day H1 windows, ~9 real months of XAUUSD): baseline 690.36$
+# (110 trades) -> restricted 1328.82$ (182 trades), +638.46 (+92%), 4/6
+# windows improved and the gains dwarf the 2 losing windows (+153/+53/
+# +318/+192 vs -37/-41). First mechanism this session to survive a real
+# walk-forward test — regime modulation (-37%), category modulation
+# (invalidated), abstention exclusion (-442) all failed the same test.
+#
+# Same-day test on BTCUSD/ETHUSD (single window, not walk-forward) was
+# mixed — BTCUSD +99, ETHUSD -267 — so this stays scoped to XAUUSD only,
+# not a general "fewer engines is better" conclusion.
+#
+# Disclosed caveat (Louis asked directly, 2026-08-14): fusion_backtest.py
+# is single-position-at-a-time and H1-only (see its own module docstring's
+# "Known, disclosed scope limits") — it does NOT model the live app's
+# pyramiding (2 concurrent Intraday/Swing positions, unlimited Scalping
+# trades/day, shipped earlier today) or a faster Scalping-paced timeframe.
+# No trade-count cap was applied in the test; the low count (182 over ~9
+# months) is a real structural backtest limitation, not evidence of how
+# many opportunities the live app can actually act on — the true live $
+# throughput is expected to differ (likely higher) from this backtested
+# figure. The DIRECTIONAL finding (this restriction improves XAUUSD
+# per-trade quality) is what's being trusted here, not the absolute $
+# amount.
+ZONE_ONLY_SYMBOLS = {"XAUUSD"}
+ZONE_ONLY_KEEP_ENGINES = {"smart_money", "liquidity"}
+ZONE_ONLY_CUT_MULTIPLIER = 0.0
+
+
+def zone_only_weight_multipliers(symbol):
+    """Returns a {engine_name: multiplier} dict to apply on top of
+    ENGINE_WEIGHTS before fusion, or {} for symbols left untouched. Mirrors
+    category_weight_multipliers's contract exactly. Derives the cut list
+    from ENGINE_WEIGHTS itself (not a hardcoded name list) so a future new
+    weighted engine is automatically zeroed out too, never silently left
+    active by omission."""
+    if (symbol or "").upper() not in ZONE_ONLY_SYMBOLS:
+        return {}
+    return {name: ZONE_ONLY_CUT_MULTIPLIER for name in ENGINE_WEIGHTS if name not in ZONE_ONLY_KEEP_ENGINES}
+
+
 def _clamp(v, lo=0, hi=100):
     return max(lo, min(hi, round(v)))
 
