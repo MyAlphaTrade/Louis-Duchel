@@ -88,7 +88,14 @@ PROFILE_CONFIG = {
     # 2026-08-13, mirrors local_functions.PROFILE_BASE_RISK_PERCENT) — this
     # is now the BASE the dynamic lot-sizing multiplier scales from (see
     # market_brain._dynamic_risk_multiplier), not a flat lot.
-    "scalping": {"min_confidence": 80, "max_risk_percent": 0.8, "max_daily_trades": 10, "clock_tf": "M1", "break_even_trigger": 0.5},
+    # max_daily_trades: None for scalping (2026-08-14, real trader spec —
+    # Louis: "pas de limite pour le mode scalping, l'objectif par jour est
+    # le gain plafonné") — no trade-count cap; the real daily governor is
+    # the $ daily-goal engine (score_risk_management/dailyGoalStatus),
+    # which this harness doesn't model either (see this file's own
+    # disclosed scope-limit comment above). None is handled explicitly
+    # below (no comparison against it), never silently treated as 0.
+    "scalping": {"min_confidence": 80, "max_risk_percent": 0.8, "max_daily_trades": None, "clock_tf": "M1", "break_even_trigger": 0.5},
     "intraday": {"min_confidence": 70, "max_risk_percent": 1.0, "max_daily_trades": 5, "clock_tf": "M30", "break_even_trigger": 1.0},
     "swing":    {"min_confidence": 75, "max_risk_percent": 1.5, "max_daily_trades": 2, "clock_tf": "H4", "break_even_trigger": 2.0},
 }
@@ -391,7 +398,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             continue
 
         # Flat — scan for a new entry, respecting the daily trade cap.
-        if daily_trade_count.get(today, 0) >= max_daily_trades:
+        if max_daily_trades is not None and daily_trade_count.get(today, 0) >= max_daily_trades:
             continue
 
         window_by_tf = slice_to(now)
