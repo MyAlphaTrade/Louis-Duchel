@@ -67,7 +67,7 @@ Known, disclosed scope limits (same category as fusion_backtest.py's own):
 from backtest_engine import compute_stats
 from fusion_backtest import _pending_order_type
 from local_functions import (
-    CONTRACT_SIZES, calculate_lot, MULTI_TIMEFRAMES,
+    calculate_lot, resolve_contract_size, MULTI_TIMEFRAMES,
     PROFILE_TIMEFRAME_RANGES, PROFILE_TIMEFRAME_FALLBACK,
     EXTRA_TIMEFRAMES_FOR_SELECTION,
     TP1_TRIGGER_R, TP1_CLOSE_FRACTION, TP2_TRIGGER_R, TP2_CLOSE_FRACTION,
@@ -207,7 +207,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
 
     allowed = PROFILE_TIMEFRAME_RANGES.get(profile_key)
     fallback = PROFILE_TIMEFRAME_FALLBACK.get(profile_key, "H1")
-    contract_size = CONTRACT_SIZES.get(symbol.upper(), 100000)
+    contract_size = resolve_contract_size(symbol)
 
     trades = []
     open_position = None

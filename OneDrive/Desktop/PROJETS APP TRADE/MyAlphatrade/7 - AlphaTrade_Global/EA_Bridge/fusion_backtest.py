@@ -41,7 +41,7 @@ Known, disclosed scope limits — not silently ignored:
 import engine_scoring as es
 import market_brain
 from backtest_engine import compute_stats
-from local_functions import CONTRACT_SIZES, calculate_lot
+from local_functions import calculate_lot, resolve_contract_size
 
 MULTI_TIMEFRAMES = ["D1", "H4", "H1", "M15", "M5"]
 
@@ -115,7 +115,7 @@ def run_fusion_backtest(symbol, primary_timeframe, primary_candles, mtf_candles=
     original_kill_switch = market_brain.CRYPTO_CONTEXT_ENABLED
     market_brain.CRYPTO_CONTEXT_ENABLED = False
     try:
-        contract_size = CONTRACT_SIZES.get(symbol.upper(), 100000)
+        contract_size = resolve_contract_size(symbol)
         trades = []
         open_position = None
         pending_order = None  # {direction, price, order_type, stop_loss, take_profit, lot, bars_waited, confidence, rationale}

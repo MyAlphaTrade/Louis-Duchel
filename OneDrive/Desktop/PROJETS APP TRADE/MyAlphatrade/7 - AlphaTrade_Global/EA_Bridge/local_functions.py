@@ -43,6 +43,45 @@ CONTRACT_SIZES = {
 }
 
 
+def _deriv_synthetic_contract_size(symbol):
+    """Real contract size for Deriv synthetic indices (Boom/Crash/
+    Volatility/Jump/Range Break/Vol over/Spot Up families) — NOT in
+    CONTRACT_SIZES above (71 real symbol names, too many/too likely to
+    grow to hardcode one by one — same bug class as the SOLUSD incident:
+    absent from the dict silently falls back to the 100000 Forex default,
+    wildly overstating exposure/risk for a synthetic).
+
+    2026-08-14, confirmed live via symbol_info().trade_contract_size on
+    all 71 real Deriv synthetic symbols found on this account: every one
+    is EITHER 1.0 or 10.0, and the sole real determinant is whether "STEP"
+    appears anywhere in the name — Step Index and all its variants (Step
+    Index 200/300/400/500, Multi Step 2/3/4 Index, Skew Step Index...) are
+    10.0; every other family (Boom/Crash/Volatility/Jump/Range Break/Vol
+    over/Spot Up/Crash Boom Flip) is 1.0. Not a guess — the exact rule
+    that reproduces all 71 real values with zero exceptions.
+
+    Returns None (not a synthetic, caller falls back to its own default)
+    if the symbol doesn't match any known synthetic-index family at all."""
+    norm = re.sub(r"\s+", "", (symbol or "").upper())
+    if not re.search(r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)", norm):
+        return None
+    return 10.0 if "STEP" in norm else 1.0
+
+
+def resolve_contract_size(symbol):
+    """Single lookup used everywhere a contract size is needed: real named
+    value from CONTRACT_SIZES first, real Deriv-synthetic rule second,
+    100000 (Forex default) only as the final fallback for anything truly
+    unrecognized. Replaces the old `CONTRACT_SIZES.get(symbol, 100000)`
+    pattern repeated at every call site, which silently mis-sized every
+    synthetic index (2026-08-14 finding, same root cause as SOLUSD)."""
+    key = (symbol or "").upper()
+    if key in CONTRACT_SIZES:
+        return CONTRACT_SIZES[key]
+    synthetic = _deriv_synthetic_contract_size(symbol)
+    return synthetic if synthetic is not None else 100000
+
+
 def _now_iso():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -109,7 +148,14 @@ def _normalize_symbol(raw):
 
 def _infer_asset_category(raw):
     s = re.sub(r"\s+", "", (raw or "").upper())
-    if re.match(r"^(BOOM|CRASH|STEP|VOLATILITY)", s) or re.search(r"VIX\d", s):
+    # search (not ^match) since real Deriv names put other words first —
+    # "Multi Step 2 Index" / "Skew Step Index" don't start with STEP but
+    # are the same 10.0-contract-size family (see
+    # resolve_contract_size/_deriv_synthetic_contract_size, 2026-08-14,
+    # 71 real symbols confirmed live). JUMP/RANGEBREAK/VOLOVER/SPOTUP
+    # added same day — previously fell through to "forex", wrong category
+    # for portfolio-risk correlation grouping and category modulation.
+    if re.search(r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)", s) or re.search(r"VIX\d", s):
         return "synthetic"
     if "INDEX" in s:
         return "indices"
@@ -412,7 +458,7 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     risk_percent = risk_percent if risk_percent is not None else 1
     risk_amount = capital * (risk_percent / 100)
     if not contract_size:
-        contract_size = CONTRACT_SIZES.get((symbol or "").upper(), 100000)
+        contract_size = resolve_contract_size(symbol)
     min_vol = volume_min if volume_min else 0.01
     step = volume_step if volume_step else 0.01
     sl_distance = abs((entry_price or 0) - (stop_loss or 0))
@@ -669,7 +715,7 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
             #      the safety net a violent reversal falls back to if it
             #      blows straight past the tight trail above.
             profit_usd = pos["profit"] or 0
-            contract_size = CONTRACT_SIZES.get((pos.get("symbol") or "").upper(), 100000)
+            contract_size = resolve_contract_size(pos.get("symbol"))
             lot = pos.get("lot") or 0
 
             if close_fn and profit_usd >= QUICK_PROFIT_LOCK_USD:
@@ -765,7 +811,7 @@ def trade_manager_close_trade(body, get_entity_fn):
     entry_price = trade.get("entry_price") or 0
     lot = trade.get("lot") or 0.01
     direction = trade.get("direction")
-    contract_size = CONTRACT_SIZES.get((trade.get("symbol") or "").upper(), 100000)
+    contract_size = resolve_contract_size(trade.get("symbol"))
 
     try:
         real_pnl = float(body.get("pnl"))

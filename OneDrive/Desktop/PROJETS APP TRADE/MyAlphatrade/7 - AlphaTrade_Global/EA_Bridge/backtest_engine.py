@@ -7,7 +7,7 @@ Faithful Python port of Dist/base44/shared/backtestEngine.ts.
 """
 
 from indicators import ema, rsi, atr, find_swings, fibonacci_levels
-from local_functions import CONTRACT_SIZES, calculate_lot
+from local_functions import calculate_lot, resolve_contract_size
 
 SWING_LOOKBACK = 3
 
@@ -146,7 +146,7 @@ def run_backtest(candles, strategy_name, params):
     s = _build_series(candles)
     sl_mult = params.get("sl_atr_multiple", 1.5)
     tp_mult = params.get("tp_atr_multiple", 3)
-    contract_size = CONTRACT_SIZES.get(params["symbol"].upper(), 100000)
+    contract_size = resolve_contract_size(params["symbol"])
     capital = params["capital"]
     risk_percent = params["risk_percent"]
 

@@ -58,7 +58,9 @@ def _infer_asset_category(raw):
     own copy exactly (duplicated, not imported, same reasoning as
     portfolio_risk.py's own comment: keep this leaf module import-independent)."""
     s = re.sub(r"\s+", "", (raw or "").upper())
-    if re.match(r"^(BOOM|CRASH|STEP|VOLATILITY)", s) or re.search(r"VIX\d", s):
+    # search (not ^match) — see local_functions._infer_asset_category's
+    # comment (2026-08-14): Multi Step/Skew Step don't start with STEP.
+    if re.search(r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)", s) or re.search(r"VIX\d", s):
         return "synthetic"
     if "INDEX" in s:
         return "indices"

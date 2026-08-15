@@ -51,13 +51,43 @@ CONTRACT_SIZES = {
 }
 
 
+def _deriv_synthetic_contract_size(symbol):
+    """Mirrors local_functions._deriv_synthetic_contract_size exactly
+    (duplicated, not imported — same import-independence reason as
+    _infer_asset_category below). Real trade_contract_size for Deriv
+    synthetic indices, confirmed live on all 71 real symbols found on
+    this account (2026-08-14): 10.0 if "STEP" appears anywhere in the
+    name (Step Index family incl. Multi Step/Skew Step), else 1.0 for
+    every other synthetic family. Same bug class as the SOLUSD incident
+    above — a synthetic absent from CONTRACT_SIZES silently fell back to
+    the 100000 Forex default, wildly overstating its real risk."""
+    import re
+    norm = re.sub(r"\s+", "", (symbol or "").upper())
+    if not re.search(r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)", norm):
+        return None
+    return 10.0 if "STEP" in norm else 1.0
+
+
+def resolve_contract_size(symbol):
+    """Mirrors local_functions.resolve_contract_size exactly (duplicated,
+    not imported). Single lookup used everywhere in this module a
+    contract size is needed."""
+    key = (symbol or "").upper()
+    if key in CONTRACT_SIZES:
+        return CONTRACT_SIZES[key]
+    synthetic = _deriv_synthetic_contract_size(symbol)
+    return synthetic if synthetic is not None else 100000
+
+
 def _infer_asset_category(raw):
     """Mirrors local_functions._infer_asset_category exactly (duplicated,
     not imported, to keep this module import-independent of local_functions —
     it is deliberately a leaf module other things depend on, not the reverse)."""
     import re
     s = re.sub(r"\s+", "", (raw or "").upper())
-    if re.match(r"^(BOOM|CRASH|STEP|VOLATILITY)", s) or re.search(r"VIX\d", s):
+    # search (not ^match) — see local_functions._infer_asset_category's
+    # comment (2026-08-14): Multi Step/Skew Step don't start with STEP.
+    if re.search(r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)", s) or re.search(r"VIX\d", s):
         return "synthetic"
     if "INDEX" in s:
         return "indices"
@@ -82,7 +112,7 @@ def _position_open_risk(pos):
         return 0.0
     current = pos.get("current_price") or pos.get("entry_price") or 0
     lot = pos.get("lot") or 0
-    contract_size = CONTRACT_SIZES.get((pos.get("symbol") or "").upper(), 100000)
+    contract_size = resolve_contract_size(pos.get("symbol"))
     return abs(current - sl) * lot * contract_size
 
 
