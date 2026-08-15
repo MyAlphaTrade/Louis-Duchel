@@ -428,7 +428,7 @@ class RealCapitalUnavailable(Exception):
 
 
 def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_percent=None, contract_size=None,
-                   volume_min=None, volume_step=None):
+                   volume_min=None, volume_step=None, volume_max=None):
     """contract_size: pass the REAL value read live from MT5
     (symbol_info().trade_contract_size) whenever the caller has an active
     connection — see alphatg_bridge.py's compute_real_lot(). Falls back to
@@ -450,7 +450,20 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     valid — confirmed via 64 real rejections over 5 real days in
     production logs; the bot never once placed a SOLUSD order itself.
     Falls back to 0.01/0.01 only when no live value is available, same
-    disclosed-limitation category as contract_size's own fallback."""
+    disclosed-limitation category as contract_size's own fallback.
+
+    volume_max: same live symbol_info() source as above. Real incident,
+    2026-08-15: this function floored at volume_min but had NO ceiling at
+    all — a tight Scalping stop (real case: ETHUSD, ~0.25$ stop distance
+    on a ~1884$ price) makes risk_amount/sl_distance explode past the
+    broker's real maximum (10.0 for ETHUSD) into a lot of ~82, rejected
+    outright (INVALID_VOLUME, above_maximum) instead of simply being
+    capped — a real 62%-confidence BUY blocked entirely, twice in a row
+    in production. Capping here means the trade still happens, just at
+    LESS than the configured risk (better than zero position on a
+    legitimate signal) — same principle as flooring at volume_min already
+    did for the opposite edge. Falls back to no cap (None) when
+    unavailable, same disclosed-limitation category as the others."""
     if not capital or capital <= 0:
         raise RealCapitalUnavailable(
             "Capital réel indisponible (equity MT5 introuvable) — impossible de calculer une taille de position en toute sécurité."
@@ -472,7 +485,10 @@ def calculate_lot(symbol, entry_price=None, stop_loss=None, capital=None, risk_p
     # real minimum is higher just guarantees the order fails every time.
     steps = math.floor(lot / step) if step > 0 else 0
     lot = steps * step
-    return round(max(min_vol, lot), 4)
+    lot = max(min_vol, lot)
+    if volume_max:
+        lot = min(volume_max, lot)
+    return round(lot, 4)
 
 
 def build_order(body, account_equity=None):

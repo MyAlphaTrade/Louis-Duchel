@@ -647,6 +647,15 @@ def compute_real_lot(symbol, entry_price, stop_loss, risk_percent):
     # contract_size above.
     volume_min = getattr(info, "volume_min", None) if info else None
     volume_step = getattr(info, "volume_step", None) if info else None
+    # 2026-08-15 real incident (ETHUSD): calculate_lot() had a floor
+    # (volume_min above) but no CEILING at all — a tight Scalping stop
+    # (real case: entry 1884.485, stop 1884.2396, ~0.25$ distance) makes
+    # risk_amount/sl_distance explode past the broker's real volume_max
+    # (10.0 for ETHUSD) into a lot of ~82, rejected outright
+    # (INVALID_VOLUME, "above_maximum") — a real, high-confidence (62%)
+    # BUY signal blocked entirely, twice in a row in production, instead
+    # of simply being capped at the tradeable maximum.
+    volume_max = getattr(info, "volume_max", None) if info else None
 
     snap = get_account_snapshot()
     equity = snap.get("equity") if snap else None
@@ -654,7 +663,7 @@ def compute_real_lot(symbol, entry_price, stop_loss, risk_percent):
         lot = local_functions.calculate_lot(
             symbol, entry_price=entry_price, stop_loss=stop_loss,
             capital=equity, risk_percent=risk_percent, contract_size=contract_size,
-            volume_min=volume_min, volume_step=volume_step,
+            volume_min=volume_min, volume_step=volume_step, volume_max=volume_max,
         )
     except local_functions.RealCapitalUnavailable as e:
         return None, (jsonify(_structured_error("CAPITAL_UNAVAILABLE", str(e), symbol=symbol)), 400)
