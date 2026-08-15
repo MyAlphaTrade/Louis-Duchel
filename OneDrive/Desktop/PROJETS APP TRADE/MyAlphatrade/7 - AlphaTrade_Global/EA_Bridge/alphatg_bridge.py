@@ -251,6 +251,20 @@ GLOBAL_MAGIC_NUMBER = 234000
 # with real logs of how often/how far this actually fires in practice.
 STALE_ENTRY_MAX_RISK_FRACTION = 0.3
 
+# Real incident, 2026-08-15 (Louis, live SOLUSD): planned_entry=75.28,
+# actual=75.225, drift=0.055 — a genuinely tiny 0.07% price move, rejected
+# twice in a row because Scalping's stop was so tight that 0.055 already
+# exceeded 30% of it. The fraction-of-planned-risk check above is sound
+# for normal stops, but has no floor: the tighter the stop, the smaller a
+# real-world, harmless quote jitter needs to be before it looks like a
+# "large" drift relative to that stop. STALE_ENTRY_MIN_DRIFT_FRACTION adds
+# a second, independent gate — of the CURRENT PRICE, not the stop — so a
+# drift must be non-trivial in absolute market terms too, not just
+# relative to an unusually tight risk unit, before being rejected. Chosen
+# well above the real SOL incident's 0.07% (with margin) while still well
+# under what would count as a genuinely stale, materially-different price.
+STALE_ENTRY_MIN_DRIFT_FRACTION = 0.0015
+
 
 def _classify_trade_origin(magic):
     """Shared 3-way split ("Global IA / externe / manuel") used for both
@@ -1335,9 +1349,14 @@ def send_order():
     if requested_entry and stop_loss:
         planned_risk = abs(float(requested_entry) - stop_loss)
         drift = abs(price - float(requested_entry))
-        if planned_risk > 0 and drift > planned_risk * STALE_ENTRY_MAX_RISK_FRACTION:
-            log.warning("[PRICE_DRIFT] %s rejected: planned_entry=%s current=%s drift=%.5f (%.0f%% of planned risk %.5f)",
-                        symbol, requested_entry, price, drift, (drift / planned_risk) * 100, planned_risk)
+        # Both gates must fire — relative to the (possibly very tight)
+        # planned risk AND to the current price itself — see
+        # STALE_ENTRY_MIN_DRIFT_FRACTION above for the real 2026-08-15
+        # SOLUSD incident this closes.
+        min_drift_floor = price * STALE_ENTRY_MIN_DRIFT_FRACTION
+        if planned_risk > 0 and drift > planned_risk * STALE_ENTRY_MAX_RISK_FRACTION and drift > min_drift_floor:
+            log.warning("[PRICE_DRIFT] %s rejected: planned_entry=%s current=%s drift=%.5f (%.0f%% of planned risk %.5f, min_floor=%.5f)",
+                        symbol, requested_entry, price, drift, (drift / planned_risk) * 100, planned_risk, min_drift_floor)
             return jsonify(_structured_error(
                 "PRICE_DRIFT",
                 f"Prix trop éloigné du plan depuis la décision ({symbol}: prévu {requested_entry}, actuel {price}) "
