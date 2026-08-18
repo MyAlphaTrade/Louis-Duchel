@@ -64,6 +64,8 @@ Known, disclosed scope limits (same category as fusion_backtest.py's own):
     XAUUSD/BTCUSD/ETHUSD.
 """
 
+import math
+
 from backtest_engine import compute_stats
 from fusion_backtest import _pending_order_type
 from local_functions import (
@@ -78,6 +80,25 @@ from local_functions import (
 )
 import indicators as ind
 import market_brain as mb
+
+# 2026-08-15 — testing candidate (Louis's proposal): the "dead zone"
+# between BREAK_EVEN_TRIGGER_USD (1.5$) and QUICK_PROFIT_LOCK_USD (15$)
+# locks the stop ONCE at entry+BREAK_EVEN_BUFFER_USD and leaves it flat no
+# matter how much further real profit builds before a pullback — a trade
+# that reaches 10$ then reverses still only banks 0.5$. Sound reasoning,
+# but REAL RESULT (XAUUSD Scalping, ~4.5 real M1 days, same session as
+# the widened quick-lock above): pnl 78.80 -> 31.91 (-59%), avg_win 2.54
+# -> 1.67, ratio 0.62 -> 0.41, trades reaching quick_profit_lock 7 -> 1.
+# INVALIDATED — raising the stop this early, even gradually, gives real
+# trades less room to breathe before reaching the (now-widened) 15$
+# lock zone; most get stopped out by ordinary noise before they can
+# develop into the bigger wins the flat BE + wide lock combo allows.
+# Same verdict class as RSI-for-gold and abstention-for-ETH the same day:
+# intuitive, invalidated by real data. Stays False; kept as a tested,
+# documented, inactive capability — never mirrored into local_functions.py.
+BE_RATCHET_ENABLED = False
+BE_RATCHET_STEP_USD = 2.0       # every extra $2 of real profit past the BE trigger...
+BE_RATCHET_LOCK_FRACTION = 0.5  # ...locks in half of that extra step (monotonic, never moves back down)
 
 # Mirrors Dist/src/lib/tradingProfiles.js exactly (2026-08-13) — duplicated
 # here since this is a Python harness and that file is JS; same reasoning
@@ -365,10 +386,25 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                         open_position["current_sl"] = candidate
                         events.add("quick_profit_lock")
                     continue
-                if profit_usd >= BREAK_EVEN_TRIGGER_USD and not at_be_or_better and remaining_lot > 0:
-                    buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
-                    open_position["current_sl"] = entry_price + sign * buffer_offset
-                    events.add("break_even")
+                if profit_usd >= BREAK_EVEN_TRIGGER_USD and remaining_lot > 0:
+                    if BE_RATCHET_ENABLED:
+                        # Staircase: locked profit grows in discrete steps as
+                        # real profit builds, instead of one flat jump — see
+                        # the module-level comment above for the real gap
+                        # this closes. "better" below is what keeps this
+                        # monotonic (never moves the stop back down).
+                        steps = math.floor((profit_usd - BREAK_EVEN_TRIGGER_USD) / BE_RATCHET_STEP_USD)
+                        locked_profit_usd = BREAK_EVEN_BUFFER_USD + max(0, steps) * BE_RATCHET_STEP_USD * BE_RATCHET_LOCK_FRACTION
+                        offset = locked_profit_usd / (remaining_lot * contract_size)
+                        candidate = entry_price + sign * offset
+                        better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                        if better:
+                            open_position["current_sl"] = candidate
+                            events.add("break_even_ratchet" if steps > 0 else "break_even")
+                    elif not at_be_or_better:
+                        buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
+                        open_position["current_sl"] = entry_price + sign * buffer_offset
+                        events.add("break_even")
                 continue
 
             r_now = _r_multiple(direction, entry_price, favorable_price, original_risk)
