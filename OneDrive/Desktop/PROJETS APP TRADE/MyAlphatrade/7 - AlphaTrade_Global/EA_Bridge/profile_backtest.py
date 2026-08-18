@@ -49,14 +49,13 @@ Known, disclosed scope limits (same category as fusion_backtest.py's own):
   - max_daily_trades is enforced; the separate daily-loss-cap/goal engine
     (score_risk_management) is not — this tests the market_brain +
     position-management pipeline, not every autonomous-loop risk gate.
-  - Single position at a time (`open_position`, not a list) — real
-    production Scalping (2026-08-13 spec) allows pyramiding up to 5
-    same-direction concurrent positions per symbol (see
-    AnalysisSessionStore.jsx's profile-aware exposure gate). This harness
-    does NOT model that yet: it still tests one Scalping position's own
-    entry/exit mechanics correctly (immediate-only entry, no TP1/TP2,
-    full-close-on-trail), just not the pyramiding effect on total volume/
-    PnL. Disclosed gap, not silently wrong.
+  - FIXED 2026-08-18 (was: single position at a time, disclosed gap since
+    2026-08-13) — `run_profile_backtest` now takes `max_concurrent_positions`
+    (default 1, so every prior result in this session stays reproducible
+    unchanged) and tracks a real list of open positions, mirroring
+    AnalysisSessionStore.jsx's own exposure gate (up to 5 same-direction
+    for Scalping, 2 for Intraday/Swing in production) instead of silently
+    understating real live throughput.
   - Lot size uses local_functions.calculate_lot with CONTRACT_SIZES's
     fallback (100000) for any symbol not in that dict — same known,
     disclosed limitation fusion_backtest.py already carries for
@@ -99,6 +98,20 @@ import market_brain as mb
 BE_RATCHET_ENABLED = False
 BE_RATCHET_STEP_USD = 2.0       # every extra $2 of real profit past the BE trigger...
 BE_RATCHET_LOCK_FRACTION = 0.5  # ...locks in half of that extra step (monotonic, never moves back down)
+
+# 2026-08-15 — second variant of the same idea, per Louis's own clarified
+# example: "si le prix va de 10$ à 20$... au lieu de reprendre 1.5$ à
+# cause du BE initial, on pourrait prendre 10$" — a CONTINUOUS fraction of
+# the real peak profit reached, not the discrete $2 steps above (which
+# were shown to tighten too early/too often and cut trades short before
+# they could grow). This locks proportionally to whatever peak is
+# actually reached — a 20$ peak locks 10$ (50%), an 8$ peak locks 4$ —
+# while never tightening MORE aggressively than that single ratio,
+# unlike the stepped version. Still gated separately (BE_RATCHET_ENABLED
+# must stay False when this is True — see the loop below) so both can be
+# A/B tested independently. Not yet proven — test before trusting.
+BE_TRAIL_PEAK_ENABLED = False
+BE_TRAIL_PEAK_FRACTION = 0.5    # lock this fraction of the real peak profit reached, continuously
 
 # Mirrors Dist/src/lib/tradingProfiles.js exactly (2026-08-13) — duplicated
 # here since this is a Python harness and that file is JS; same reasoning
@@ -194,13 +207,30 @@ def _finalize_trade(trades, open_position, exit_price, exit_date, exit_reason, c
 
 
 def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_bars=210,
-                          use_momentum_catchup=False):
+                          use_momentum_catchup=False, max_concurrent_positions=1):
     """
     all_candles: {timeframe: full_candle_list} — REAL MT5 data covering the
       SAME real period for every timeframe this profile might touch: the
       standard MULTI_TIMEFRAMES (D1/H4/H1/M15/M5) PLUS this profile's own
       EXTRA_TIMEFRAMES_FOR_SELECTION entry (M1 for scalping, M30 for
       intraday) if applicable. Fetched once by the caller.
+
+    max_concurrent_positions: 2026-08-18, real request (Louis) — the live
+      app already pyramids same-direction positions (AnalysisSessionStore.jsx,
+      Task #98/#103: up to 5 for Scalping, 2 for Intraday/Swing), re-
+      confirming each addition with a fresh >= min_confidence decision, but
+      this backtest harness stayed single-position (disclosed limitation
+      since its creation, 2026-08-13) — every $/day figure produced by it
+      therefore UNDERSTATES real live throughput. Defaults to 1 (byte-
+      identical to the old single-position behavior) so every existing
+      call site and every already-validated result in this session is
+      unaffected unless a caller explicitly asks for more. Mirrors the
+      live exposure gate exactly: a same-direction signal is added if
+      the count of open same-direction positions is still under this
+      limit; an OPPOSING signal blocks entirely (no reversal-close for
+      Scalping — see the module-level comment near BE_RATCHET_ENABLED —
+      so it just waits for the existing position(s) to close on their own
+      stop/BE/TP first, exactly like live).
 
     Returns {"trades": [...], "stats": {...}} — same shape as
     fusion_backtest.run_fusion_backtest, plus each trade also carries
@@ -231,7 +261,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
     contract_size = resolve_contract_size(symbol)
 
     trades = []
-    open_position = None
+    open_positions = []  # list, not a single dict — see max_concurrent_positions above
     pending_order = None
     daily_trade_count = {}
     slice_to = _make_cursor_slicer(all_candles)
@@ -259,14 +289,14 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                 filled = (bar["high"] >= p_price) if p_direction == "BUY" else (bar["low"] <= p_price)
             if filled:
                 original_risk = abs(p_price - pending_order["stop_loss"])
-                open_position = {
+                open_positions.append({
                     "direction": p_direction, "entry_price": p_price, "entry_date": now,
                     "original_sl": pending_order["stop_loss"], "current_sl": pending_order["stop_loss"],
                     "original_risk": original_risk, "remaining_lot": pending_order["lot"], "events": set(),
                     "confidence": pending_order["confidence"], "rationale": pending_order["rationale"],
                     "chosen_timeframe": pending_order["chosen_timeframe"], "take_profit_1": pending_order.get("take_profit_1"),
                     "max_favorable_r": 0.0,
-                }
+                })
                 pending_order = None
             else:
                 pending_order["bars_waited"] += 1
@@ -274,34 +304,31 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     pending_order = None  # expired unfilled — the zone was never reached in time
             continue
 
-        if open_position:
-            direction = open_position["direction"]
-            entry_price = open_position["entry_price"]
-            original_risk = open_position["original_risk"]
-            current_sl = open_position["current_sl"]
-            events = open_position["events"]
-            remaining_lot = open_position["remaining_lot"]
+        # Manage every open position independently (0..max_concurrent_positions
+        # of them). With max_concurrent_positions=1 this loop body runs at
+        # most once per bar — byte-identical outcome to the old single-
+        # position code it replaces.
+        still_open = []
+        reversal_result = None  # computed at most once per bar, shared across positions (same symbol/profile)
+        reversal_checked = False
+        for pos in open_positions:
+            direction = pos["direction"]
+            entry_price = pos["entry_price"]
+            original_risk = pos["original_risk"]
+            current_sl = pos["current_sl"]
+            events = pos["events"]
+            remaining_lot = pos["remaining_lot"]
+            closed = False
 
-            # 0. Max favorable excursion (diagnostic only, real trader
-            # question 2026-08-13: "were these losing/break-even trades ever
-            # profitable before failing?") — tracked from this bar's REAL
-            # high/low, not just its close, so a wick that touched a better
-            # price than the close still counts. Never influences any real
-            # decision below, purely recorded on the finished trade.
+            # 0. Max favorable excursion (diagnostic only) — see original
+            # rationale, unchanged, just per-position now.
             favorable_r_this_bar = _r_multiple(direction, entry_price, bar["high"] if direction == "BUY" else bar["low"], original_risk)
-            if favorable_r_this_bar > open_position["max_favorable_r"]:
-                open_position["max_favorable_r"] = favorable_r_this_bar
+            if favorable_r_this_bar > pos["max_favorable_r"]:
+                pos["max_favorable_r"] = favorable_r_this_bar
 
-            # 1. Real stop-loss check FIRST (this bar's high/low against
-            # whatever the current stop is — original, break-even, or
-            # trailing) — conservative, matches fusion_backtest.py's own
-            # SL-first-on-ambiguity convention.
+            # 1. Real stop-loss check FIRST — unchanged.
             hit_sl = (bar["low"] <= current_sl) if direction == "BUY" else (bar["high"] >= current_sl)
             if hit_sl:
-                # Event-driven, not a price comparison (2026-08-13): with
-                # BREAK_EVEN_BUFFER_R, current_sl no longer equals
-                # entry_price exactly on a break-even, so the old
-                # `current_sl == entry_price` check would misclassify it.
                 if "quick_profit_lock" in events:
                     reason = "quick_profit_lock"
                 elif "trailing_stop" in events:
@@ -310,26 +337,17 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     reason = "break_even"
                 else:
                     reason = "stop_loss"
-                _finalize_trade(trades, open_position, current_sl, now, reason, remaining_lot, contract_size, capital)
-                open_position = None
-                continue
+                _finalize_trade(trades, pos, current_sl, now, reason, remaining_lot, contract_size, capital)
+                closed = True
 
-            # 2. TP1 partial (33%) at 1R, TP2 partial (50%) at 2R once TP1
-            # is done — exact same triggers/fractions as
-            # local_functions.manage_open_positions, checked against this
-            # bar's high/low (a real price touch), not just its close.
-            # NEVER for Scalping (real trader spec, 2026-08-13, mirrors
-            # local_functions.manage_open_positions exactly): a scalp holds
-            # its full size until step 3 either protects it at break-even
-            # or banks it entirely on the trailing trigger — no partial
-            # legging.
-            if profile_key != "scalping":
+            # 2. TP1/TP2 partials — NEVER for Scalping, unchanged rationale.
+            if not closed and profile_key != "scalping":
                 if "tp1_partial" not in events:
                     tp1_price = _price_at_r(entry_price, direction, original_risk, TP1_TRIGGER_R)
                     tp1_hit = (bar["high"] >= tp1_price) if direction == "BUY" else (bar["low"] <= tp1_price)
                     if tp1_hit:
                         closed_vol = round(remaining_lot * TP1_CLOSE_FRACTION, 4)
-                        _finalize_trade(trades, open_position, tp1_price, now, "tp1_partial", closed_vol, contract_size, capital)
+                        _finalize_trade(trades, pos, tp1_price, now, "tp1_partial", closed_vol, contract_size, capital)
                         remaining_lot = round(remaining_lot - closed_vol, 4)
                         events.add("tp1_partial")
 
@@ -338,102 +356,96 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     tp2_hit = (bar["high"] >= tp2_price) if direction == "BUY" else (bar["low"] <= tp2_price)
                     if tp2_hit:
                         closed_vol = round(remaining_lot * TP2_CLOSE_FRACTION, 4)
-                        _finalize_trade(trades, open_position, tp2_price, now, "tp2_partial", closed_vol, contract_size, capital)
+                        _finalize_trade(trades, pos, tp2_price, now, "tp2_partial", closed_vol, contract_size, capital)
                         remaining_lot = round(remaining_lot - closed_vol, 4)
                         events.add("tp2_partial")
 
                 if remaining_lot <= 0:
-                    open_position = None
                     daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
-                    continue
-                open_position["remaining_lot"] = remaining_lot
+                    closed = True
+                else:
+                    pos["remaining_lot"] = remaining_lot
 
-            # 3. Break-even / trailing / quick-profit-lock — evaluated
-            # against this bar's REAL favorable-side extreme (high for BUY,
-            # low for SELL), not just its close (2026-08-13 fix): mirrors
-            # the live position manager's own continuous tick-by-tick
-            # monitoring (local_functions.manage_open_positions runs on its
-            # own fast loop against real current_price, never a bar close).
-            # Real finding the same day: several trades wicked well past
-            # be_trigger/trail_trigger intrabar, then closed back below it —
-            # a close-only check would have missed the real protection
-            # window entirely.
-            favorable_price = bar["high"] if direction == "BUY" else bar["low"]
-            at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
-            sign = 1 if direction == "BUY" else -1
+            # 3. Break-even / trailing / quick-profit-lock — unchanged logic,
+            # per-position.
+            if not closed:
+                favorable_price = bar["high"] if direction == "BUY" else bar["low"]
+                at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
+                sign = 1 if direction == "BUY" else -1
 
-            if profile_key == "scalping":
-                # Scalping — exactly two dollar-based tiers now
-                # (2026-08-13, mirrors local_functions.manage_open_positions's
-                # own is_scalping branch exactly — see that function's
-                # comment for the full real-trader-spec rationale), REPLACES
-                # the R-multiple path below entirely for Scalping:
-                #   1. Quick-profit lock (checked first, tightest): real $
-                #      profit >= QUICK_PROFIT_LOCK_USD -> tight trail.
-                #   2. Break-even floor: real $ profit >= BREAK_EVEN_TRIGGER_USD
-                #      -> stop moved to entry + BREAK_EVEN_BUFFER_USD (never
-                #      exactly at entry).
-                profit_usd = (
-                    (favorable_price - entry_price) * remaining_lot * contract_size
-                    if direction == "BUY"
-                    else (entry_price - favorable_price) * remaining_lot * contract_size
-                )
-                if profit_usd >= QUICK_PROFIT_LOCK_USD:
-                    tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
-                    candidate = favorable_price - sign * tight_offset
-                    better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
-                    if better:
-                        open_position["current_sl"] = candidate
-                        events.add("quick_profit_lock")
-                    continue
-                if profit_usd >= BREAK_EVEN_TRIGGER_USD and remaining_lot > 0:
-                    if BE_RATCHET_ENABLED:
-                        # Staircase: locked profit grows in discrete steps as
-                        # real profit builds, instead of one flat jump — see
-                        # the module-level comment above for the real gap
-                        # this closes. "better" below is what keeps this
-                        # monotonic (never moves the stop back down).
-                        steps = math.floor((profit_usd - BREAK_EVEN_TRIGGER_USD) / BE_RATCHET_STEP_USD)
-                        locked_profit_usd = BREAK_EVEN_BUFFER_USD + max(0, steps) * BE_RATCHET_STEP_USD * BE_RATCHET_LOCK_FRACTION
-                        offset = locked_profit_usd / (remaining_lot * contract_size)
-                        candidate = entry_price + sign * offset
+                if profile_key == "scalping":
+                    profit_usd = (
+                        (favorable_price - entry_price) * remaining_lot * contract_size
+                        if direction == "BUY"
+                        else (entry_price - favorable_price) * remaining_lot * contract_size
+                    )
+                    if profit_usd >= QUICK_PROFIT_LOCK_USD:
+                        tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
+                        candidate = favorable_price - sign * tight_offset
                         better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
                         if better:
-                            open_position["current_sl"] = candidate
-                            events.add("break_even_ratchet" if steps > 0 else "break_even")
-                    elif not at_be_or_better:
-                        buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
-                        open_position["current_sl"] = entry_price + sign * buffer_offset
+                            pos["current_sl"] = candidate
+                            events.add("quick_profit_lock")
+                    elif profit_usd >= BREAK_EVEN_TRIGGER_USD and remaining_lot > 0:
+                        if BE_TRAIL_PEAK_ENABLED:
+                            locked_profit_usd = max(BREAK_EVEN_BUFFER_USD, profit_usd * BE_TRAIL_PEAK_FRACTION)
+                            offset = locked_profit_usd / (remaining_lot * contract_size)
+                            candidate = entry_price + sign * offset
+                            better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                            if better:
+                                pos["current_sl"] = candidate
+                                events.add("break_even_trail_peak")
+                        elif BE_RATCHET_ENABLED:
+                            steps = math.floor((profit_usd - BREAK_EVEN_TRIGGER_USD) / BE_RATCHET_STEP_USD)
+                            locked_profit_usd = BREAK_EVEN_BUFFER_USD + max(0, steps) * BE_RATCHET_STEP_USD * BE_RATCHET_LOCK_FRACTION
+                            offset = locked_profit_usd / (remaining_lot * contract_size)
+                            candidate = entry_price + sign * offset
+                            better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                            if better:
+                                pos["current_sl"] = candidate
+                                events.add("break_even_ratchet" if steps > 0 else "break_even")
+                        elif not at_be_or_better:
+                            buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
+                            pos["current_sl"] = entry_price + sign * buffer_offset
+                            events.add("break_even")
+                    # Scalping never reversal-closes (real live spec,
+                    # 2026-08-15 — mirrors AnalysisSessionStore.jsx's own
+                    # `profile.key !== 'scalping'` gate exactly): no
+                    # analyze() call needed here at all, pure price math.
+                else:
+                    r_now = _r_multiple(direction, entry_price, favorable_price, original_risk)
+                    if r_now >= trail_trigger:
+                        trail_offset = original_risk * TRAIL_DISTANCE_R
+                        candidate = favorable_price - sign * trail_offset
+                        better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                        beyond_entry = (candidate > entry_price) if direction == "BUY" else (candidate < entry_price)
+                        if better and beyond_entry:
+                            pos["current_sl"] = candidate
+                            events.add("trailing_stop")
+                    elif r_now >= be_trigger and not at_be_or_better:
+                        pos["current_sl"] = entry_price
                         events.add("break_even")
-                continue
 
-            r_now = _r_multiple(direction, entry_price, favorable_price, original_risk)
-            if r_now >= trail_trigger:
-                trail_offset = original_risk * TRAIL_DISTANCE_R
-                candidate = favorable_price - sign * trail_offset
-                better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
-                beyond_entry = (candidate > entry_price) if direction == "BUY" else (candidate < entry_price)
-                if better and beyond_entry:
-                    open_position["current_sl"] = candidate
-                    events.add("trailing_stop")
-            elif r_now >= be_trigger and not at_be_or_better:
-                open_position["current_sl"] = entry_price
-                events.add("break_even")
+                    # 4. Reversal-close (Task #91) — one fresh decision per
+                    # bar covers every open position on this symbol (they're
+                    # all the same instrument/profile), computed once and
+                    # reused rather than once per position.
+                    if not reversal_checked:
+                        reversal_checked = True
+                        reversal_result = _run_one_decision(symbol, profile_key, slice_to(now), allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence)
+                    if reversal_result and reversal_result["decision"] in ("BUY", "SELL") and reversal_result["decision"] != direction and reversal_result["confidence"] >= min_confidence:
+                        _finalize_trade(trades, pos, bar["close"], now, "reversal_close", remaining_lot, contract_size, capital)
+                        daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
+                        closed = True
 
-            # 4. Reversal-close (Task #91) — re-run the SAME real decision
-            # pipeline used for entries. If it now opposes this open
-            # position with real confidence, close everything left, even
-            # at a loss (explicit trader confirmation, 2026-08-13: cutting
-            # a loss early beats waiting for the original, wider stop).
-            window_by_tf = slice_to(now)
-            reversal_result = _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence)
-            if reversal_result and reversal_result["decision"] in ("BUY", "SELL") and reversal_result["decision"] != direction and reversal_result["confidence"] >= min_confidence:
-                _finalize_trade(trades, open_position, bar["close"], now, "reversal_close", remaining_lot, contract_size, capital)
-                open_position = None
-                daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
-            continue
+            if not closed:
+                still_open.append(pos)
 
-        # Flat — scan for a new entry, respecting the daily trade cap.
+        open_positions = still_open
+
+        # Scan for a new entry — always attempted (not just when flat), so
+        # a same-direction reinforcement can be added on top of already-open
+        # positions, exactly like live. Still respects the daily trade cap.
         if max_daily_trades is not None and daily_trade_count.get(today, 0) >= max_daily_trades:
             continue
 
@@ -442,6 +454,17 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
         if not result or result["decision"] not in ("BUY", "SELL") or result["confidence"] < min_confidence:
             continue
         if result["entry_type"] not in ("immediate", "pending_order"):
+            continue
+
+        # Exposure gate — mirrors AnalysisSessionStore.jsx's `alreadyExposed`
+        # exactly: an OPPOSING open position blocks entirely (Scalping never
+        # reversal-closes anymore, so it just waits for the existing
+        # position(s) to close on their own); same-direction is allowed
+        # until max_concurrent_positions is reached. A pending order on this
+        # symbol also blocks (never stacks a plan on top of a plan).
+        same_direction_count = sum(1 for p in open_positions if p["direction"] == result["decision"])
+        opposing_count = len(open_positions) - same_direction_count
+        if opposing_count > 0 or same_direction_count >= max_concurrent_positions or pending_order:
             continue
 
         sl = result["stop_loss"]
@@ -460,14 +483,14 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             if original_risk <= 0:
                 continue
             lot = calculate_lot(symbol, entry_price=entry_price, stop_loss=sl, capital=capital, risk_percent=applied_risk_percent)
-            open_position = {
+            open_positions.append({
                 "direction": result["decision"], "entry_price": entry_price, "entry_date": now,
                 "original_sl": sl, "current_sl": sl, "original_risk": original_risk,
                 "remaining_lot": lot, "events": set(), "confidence": result["confidence"],
                 "rationale": rationale, "chosen_timeframe": result["timeframe"],
                 "take_profit_1": result.get("take_profit_1"), "applied_risk_percent": applied_risk_percent,
                 "max_favorable_r": 0.0,
-            }
+            })
         else:  # pending_order — real LIMIT/STOP order, waits for a genuine price touch
             planned_price = result["ideal_entry"]
             if not planned_price:
