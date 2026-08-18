@@ -603,8 +603,16 @@ BREAK_EVEN_BUFFER_USD = 0.5
 # profit_protection_trigger R" behavior for Scalping (now redundant: at
 # typical Scalping risk sizes, this dollar trigger fires well before that
 # R-multiple would anyway).
-QUICK_PROFIT_LOCK_USD = 5.0
-QUICK_PROFIT_TRAIL_DISTANCE_R = 0.15
+# 2026-08-15 — real backtest (Louis, XAUUSD Scalping, ~4,5 real days M1):
+# widening from 5$/0.15R to 15$/0.35R measured +56% PnL (50.98 -> 79.30),
+# gain/perte ratio 0.45 -> 0.61, avg_win 1.91 -> 2.50, avg_loss -4.21 ->
+# -4.11 on the SAME real data. Root cause found by the same audit: most
+# "wins" were the break_even tier locking in only its tiny buffer, not
+# real profit — this widening gives real momentum more room before
+# anything gets locked at all, so the trades that DO reach the lock tier
+# are keeping meaningfully more of their real move.
+QUICK_PROFIT_LOCK_USD = 15.0
+QUICK_PROFIT_TRAIL_DISTANCE_R = 0.35
 
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
