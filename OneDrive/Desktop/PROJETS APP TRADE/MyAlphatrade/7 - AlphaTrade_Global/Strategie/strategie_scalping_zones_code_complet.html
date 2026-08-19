@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Code source — Scalping Zones</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --surface: #ffffff;
+    --surface-2: #eef1ee;
+    --border: #d9ded9;
+    --text: #14201a;
+    --text-dim: #58685e;
+    --text-faint: #8b9a90;
+    --accent: #0f8b5c;
+    --accent-dim: #d9f0e4;
+    --accent-text: #086b46;
+    --warn: #92650b;
+    --warn-bg: #faedd0;
+    --danger: #a3372c;
+    --danger-bg: #f6e0dc;
+    --code-bg: #101812;
+    --code-text: #dfe8e2;
+    --code-comment: #7b9184;
+    --code-string: #c9d98a;
+    --code-keyword: #7fb3d5;
+    --code-def: #e0b96f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f0d;
+      --surface: #101512;
+      --surface-2: #161c18;
+      --border: #223029;
+      --text: #e7ece8;
+      --text-dim: #9aab9f;
+      --text-faint: #64766a;
+      --accent: #34d399;
+      --accent-dim: #12332580;
+      --accent-text: #6ee7b7;
+      --warn: #f0b429;
+      --warn-bg: #3a2c0d;
+      --danger: #f0847a;
+      --danger-bg: #3a1815;
+      --code-bg: #070b08;
+      --code-text: #d7e0da;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f0d;
+    --surface: #101512;
+    --surface-2: #161c18;
+    --border: #223029;
+    --text: #e7ece8;
+    --text-dim: #9aab9f;
+    --text-faint: #64766a;
+    --accent: #34d399;
+    --accent-dim: #12332580;
+    --accent-text: #6ee7b7;
+    --warn: #f0b429;
+    --warn-bg: #3a2c0d;
+    --danger: #f0847a;
+    --danger-bg: #3a1815;
+    --code-bg: #070b08;
+    --code-text: #d7e0da;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-dim); }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: 56px 24px 120px; }
+
+  header.doc-head { margin-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 32px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+    max-width: 68ch;
+    margin: 0 0 20px;
+  }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em;
+    padding: 4px 10px; border-radius: 100px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .chip-accent { background: var(--accent-dim); color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .chip-neutral { background: var(--surface-2); color: var(--text-dim); border-color: var(--border); }
+
+  nav.toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 22px; margin-top: 28px;
+  }
+  nav.toc .toc-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin-bottom: 10px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
+  nav.toc li { font-size: 13.5px; margin-bottom: 6px; break-inside: avoid; }
+  nav.toc a { color: var(--text); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent-text); }
+  @media (max-width: 600px) { nav.toc ol { columns: 1; } }
+
+  section { margin-bottom: 48px; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 13px; font-family: var(--mono); letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--text-faint); border-bottom: 1px solid var(--border); padding-bottom: 10px;
+    margin: 0 0 18px; display: flex; align-items: center; gap: 10px;
+  }
+  h2 .n { color: var(--text-faint); }
+  h3 { font-size: 17px; font-weight: 650; margin: 26px 0 10px; text-wrap: balance; }
+  p { margin: 0 0 14px; color: var(--text); max-width: 72ch; }
+  p.dim { color: var(--text-dim); font-size: 14.5px; }
+  strong { font-weight: 650; }
+  code.inline {
+    font-family: var(--mono); font-size: 0.9em; background: var(--surface-2);
+    border: 1px solid var(--border); padding: 0.05em 0.4em; border-radius: 5px;
+  }
+  a { color: var(--accent-text); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-faint); background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.dim { color: var(--text-dim); }
+
+  .file-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; margin-bottom: 18px;
+  }
+  .file-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .file-name { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .file-desc { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+  pre {
+    margin: 0; padding: 18px 20px; background: var(--code-bg); color: var(--code-text);
+    overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+  }
+  pre code { font-family: inherit; white-space: pre; }
+  .cm { color: var(--code-comment); }
+  .kw { color: var(--code-keyword); }
+  .st { color: var(--code-string); }
+  .df { color: var(--code-def); }
+
+  .callout {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px; margin-bottom: 14px;
+  }
+  .callout.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  .callout .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin-bottom: 8px; }
+  .callout.warn .label { color: var(--warn); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  ol.steps li { counter-increment: step; position: relative; padding-left: 38px; margin-bottom: 14px; }
+  ol.steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 24px; height: 24px;
+    border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps li strong { display: block; margin-bottom: 3px; }
+  ol.steps li p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+  .divider { height: 1px; background: var(--border); margin: 48px 0; border: none; }
+  footer { color: var(--text-faint); font-size: 12.5px; font-family: var(--mono); padding-top: 24px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 25px; }
+    .wrap { padding: 36px 16px 90px; }
+    pre { font-size: 11.5px; padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <div class="eyebrow">AlphaTrade Global — Extraction technique complète</div>
+    <h1>Stratégie Scalping Zones : spécification et code source de A à Z</h1>
+    <p class="subtitle">Tout ce qu'il faut pour porter cette stratégie — déjà codée, testée et déployée en production — vers une autre application : les indicateurs utilisés, la logique de décision, la gestion de position, le pyramidage, et le code source réel de chaque brique.</p>
+    <div class="meta-row">
+      <span class="chip chip-accent">Actif en production — v1.0.5</span>
+      <span class="chip chip-neutral">Langage source : Python 3 (+ JavaScript pour la gestion multi-position)</span>
+    </div>
+
+    <nav class="toc">
+      <div class="toc-label">Sommaire</div>
+      <ol>
+        <li><a href="#vue-ensemble">00 — Vue d'ensemble</a></li>
+        <li><a href="#indicateurs">01 — Indicateurs utilisés</a></li>
+        <li><a href="#base">02 — Indicateurs de base</a></li>
+        <li><a href="#zones">03 — Détection de structure et zones</a></li>
+        <li><a href="#scoring">04 — Scoring des moteurs actifs</a></li>
+        <li><a href="#fusion">05 — Fusion et décision finale</a></li>
+        <li><a href="#sizing">06 — Dimensionnement de position</a></li>
+        <li><a href="#management">07 — Gestion de position active</a></li>
+        <li><a href="#pyramidage">08 — Pyramidage et anti-doublon</a></li>
+        <li><a href="#retournement">09 — Clôture sur retournement</a></li>
+        <li><a href="#parametres">10 — Paramètres réels de production</a></li>
+        <li><a href="#validation">11 — Résultats de validation réels</a></li>
+        <li><a href="#portage">12 — Notes de portage</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <section id="vue-ensemble">
+    <h2><span class="n">00</span> Vue d'ensemble</h2>
+    <p>Cette stratégie tourne aujourd'hui sur <strong>XAUUSD</strong> et <strong>BTCUSD</strong>, en profil <strong>Scalping</strong> (bougies M1, cycle d'analyse toutes les 30 secondes). À chaque cycle, elle : (1) calcule un petit ensemble d'indicateurs de zones institutionnelles sur les bougies récentes, (2) en dérive une direction (achat/vente/attente) et un niveau de confiance 0-100 par vote pondéré, (3) si la confiance dépasse un seuil (80%), envoie un ordre dimensionné selon le risque réel du compte, (4) gère la position ouverte en temps réel (sécurisation des gains, verrouillage rapide du profit), et (5) autorise plusieurs renforts dans le même sens sur le même actif tant que chaque nouveau signal est indépendamment validé à ≥80%.</p>
+    <p>Aucune IA générative n'intervient nulle part — chaque étape est un calcul déterministe sur des données de marché réelles (OHLCV). Le code ci-dessous est copié tel quel depuis le dépôt de production, pas réécrit pour ce document.</p>
+  </section>
+
+  <section id="indicateurs">
+    <h2><span class="n">01</span> Indicateurs utilisés</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Indicateur</th><th>Calculé à partir de</th><th>Utilisé par</th><th>Rôle</th></tr></thead>
+        <tbody>
+          <tr><td><strong>ATR(14)</strong></td><td class="dim">High/Low/Close, moyenne mobile de Wilder</td><td class="dim">Zones, SL/TP, dimensionnement</td><td class="dim">Unité de volatilité réelle — sert de règle pour toutes les distances (zones, stop, take-profit)</td></tr>
+          <tr><td><strong>Swings (pivots)</strong></td><td class="dim">Extrêmes locaux sur 3 bougies de chaque côté</td><td class="dim">Structure, Fair Value Gaps, zones de liquidité</td><td class="dim">Repère les plus hauts/plus bas significatifs, base de toute la lecture de structure</td></tr>
+          <tr><td><strong>Structure HH/HL/LH/LL</strong></td><td class="dim">2 derniers swings hauts + 2 derniers swings bas</td><td class="dim">BOS/CHOCH</td><td class="dim">Classe la tendance en hausse/baisse/range</td></tr>
+          <tr><td><strong>Fair Value Gaps (FVG)</strong></td><td class="dim">Déséquilibre à 3 bougies (ICT)</td><td class="dim">Smart Money</td><td class="dim">Zone de prix laissée "vide" que le marché revient souvent combler</td></tr>
+          <tr><td><strong>Order Blocks</strong></td><td class="dim">Dernière bougie opposée avant un mouvement impulsif (&gt;1,5×ATR)</td><td class="dim">Smart Money</td><td class="dim">Zone institutionnelle probable d'entrée d'ordres</td></tr>
+          <tr><td><strong>Zones de liquidité</strong></td><td class="dim">Plus hauts/bas égaux (±0,05%)</td><td class="dim">Liquidity</td><td class="dim">Zones où les ordres stop se regroupent</td></tr>
+          <tr><td><strong>Sweep de liquidité</strong></td><td class="dim">Mèche au-delà d'une zone puis clôture de l'autre côté</td><td class="dim">Liquidity</td><td class="dim">Signale une prise de liquidité avant retournement probable</td></tr>
+          <tr><td><strong>Carnet d'ordres (order flow)</strong></td><td class="dim">Données réelles Hyperliquid (BTCUSD uniquement)</td><td class="dim">Microstructure</td><td class="dim">Déséquilibre acheteur/vendeur réel, hors périmètre de ce document (source externe)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="dim">D'autres indicateurs (EMA, RSI, MACD, Bollinger, volume, VWAP…) existent dans le code source mais ne pèsent <strong>rien</strong> dans la décision active aujourd'hui (poids ramené à zéro par le filtre "zones uniquement" ci-dessous) — non inclus dans ce document pour rester fidèle à ce qui tourne réellement.</p>
+  </section>
+
+  <section id="base">
+    <h2><span class="n">02</span> Indicateurs de base</h2>
+    <p>Deux primitives partagées par tout le reste : l'ATR (unité de volatilité) et la détection des swings/structure.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">indicators.py</span><span class="file-desc">extrait — atr, find_swings, classify_structure</span></div>
+      <pre><code><span class="kw">def</span> <span class="df">atr</span>(candles, period=<span class="st">14</span>):
+    out = [<span class="kw">None</span>] * len(candles)
+    <span class="kw">if</span> len(candles) &lt; period + <span class="st">1</span>:
+        <span class="kw">return</span> out
+
+    true_ranges = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(<span class="st">1</span>, len(candles)):
+        c = candles[i]
+        prev_close = candles[i - <span class="st">1</span>][<span class="st">"close"</span>]
+        true_ranges.append(max(
+            c[<span class="st">"high"</span>] - c[<span class="st">"low"</span>],
+            abs(c[<span class="st">"high"</span>] - prev_close),
+            abs(c[<span class="st">"low"</span>] - prev_close),
+        ))
+
+    avg = sum(true_ranges[:period]) / period
+    out[period] = avg
+    <span class="kw">for</span> i <span class="kw">in</span> range(period, len(true_ranges)):
+        avg = (avg * (period - <span class="st">1</span>) + true_ranges[i]) / period
+        out[i + <span class="st">1</span>] = avg
+    <span class="kw">return</span> out
+
+
+<span class="cm"># Un swing high/low est un extrême local relatif aux `lookback` bougies de chaque côté.</span>
+<span class="kw">def</span> <span class="df">find_swings</span>(candles, lookback=<span class="st">3</span>):
+    swings = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(lookback, len(candles) - lookback):
+        window = candles[i - lookback:i + lookback + <span class="st">1</span>]
+        is_high = all(candles[i][<span class="st">"high"</span>] &gt;= c[<span class="st">"high"</span>] <span class="kw">for</span> c <span class="kw">in</span> window)
+        is_low = all(candles[i][<span class="st">"low"</span>] &lt;= c[<span class="st">"low"</span>] <span class="kw">for</span> c <span class="kw">in</span> window)
+        <span class="kw">if</span> is_high:
+            swings.append({<span class="st">"index"</span>: i, <span class="st">"type"</span>: <span class="st">"high"</span>, <span class="st">"price"</span>: candles[i][<span class="st">"high"</span>], <span class="st">"time"</span>: candles[i][<span class="st">"time"</span>]})
+        <span class="kw">elif</span> is_low:
+            swings.append({<span class="st">"index"</span>: i, <span class="st">"type"</span>: <span class="st">"low"</span>, <span class="st">"price"</span>: candles[i][<span class="st">"low"</span>], <span class="st">"time"</span>: candles[i][<span class="st">"time"</span>]})
+    <span class="kw">return</span> swings
+
+
+<span class="cm"># Lecture classique HH/HL vs LH/LL sur les 4 derniers swings confirmés.</span>
+<span class="kw">def</span> <span class="df">classify_structure</span>(swings):
+    highs = [s <span class="kw">for</span> s <span class="kw">in</span> swings <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"high"</span>][-<span class="st">2</span>:]
+    lows = [s <span class="kw">for</span> s <span class="kw">in</span> swings <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"low"</span>][-<span class="st">2</span>:]
+    <span class="kw">if</span> len(highs) &lt; <span class="st">2</span> <span class="kw">or</span> len(lows) &lt; <span class="st">2</span>:
+        <span class="kw">return</span> {<span class="st">"label"</span>: <span class="st">"ranging"</span>, <span class="st">"detail"</span>: <span class="st">"Pas assez de swings confirmés pour classifier la structure."</span>}
+
+    higher_highs = highs[<span class="st">1</span>][<span class="st">"price"</span>] &gt; highs[<span class="st">0</span>][<span class="st">"price"</span>]
+    higher_lows = lows[<span class="st">1</span>][<span class="st">"price"</span>] &gt; lows[<span class="st">0</span>][<span class="st">"price"</span>]
+    <span class="kw">if</span> higher_highs <span class="kw">and</span> higher_lows:
+        <span class="kw">return</span> {<span class="st">"label"</span>: <span class="st">"uptrend"</span>, <span class="st">"detail"</span>: f<span class="st">"HH {highs[0]['price']:.2f}→{highs[1]['price']:.2f}, HL {lows[0]['price']:.2f}→{lows[1]['price']:.2f}"</span>}
+    <span class="kw">if not</span> higher_highs <span class="kw">and not</span> higher_lows:
+        <span class="kw">return</span> {<span class="st">"label"</span>: <span class="st">"downtrend"</span>, <span class="st">"detail"</span>: f<span class="st">"LH {highs[0]['price']:.2f}→{highs[1]['price']:.2f}, LL {lows[0]['price']:.2f}→{lows[1]['price']:.2f}"</span>}
+    <span class="kw">return</span> {<span class="st">"label"</span>: <span class="st">"ranging"</span>, <span class="st">"detail"</span>: <span class="st">"Structure mixte — pas de séquence HH/HL ou LH/LL claire."</span>}</code></pre>
+    </div>
+  </section>
+
+  <section id="zones">
+    <h2><span class="n">03</span> Détection de structure et zones (fichier complet)</h2>
+    <p>Toutes les définitions techniques standards (ICT) utilisées par les moteurs actifs — cassures de structure, Fair Value Gaps, Order Blocks, zones de liquidité et sweeps. Fichier entier, rien n'est omis.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">market_analysis.py</span><span class="file-desc">fichier complet</span></div>
+      <pre><code><span class="cm"># Break of Structure (continuation) vs Change of Character (avertissement de
+# retournement), lu depuis les derniers swings confirmés et la dernière clôture.
+#
+# BOS : en tendance haussière, la clôture casse au-dessus du dernier plus haut
+# (la tendance continue). En tendance baissière, elle casse sous le dernier
+# plus bas. CHOCH : l'inverse — la clôture casse le swing du "mauvais" côté
+# pour la tendance en cours, premier signe d'un retournement possible.</span>
+<span class="kw">def</span> <span class="df">bos_choch</span>(candles, swings):
+    structure = classify_structure(swings)
+    last_close = candles[-<span class="st">1</span>][<span class="st">"close"</span>]
+    last_high = next((s <span class="kw">for</span> s <span class="kw">in</span> reversed(swings) <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"high"</span>), <span class="kw">None</span>)
+    last_low = next((s <span class="kw">for</span> s <span class="kw">in</span> reversed(swings) <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"low"</span>), <span class="kw">None</span>)
+
+    <span class="kw">if</span> structure[<span class="st">"label"</span>] == <span class="st">"uptrend"</span> <span class="kw">and</span> last_high <span class="kw">and</span> last_close &gt; last_high[<span class="st">"price"</span>]:
+        <span class="kw">return</span> {<span class="st">"event"</span>: <span class="st">"BOS"</span>, <span class="st">"direction"</span>: <span class="st">"bullish"</span>, <span class="st">"level"</span>: last_high[<span class="st">"price"</span>],
+                <span class="st">"detail"</span>: f<span class="st">"Cassure du dernier plus haut ({last_high['price']:.2f}) — continuation haussière"</span>}
+    <span class="kw">if</span> structure[<span class="st">"label"</span>] == <span class="st">"uptrend"</span> <span class="kw">and</span> last_low <span class="kw">and</span> last_close &lt; last_low[<span class="st">"price"</span>]:
+        <span class="kw">return</span> {<span class="st">"event"</span>: <span class="st">"CHOCH"</span>, <span class="st">"direction"</span>: <span class="st">"bearish"</span>, <span class="st">"level"</span>: last_low[<span class="st">"price"</span>],
+                <span class="st">"detail"</span>: f<span class="st">"Cassure du dernier plus bas ({last_low['price']:.2f}) en tendance haussière — signal de retournement"</span>}
+    <span class="kw">if</span> structure[<span class="st">"label"</span>] == <span class="st">"downtrend"</span> <span class="kw">and</span> last_low <span class="kw">and</span> last_close &lt; last_low[<span class="st">"price"</span>]:
+        <span class="kw">return</span> {<span class="st">"event"</span>: <span class="st">"BOS"</span>, <span class="st">"direction"</span>: <span class="st">"bearish"</span>, <span class="st">"level"</span>: last_low[<span class="st">"price"</span>],
+                <span class="st">"detail"</span>: f<span class="st">"Cassure du dernier plus bas ({last_low['price']:.2f}) — continuation baissière"</span>}
+    <span class="kw">if</span> structure[<span class="st">"label"</span>] == <span class="st">"downtrend"</span> <span class="kw">and</span> last_high <span class="kw">and</span> last_close &gt; last_high[<span class="st">"price"</span>]:
+        <span class="kw">return</span> {<span class="st">"event"</span>: <span class="st">"CHOCH"</span>, <span class="st">"direction"</span>: <span class="st">"bullish"</span>, <span class="st">"level"</span>: last_high[<span class="st">"price"</span>],
+                <span class="st">"detail"</span>: f<span class="st">"Cassure du dernier plus haut ({last_high['price']:.2f}) en tendance baissière — signal de retournement"</span>}
+    <span class="kw">return</span> {<span class="st">"event"</span>: <span class="kw">None</span>, <span class="st">"direction"</span>: <span class="st">"neutral"</span>, <span class="st">"level"</span>: <span class="kw">None</span>, <span class="st">"detail"</span>: f<span class="st">"Pas de cassure — structure {structure['label']}"</span>}
+
+
+<span class="cm"># Fair Value Gap — déséquilibre à 3 bougies : candle[i-1] et candle[i+1] ne se
+# chevauchent pas, laissant un vide que le marché revisite souvent. Définition
+# ICT standard. `filled` = le prix est revenu dans la zone depuis.</span>
+<span class="kw">def</span> <span class="df">find_fvgs</span>(candles, lookback=<span class="st">80</span>):
+    start = max(<span class="st">2</span>, len(candles) - lookback)
+    fvgs = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(start, len(candles) - <span class="st">1</span>):
+        prev, nxt = candles[i - <span class="st">1</span>], candles[i + <span class="st">1</span>]
+        <span class="kw">if</span> prev[<span class="st">"high"</span>] &lt; nxt[<span class="st">"low"</span>]:
+            top, bottom = nxt[<span class="st">"low"</span>], prev[<span class="st">"high"</span>]
+            filled = any(c[<span class="st">"low"</span>] &lt;= bottom <span class="kw">for</span> c <span class="kw">in</span> candles[i + <span class="st">1</span>:])
+            fvgs.append({<span class="st">"index"</span>: i, <span class="st">"type"</span>: <span class="st">"bullish"</span>, <span class="st">"top"</span>: top, <span class="st">"bottom"</span>: bottom, <span class="st">"filled"</span>: filled})
+        <span class="kw">elif</span> prev[<span class="st">"low"</span>] &gt; nxt[<span class="st">"high"</span>]:
+            top, bottom = prev[<span class="st">"low"</span>], nxt[<span class="st">"high"</span>]
+            filled = any(c[<span class="st">"high"</span>] &gt;= top <span class="kw">for</span> c <span class="kw">in</span> candles[i + <span class="st">1</span>:])
+            fvgs.append({<span class="st">"index"</span>: i, <span class="st">"type"</span>: <span class="st">"bearish"</span>, <span class="st">"top"</span>: top, <span class="st">"bottom"</span>: bottom, <span class="st">"filled"</span>: filled})
+    <span class="kw">return</span> fvgs
+
+
+<span class="cm"># Order Block — la dernière bougie de couleur opposée avant un mouvement
+# impulsif qui casse la structure récente. "Impulsif" = un corps qui dépasse
+# `impulse_mult` fois l'ATR local.</span>
+<span class="kw">def</span> <span class="df">find_order_blocks</span>(candles, atr_series, lookback=<span class="st">80</span>, impulse_mult=<span class="st">1.5</span>):
+    start = max(<span class="st">1</span>, len(candles) - lookback)
+    blocks = []
+    <span class="kw">for</span> i <span class="kw">in</span> range(start, len(candles)):
+        atr_val = atr_series[i]
+        <span class="kw">if</span> atr_val <span class="kw">is None</span> <span class="kw">or</span> atr_val &lt;= <span class="st">0</span>:
+            <span class="kw">continue</span>
+        c = candles[i]
+        candle_range = c[<span class="st">"high"</span>] - c[<span class="st">"low"</span>]
+        <span class="kw">if</span> candle_range &lt; atr_val * impulse_mult:
+            <span class="kw">continue</span>
+        is_bullish_impulse = c[<span class="st">"close"</span>] &gt; c[<span class="st">"open"</span>]
+        prev = candles[i - <span class="st">1</span>]
+        <span class="kw">if</span> is_bullish_impulse <span class="kw">and</span> prev[<span class="st">"close"</span>] &lt; prev[<span class="st">"open"</span>]:
+            top, bottom = prev[<span class="st">"high"</span>], prev[<span class="st">"low"</span>]
+            mitigated = any(cc[<span class="st">"low"</span>] &lt;= bottom <span class="kw">for</span> cc <span class="kw">in</span> candles[i + <span class="st">1</span>:])
+            blocks.append({<span class="st">"index"</span>: i - <span class="st">1</span>, <span class="st">"type"</span>: <span class="st">"bullish"</span>, <span class="st">"top"</span>: top, <span class="st">"bottom"</span>: bottom, <span class="st">"mitigated"</span>: mitigated, <span class="st">"impulse_index"</span>: i})
+        <span class="kw">elif not</span> is_bullish_impulse <span class="kw">and</span> prev[<span class="st">"close"</span>] &gt; prev[<span class="st">"open"</span>]:
+            top, bottom = prev[<span class="st">"high"</span>], prev[<span class="st">"low"</span>]
+            mitigated = any(cc[<span class="st">"high"</span>] &gt;= top <span class="kw">for</span> cc <span class="kw">in</span> candles[i + <span class="st">1</span>:])
+            blocks.append({<span class="st">"index"</span>: i - <span class="st">1</span>, <span class="st">"type"</span>: <span class="st">"bearish"</span>, <span class="st">"top"</span>: top, <span class="st">"bottom"</span>: bottom, <span class="st">"mitigated"</span>: mitigated, <span class="st">"impulse_index"</span>: i})
+    <span class="kw">return</span> blocks
+
+
+<span class="cm"># Plus hauts/bas égaux (±tolerance_pct%) marquent une poche de liquidité —
+# les ordres stop en attente et les entrées de breakout s'y regroupent,
+# en faisant un aimant que le prix balaie souvent avant de se retourner.</span>
+<span class="kw">def</span> <span class="df">find_liquidity_zones</span>(swings, tolerance_pct=<span class="st">0.05</span>):
+    zones = []
+    highs = [s <span class="kw">for</span> s <span class="kw">in</span> swings <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"high"</span>]
+    lows = [s <span class="kw">for</span> s <span class="kw">in</span> swings <span class="kw">if</span> s[<span class="st">"type"</span>] == <span class="st">"low"</span>]
+    <span class="kw">for</span> group, side <span class="kw">in</span> ((highs, <span class="st">"buy_side"</span>), (lows, <span class="st">"sell_side"</span>)):
+        used = set()
+        <span class="kw">for</span> i, a <span class="kw">in</span> enumerate(group):
+            <span class="kw">if</span> i <span class="kw">in</span> used:
+                <span class="kw">continue</span>
+            cluster = [a]
+            <span class="kw">for</span> j <span class="kw">in</span> range(i + <span class="st">1</span>, len(group)):
+                b = group[j]
+                <span class="kw">if</span> j <span class="kw">in</span> used:
+                    <span class="kw">continue</span>
+                <span class="kw">if</span> abs(b[<span class="st">"price"</span>] - a[<span class="st">"price"</span>]) / a[<span class="st">"price"</span>] * <span class="st">100</span> &lt;= tolerance_pct:
+                    cluster.append(b)
+                    used.add(j)
+            <span class="kw">if</span> len(cluster) &gt;= <span class="st">2</span>:
+                avg_price = sum(s[<span class="st">"price"</span>] <span class="kw">for</span> s <span class="kw">in</span> cluster) / len(cluster)
+                zones.append({<span class="st">"side"</span>: side, <span class="st">"price"</span>: avg_price, <span class="st">"touches"</span>: len(cluster), <span class="st">"last_index"</span>: max(s[<span class="st">"index"</span>] <span class="kw">for</span> s <span class="kw">in</span> cluster)})
+    <span class="kw">return</span> zones
+
+
+<span class="cm"># Un sweep : une bougie récente dépasse une zone de liquidité en mèche puis
+# clôture de l'autre côté — les institutionnels prennent les stops avant de
+# retourner le marché, précurseur classique d'un retournement plutôt qu'un
+# breakout.</span>
+<span class="kw">def</span> <span class="df">detect_sweep</span>(candles, zones, recent_bars=<span class="st">5</span>):
+    recent = candles[-recent_bars:]
+    <span class="kw">for</span> zone <span class="kw">in</span> zones:
+        <span class="kw">for</span> c <span class="kw">in</span> recent:
+            <span class="kw">if</span> zone[<span class="st">"side"</span>] == <span class="st">"buy_side"</span> <span class="kw">and</span> c[<span class="st">"high"</span>] &gt; zone[<span class="st">"price"</span>] <span class="kw">and</span> c[<span class="st">"close"</span>] &lt; zone[<span class="st">"price"</span>]:
+                <span class="kw">return</span> {<span class="st">"swept"</span>: <span class="kw">True</span>, <span class="st">"side"</span>: <span class="st">"buy_side"</span>, <span class="st">"level"</span>: zone[<span class="st">"price"</span>], <span class="st">"direction"</span>: <span class="st">"bearish"</span>,
+                        <span class="st">"detail"</span>: f<span class="st">"Sweep de liquidité acheteuse à {zone['price']:.2f} — mèche au-dessus, clôture en dessous"</span>}
+            <span class="kw">if</span> zone[<span class="st">"side"</span>] == <span class="st">"sell_side"</span> <span class="kw">and</span> c[<span class="st">"low"</span>] &lt; zone[<span class="st">"price"</span>] <span class="kw">and</span> c[<span class="st">"close"</span>] &gt; zone[<span class="st">"price"</span>]:
+                <span class="kw">return</span> {<span class="st">"swept"</span>: <span class="kw">True</span>, <span class="st">"side"</span>: <span class="st">"sell_side"</span>, <span class="st">"level"</span>: zone[<span class="st">"price"</span>], <span class="st">"direction"</span>: <span class="st">"bullish"</span>,
+                        <span class="st">"detail"</span>: f<span class="st">"Sweep de liquidité vendeuse à {zone['price']:.2f} — mèche en dessous, clôture au-dessus"</span>}
+    <span class="kw">return</span> {<span class="st">"swept"</span>: <span class="kw">False</span>, <span class="st">"side"</span>: <span class="kw">None</span>, <span class="st">"level"</span>: <span class="kw">None</span>, <span class="st">"direction"</span>: <span class="st">"neutral"</span>, <span class="st">"detail"</span>: <span class="st">"Aucun sweep récent détecté"</span>}</code></pre>
+    </div>
+  </section>
+
+  <section id="scoring">
+    <h2><span class="n">04</span> Scoring des moteurs actifs</h2>
+    <p>Seuls <strong>2 à 3 moteurs sur 13</strong> pèsent réellement dans la décision (voir section 05) : <code class="inline">smart_money</code>, <code class="inline">liquidity</code>, et pour BTCUSD uniquement <code class="inline">microstructure</code> (carnet d'ordres Hyperliquid, source externe non incluse ici). Chacun retourne une direction (haussier/baissier/neutre) et un niveau de confiance 0-100.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">engine_scoring.py</span><span class="file-desc">extrait — score_smart_money, score_liquidity</span></div>
+      <pre><code><span class="kw">def</span> <span class="df">score_smart_money</span>(ctx):
+    candles, last = ctx[<span class="st">"candles"</span>], ctx[<span class="st">"candles"</span>][-<span class="st">1</span>]
+    price = last[<span class="st">"close"</span>]
+    atr_val = ctx[<span class="st">"atr14"</span>][-<span class="st">1</span>] <span class="kw">or</span> <span class="st">0</span>
+    fvgs = [f <span class="kw">for</span> f <span class="kw">in</span> find_fvgs(candles) <span class="kw">if not</span> f[<span class="st">"filled"</span>]]
+    obs = [o <span class="kw">for</span> o <span class="kw">in</span> find_order_blocks(candles, ctx[<span class="st">"atr14"</span>]) <span class="kw">if not</span> o[<span class="st">"mitigated"</span>]]
+    zones = [{<span class="st">"type"</span>: z[<span class="st">"type"</span>], <span class="st">"top"</span>: z[<span class="st">"top"</span>], <span class="st">"bottom"</span>: z[<span class="st">"bottom"</span>], <span class="st">"index"</span>: z.get(<span class="st">"index"</span>, z.get(<span class="st">"impulse_index"</span>))} <span class="kw">for</span> z <span class="kw">in</span> fvgs + obs]
+
+    nearest_bullish = min(
+        (z <span class="kw">for</span> z <span class="kw">in</span> zones <span class="kw">if</span> z[<span class="st">"type"</span>] == <span class="st">"bullish"</span> <span class="kw">and</span> z[<span class="st">"top"</span>] &lt;= price), key=<span class="kw">lambda</span> z: price - z[<span class="st">"top"</span>], default=<span class="kw">None</span>
+    )
+    nearest_bearish = min(
+        (z <span class="kw">for</span> z <span class="kw">in</span> zones <span class="kw">if</span> z[<span class="st">"type"</span>] == <span class="st">"bearish"</span> <span class="kw">and</span> z[<span class="st">"bottom"</span>] &gt;= price), key=<span class="kw">lambda</span> z: z[<span class="st">"bottom"</span>] - price, default=<span class="kw">None</span>
+    )
+
+    dist_bull = (price - nearest_bullish[<span class="st">"top"</span>]) <span class="kw">if</span> nearest_bullish <span class="kw">else</span> <span class="kw">None</span>
+    dist_bear = (nearest_bearish[<span class="st">"bottom"</span>] - price) <span class="kw">if</span> nearest_bearish <span class="kw">else</span> <span class="kw">None</span>
+    near_atr = atr_val * <span class="st">1.0</span> <span class="kw">if</span> atr_val <span class="kw">else</span> price * <span class="st">0.002</span>
+
+    <span class="kw">if</span> dist_bull <span class="kw">is not None</span> <span class="kw">and</span> dist_bull &lt;= near_atr <span class="kw">and</span> (dist_bear <span class="kw">is None</span> <span class="kw">or</span> dist_bull &lt; dist_bear):
+        conf = _clamp(<span class="st">70</span> - (dist_bull / near_atr) * <span class="st">20</span> + (len(candles) - nearest_bullish[<span class="st">"index"</span>] &lt; <span class="st">30</span>) * <span class="st">10</span>)
+        <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"smart_money"</span>, <span class="st">"bias"</span>: <span class="st">"bullish"</span>, <span class="st">"confidence"</span>: conf,
+                <span class="st">"findings"</span>: [f<span class="st">"Zone de demande non mitigée à {nearest_bullish['top']:.2f}-{nearest_bullish['bottom']:.2f}, prix à proximité"</span>]}
+    <span class="kw">if</span> dist_bear <span class="kw">is not None</span> <span class="kw">and</span> dist_bear &lt;= near_atr:
+        conf = _clamp(<span class="st">70</span> - (dist_bear / near_atr) * <span class="st">20</span> + (len(candles) - nearest_bearish[<span class="st">"index"</span>] &lt; <span class="st">30</span>) * <span class="st">10</span>)
+        <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"smart_money"</span>, <span class="st">"bias"</span>: <span class="st">"bearish"</span>, <span class="st">"confidence"</span>: conf,
+                <span class="st">"findings"</span>: [f<span class="st">"Zone d'offre non mitigée à {nearest_bearish['bottom']:.2f}-{nearest_bearish['top']:.2f}, prix à proximité"</span>]}
+    <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"smart_money"</span>, <span class="st">"bias"</span>: <span class="st">"neutral"</span>, <span class="st">"confidence"</span>: <span class="st">20</span>, <span class="st">"findings"</span>: [f<span class="st">"{len(zones)} zones non mitigées repérées, aucune à proximité immédiate du prix"</span>]}
+
+
+<span class="kw">def</span> <span class="df">score_liquidity</span>(ctx):
+    zones = find_liquidity_zones(ctx[<span class="st">"swings"</span>])
+    sweep = detect_sweep(ctx[<span class="st">"candles"</span>], zones)
+    <span class="kw">if</span> sweep[<span class="st">"swept"</span>]:
+        <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"liquidity"</span>, <span class="st">"bias"</span>: sweep[<span class="st">"direction"</span>], <span class="st">"confidence"</span>: <span class="st">65</span>, <span class="st">"findings"</span>: [sweep[<span class="st">"detail"</span>]]}
+    <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"liquidity"</span>, <span class="st">"bias"</span>: <span class="st">"neutral"</span>, <span class="st">"confidence"</span>: <span class="st">20</span>, <span class="st">"findings"</span>: [f<span class="st">"{len(zones)} zone(s) de liquidité repérée(s), aucun sweep récent"</span>]}</code></pre>
+    </div>
+
+    <h3>Restriction "zones uniquement" — le filtre qui définit la stratégie</h3>
+    <p>Sur 13 moteurs pondérés disponibles (structure, smart money, indicateurs techniques, volume, fibonacci, volatilité, session…), un filtre ramène le poids de tous les autres à zéro pour XAUUSD et BTCUSD — c'est ce filtre, validé par backtest réel, qui définit "la stratégie".</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">engine_scoring.py</span><span class="file-desc">extrait — ZONE_ONLY_CONFIG, zone_only_weight_multipliers</span></div>
+      <pre><code>ZONE_ONLY_CONFIG = {
+    <span class="st">"XAUUSD"</span>: {<span class="st">"smart_money"</span>, <span class="st">"liquidity"</span>},
+    <span class="st">"BTCUSD"</span>: {<span class="st">"smart_money"</span>, <span class="st">"liquidity"</span>, <span class="st">"microstructure"</span>},
+}
+ZONE_ONLY_CUT_MULTIPLIER = <span class="st">0.0</span>
+
+
+<span class="kw">def</span> <span class="df">zone_only_weight_multipliers</span>(symbol):
+    <span class="cm">"""Retourne un dict {nom_moteur: multiplicateur} à appliquer sur ENGINE_WEIGHTS
+    avant la fusion, ou {} pour les symboles non concernés. La liste des moteurs
+    coupés est dérivée de ENGINE_WEIGHTS lui-même (pas une liste figée), pour
+    qu'un futur nouveau moteur pondéré soit automatiquement coupé aussi."""</span>
+    keep = ZONE_ONLY_CONFIG.get((symbol <span class="kw">or</span> <span class="st">""</span>).upper())
+    <span class="kw">if</span> keep <span class="kw">is None</span>:
+        <span class="kw">return</span> {}
+    <span class="kw">return</span> {name: ZONE_ONLY_CUT_MULTIPLIER <span class="kw">for</span> name <span class="kw">in</span> ENGINE_WEIGHTS <span class="kw">if</span> name <span class="kw">not in</span> keep}</code></pre>
+    </div>
+    <div class="callout">
+      <div class="label">Poids d'origine (avant coupe)</div>
+      <p><code class="inline">smart_money: 12</code> · <code class="inline">liquidity: 8</code> · <code class="inline">microstructure: 15</code> (le plus élevé de tous, BTCUSD uniquement) — sur un total de 13 moteurs pondérés dont les 10 ou 11 autres sont ramenés à zéro pour ces deux actifs.</p>
+    </div>
+  </section>
+
+  <section id="fusion">
+    <h2><span class="n">05</span> Fusion et décision finale</h2>
+    <p>Chaque moteur vote {biais, confiance}. La direction finale n'est jamais choisie puis justifiée après coup — elle est dérivée d'un vote pondéré (poids du moteur × sa propre confiance), un score de départ (25) auquel chaque camp ajoute ce que ses moteurs lui apportent.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">engine_scoring.py</span><span class="file-desc">extrait — fuse_direction_and_confidence (chemin actif, exclude_abstentions=False)</span></div>
+      <pre><code>FUSION_BASE = <span class="st">25</span>
+STRUCTURALLY_NEUTRAL_ENGINES = {<span class="st">"volatility"</span>, <span class="st">"session"</span>, <span class="st">"economic"</span>}
+
+
+<span class="kw">def</span> <span class="df">fuse_direction_and_confidence</span>(engine_results, weight_multipliers=<span class="kw">None</span>, exclude_abstentions=<span class="kw">False</span>):
+    weight_multipliers = weight_multipliers <span class="kw">or</span> {}
+    weighted_votes = {<span class="st">"bullish"</span>: <span class="st">0.0</span>, <span class="st">"bearish"</span>: <span class="st">0.0</span>, <span class="st">"neutral"</span>: <span class="st">0.0</span>}
+    total_weight = <span class="st">0.0</span>
+    breakdown = {}
+
+    <span class="kw">for</span> engine_id, result <span class="kw">in</span> engine_results.items():
+        weight = ENGINE_WEIGHTS.get(engine_id, <span class="st">0</span>)
+        conf = result.get(<span class="st">"confidence"</span>, <span class="st">0</span>)
+        bias = result.get(<span class="st">"bias"</span>, <span class="st">"neutral"</span>)
+        breakdown[engine_id] = {<span class="st">"weight"</span>: weight, <span class="st">"bias"</span>: bias, <span class="st">"confidence"</span>: conf, <span class="st">"findings"</span>: result.get(<span class="st">"findings"</span>, [])}
+        <span class="kw">if</span> weight &lt;= <span class="st">0</span> <span class="kw">or</span> engine_id <span class="kw">in</span> STRUCTURALLY_NEUTRAL_ENGINES:
+            <span class="kw">continue</span>
+        effective_weight = weight * weight_multipliers.get(engine_id, <span class="st">1.0</span>)
+        total_weight += effective_weight
+        weighted_votes[bias] += effective_weight * (conf / <span class="st">100</span>)
+
+    <span class="kw">if</span> total_weight == <span class="st">0</span>:
+        <span class="kw">return</span> {<span class="st">"direction"</span>: <span class="st">"neutral"</span>, <span class="st">"confidence"</span>: <span class="st">0</span>, <span class="st">"breakdown"</span>: breakdown}
+
+    scores = {
+        bias: FUSION_BASE + (vote / total_weight) * (<span class="st">100</span> - FUSION_BASE)
+        <span class="kw">for</span> bias, vote <span class="kw">in</span> weighted_votes.items()
+    }
+
+    dominant = max(scores, key=scores.get)
+    confidence = round(scores[dominant])
+    <span class="kw">return</span> {<span class="st">"direction"</span>: dominant, <span class="st">"confidence"</span>: confidence, <span class="st">"breakdown"</span>: breakdown}</code></pre>
+    </div>
+
+    <h3>Seuils de décision</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Seuil</th><th>Valeur</th><th>Effet</th></tr></thead>
+        <tbody>
+          <tr><td><code class="inline">CONFIDENCE_FLOOR</code></td><td class="num">60</td><td class="dim">Sous ce seuil, la décision est forcée à WAIT quel que soit le biais fusionné (plancher global, tous profils)</td></tr>
+          <tr><td><code class="inline">min_confidence</code> (profil Scalping)</td><td class="num">80</td><td class="dim">Sous ce seuil, aucun ordre n'est envoyé — la décision reste visible mais n'est jamais exécutée (voir section 08)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Stop-loss et take-profit — multiples d'ATR</h3>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">market_brain.py</span><span class="file-desc">extrait — calcul SL/TP</span></div>
+      <pre><code>sl_mult, tp1_mult, tp2_mult = <span class="st">1.5</span>, <span class="st">3.0</span>, <span class="st">5.0</span>
+<span class="kw">if</span> decision == <span class="st">"BUY"</span>:
+    stop_loss = ideal_entry - atr_val * sl_mult
+    take_profit_1 = ideal_entry + atr_val * tp1_mult
+    take_profit_2 = ideal_entry + atr_val * tp2_mult
+    break_even = ideal_entry + (take_profit_1 - ideal_entry) * <span class="st">0.5</span>
+<span class="kw">else</span>:
+    stop_loss = ideal_entry + atr_val * sl_mult
+    take_profit_1 = ideal_entry - atr_val * tp1_mult
+    take_profit_2 = ideal_entry - atr_val * tp2_mult
+    break_even = ideal_entry - (ideal_entry - take_profit_1) * <span class="st">0.5</span></code></pre>
+    </div>
+  </section>
+
+  <section id="sizing">
+    <h2><span class="n">06</span> Dimensionnement de position</h2>
+    <p>Taille de lot = montant à risquer ÷ distance du stop, plafonnée aux limites réelles du broker. Le montant à risquer est un pourcentage du capital réel (equity MT5, jamais une valeur fournie par le frontend).</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">local_functions.py</span><span class="file-desc">extrait — calculate_lot</span></div>
+      <pre><code><span class="kw">def</span> <span class="df">calculate_lot</span>(symbol, entry_price=<span class="kw">None</span>, stop_loss=<span class="kw">None</span>, capital=<span class="kw">None</span>, risk_percent=<span class="kw">None</span>, contract_size=<span class="kw">None</span>,
+                   volume_min=<span class="kw">None</span>, volume_step=<span class="kw">None</span>, volume_max=<span class="kw">None</span>):
+    <span class="kw">if not</span> capital <span class="kw">or</span> capital &lt;= <span class="st">0</span>:
+        <span class="kw">raise</span> RealCapitalUnavailable(
+            <span class="st">"Capital réel indisponible (equity MT5 introuvable) — impossible de calculer une taille de position en toute sécurité."</span>
+        )
+    risk_percent = risk_percent <span class="kw">if</span> risk_percent <span class="kw">is not None</span> <span class="kw">else</span> <span class="st">1</span>
+    risk_amount = capital * (risk_percent / <span class="st">100</span>)
+    <span class="kw">if not</span> contract_size:
+        contract_size = resolve_contract_size(symbol)
+    min_vol = volume_min <span class="kw">if</span> volume_min <span class="kw">else</span> <span class="st">0.01</span>
+    step = volume_step <span class="kw">if</span> volume_step <span class="kw">else</span> <span class="st">0.01</span>
+    sl_distance = abs((entry_price <span class="kw">or</span> <span class="st">0</span>) - (stop_loss <span class="kw">or</span> <span class="st">0</span>))
+    <span class="kw">if</span> sl_distance &lt;= <span class="st">0</span>:
+        <span class="kw">return</span> min_vol
+    lot = risk_amount / (sl_distance * contract_size)
+    <span class="cm"># Arrondi VERS LE BAS au pas réel du broker, puis plancher au minimum réel</span>
+    steps = math.floor(lot / step) <span class="kw">if</span> step &gt; <span class="st">0</span> <span class="kw">else</span> <span class="st">0</span>
+    lot = steps * step
+    lot = max(min_vol, lot)
+    <span class="kw">if</span> volume_max:
+        lot = min(volume_max, lot)
+    <span class="kw">return</span> round(lot, <span class="st">4</span>)</code></pre>
+    </div>
+    <p class="dim"><code class="inline">contract_size</code> vient en priorité de MT5 en direct (<code class="inline">symbol_info().trade_contract_size</code>) ; à défaut, table de repli — <code class="inline">XAUUSD: 100</code>, <code class="inline">BTCUSD: 1</code>. <code class="inline">volume_min</code>/<code class="inline">volume_step</code>/<code class="inline">volume_max</code> viennent aussi en direct de MT5 (limites réelles du broker) — sans plafond, un stop très serré peut faire exploser le lot calculé bien au-delà du maximum autorisé (incident réel corrigé le 15/08/2026).</p>
+  </section>
+
+  <section id="management">
+    <h2><span class="n">07</span> Gestion de position active (spécifique Scalping)</h2>
+    <p>Une fois la position ouverte, une boucle indépendante (toutes les secondes) vérifie deux seuils, dans cet ordre — le premier qui matche l'emporte :</p>
+    <ol class="steps">
+      <li><strong>Verrou de profit rapide</strong><p>Dès que le profit flottant réel atteint <code class="inline">15$</code>, le stop est resserré à <code class="inline">0,35R</code> derrière le meilleur prix atteint — sécurise vite un gain léger tout en laissant courir un vrai mouvement.</p></li>
+      <li><strong>Break-even</strong><p>Dès que le profit flottant réel atteint <code class="inline">1,5$</code> (et seulement si le verrou ci-dessus n'a pas déjà agi), le stop monte à l'entrée <code class="inline">+ 0,5$</code> — jamais pile à l'entrée.</p></li>
+    </ol>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">local_functions.py</span><span class="file-desc">extrait — constantes + branche Scalping de manage_open_positions</span></div>
+      <pre><code>BREAK_EVEN_TRIGGER_USD = <span class="st">1.5</span>
+BREAK_EVEN_BUFFER_USD = <span class="st">0.5</span>
+QUICK_PROFIT_LOCK_USD = <span class="st">15.0</span>
+QUICK_PROFIT_TRAIL_DISTANCE_R = <span class="st">0.35</span>
+
+<span class="cm"># --- à l'intérieur de manage_open_positions(), pour une position Scalping ---</span>
+profit_usd = pos[<span class="st">"profit"</span>] <span class="kw">or</span> <span class="st">0</span>
+contract_size = resolve_contract_size(pos.get(<span class="st">"symbol"</span>))
+lot = pos.get(<span class="st">"lot"</span>) <span class="kw">or</span> <span class="st">0</span>
+
+<span class="kw">if</span> close_fn <span class="kw">and</span> profit_usd &gt;= QUICK_PROFIT_LOCK_USD:
+    tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
+    candidate = (pos[<span class="st">"current_price"</span>] - tight_offset) <span class="kw">if</span> direction == <span class="st">"BUY"</span> <span class="kw">else</span> (pos[<span class="st">"current_price"</span>] + tight_offset)
+    better = (candidate &gt; current_sl) <span class="kw">if</span> direction == <span class="st">"BUY"</span> <span class="kw">else</span> (candidate &lt; current_sl)
+    <span class="kw">if</span> better:
+        result = modify_fn(pos[<span class="st">"ticket"</span>], stop_loss=round(candidate, <span class="st">5</span>))
+        <span class="cm"># ... persiste trailing_stop, log "quick_profit_lock"</span>
+    <span class="kw">continue</span>
+
+<span class="kw">if</span> profit_usd &gt;= BREAK_EVEN_TRIGGER_USD:
+    <span class="kw">if not</span> at_breakeven_or_better <span class="kw">and</span> lot &gt; <span class="st">0</span>:
+        buffer_offset = BREAK_EVEN_BUFFER_USD / (lot * contract_size)
+        be_level = (entry_price + buffer_offset) <span class="kw">if</span> direction == <span class="st">"BUY"</span> <span class="kw">else</span> (entry_price - buffer_offset)
+        result = modify_fn(pos[<span class="st">"ticket"</span>], stop_loss=round(be_level, <span class="st">5</span>))
+        <span class="cm"># ... persiste trailing_stop, log "break_even"</span>
+    <span class="kw">continue</span></code></pre>
+    </div>
+    <p class="dim">Contrairement à Intraday/Swing, une position Scalping n'est <strong>jamais</strong> clôturée partiellement par paliers (TP1/TP2) — elle garde sa taille pleine jusqu'à l'un des deux seuils ci-dessus.</p>
+  </section>
+
+  <section id="pyramidage">
+    <h2><span class="n">08</span> Pyramidage et anti-doublon</h2>
+    <p>Le profil Scalping autorise jusqu'à <strong>5 positions même sens</strong> sur le même actif — chaque renfort est une décision fraîche, re-confirmée indépendamment à ≥80% de confiance, jamais un simple empilement automatique. Une direction opposée bloque tout nouvel ordre.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">tradingProfiles.js</span><span class="file-desc">extrait — configuration réelle du profil Scalping</span></div>
+      <pre><code>scalping: {
+  key: <span class="st">'scalping'</span>,
+  min_confidence: <span class="st">80</span>,
+  max_risk_percent: <span class="st">0.8</span>,
+  break_even_trigger: <span class="st">0.5</span>,
+  cycle_delay_ms: <span class="st">30000</span>,
+  max_concurrent_positions: <span class="st">5</span>,
+}</code></pre>
+    </div>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">AnalysisSessionStore.jsx</span><span class="file-desc">extrait — porte d'exposition (autoExecute)</span></div>
+      <pre><code><span class="kw">const</span> { maxConcurrentPositions } = getEffectiveSettings(configRef.current.params);
+<span class="kw">let</span> alreadyExposed = <span class="kw">false</span>;
+<span class="kw">const</span> symbolPositions = positions.filter((p) =&gt; p.symbol === decision.symbol);
+<span class="kw">const</span> symbolPending = pendingOrders.some((o) =&gt; o.symbol === decision.symbol);
+
+<span class="kw">if</span> (maxConcurrentPositions &gt; <span class="st">1</span>) {
+  <span class="cm">// N positions MÊME DIRECTION autorisées, chacune re-confirmée par un
+  // scan frais (min_confidence déjà re-vérifié plus haut). Direction
+  // opposée = jamais empilée, c'est le rôle de la clôture-retournement
+  // (section 09) de fermer l'existante à la place.</span>
+  <span class="kw">const</span> sameDirection = symbolPositions.filter((p) =&gt; p.direction === decision.decision).length;
+  <span class="kw">const</span> opposing = symbolPositions.length - sameDirection;
+  alreadyExposed = opposing &gt; <span class="st">0</span> || sameDirection &gt;= maxConcurrentPositions || symbolPending;
+} <span class="kw">else</span> {
+  alreadyExposed = symbolPositions.length &gt; <span class="st">0</span> || symbolPending;
+}
+
+<span class="kw">if</span> (alreadyExposed) {
+  <span class="cm">// log + return null — aucun ordre envoyé ce cycle</span>
+  <span class="kw">return</span> <span class="kw">null</span>;
+}</code></pre>
+    </div>
+  </section>
+
+  <section id="retournement">
+    <h2><span class="n">09</span> Clôture sur retournement — désactivée pour Scalping</h2>
+    <p>Quand un nouveau signal contredit une position déjà ouverte : Intraday/Swing ferment immédiatement (même en perte) ; Scalping laisse la position courir jusqu'à son propre stop, break-even ou verrou de profit — décision explicite du 15/08/2026 après 3 positions BTCUSD fermées en petite perte alors qu'elles n'avaient jamais atteint leur break-even.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">AnalysisSessionStore.jsx</span><span class="file-desc">extrait — branchement selon le profil</span></div>
+      <pre><code><span class="kw">if</span> (opposingPositions.length &gt; <span class="st">0</span>) {
+  <span class="kw">if</span> (tradingProfile !== <span class="st">'scalping'</span>) {
+    <span class="cm">// Intraday/Swing : ferme TOUTES les positions ouvertes dans l'ancien
+    // sens sur ce symbole, même en perte, avant le stop loss original.</span>
+    <span class="kw">for</span> (<span class="kw">const</span> pos <span class="kw">of</span> opposingPositions) {
+      <span class="kw">await</span> invokeConnector(<span class="st">'close_position'</span>, { ticket: pos.ticket });
+    }
+  } <span class="kw">else</span> {
+    <span class="cm">// Scalping : la position opposée est laissée courir jusqu'à son
+    // propre stop/BE/verrou de profit, aucune fermeture anticipée.</span>
+    <span class="kw">await</span> logEvent(<span class="st">'info'</span>, <span class="st">'trade'</span>,
+      `Retournement détecté sur ${sym} (Scalping) — position opposée existante, laissée courir`);
+  }
+} <span class="kw">else if</span> (staleOrders.length === <span class="st">0</span>) {
+  <span class="kw">await</span> autoExecute(decision, { positions, pendingOrders });
+}</code></pre>
+    </div>
+  </section>
+
+  <section id="parametres">
+    <h2><span class="n">10</span> Paramètres réels de production</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Paramètre</th><th>Valeur</th><th>Portée</th></tr></thead>
+        <tbody>
+          <tr><td>Actifs actifs</td><td class="num">XAUUSD, BTCUSD</td><td class="dim">Seuls deux actifs avec la restriction "zones uniquement" validée</td></tr>
+          <tr><td>Profil</td><td class="num">Scalping</td><td class="dim">Bougies M1, cycle 30s</td></tr>
+          <tr><td>Confiance minimum</td><td class="num">80%</td><td class="dim">Sous ce seuil, aucun ordre envoyé</td></tr>
+          <tr><td>Risque par trade</td><td class="num">0,8%</td><td class="dim">Ancrage — ajusté dynamiquement selon confiance/volatilité (×0,7 à ×1,6)</td></tr>
+          <tr><td>Positions simultanées max</td><td class="num">5</td><td class="dim">Même sens uniquement, par actif</td></tr>
+          <tr><td>Break-even (déclenchement)</td><td class="num">1,5$</td><td class="dim">Profit flottant réel</td></tr>
+          <tr><td>Break-even (marge)</td><td class="num">0,5$</td><td class="dim">Au-dessus/en-dessous de l'entrée</td></tr>
+          <tr><td>Verrou de profit rapide</td><td class="num">15$ / 0,35R</td><td class="dim">Seuil déclencheur / distance du trail</td></tr>
+          <tr><td>Stop-loss</td><td class="num">1,5 × ATR</td><td class="dim">Depuis le prix d'entrée</td></tr>
+          <tr><td>Take-profit 1 / 2</td><td class="num">3,0 × ATR / 5,0 × ATR</td><td class="dim">Non utilisés en paliers pour Scalping (position pleine jusqu'à BE/verrou)</td></tr>
+          <tr><td>Plancher de confiance global</td><td class="num">60%</td><td class="dim">Tous profils confondus</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="validation">
+    <h2><span class="n">11</span> Résultats de validation réels</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Test</th><th>Actif</th><th>Avant</th><th>Après</th><th>Écart</th></tr></thead>
+        <tbody>
+          <tr><td>Restriction zones uniquement</td><td>XAUUSD</td><td class="num">690,36$</td><td class="num">1328,82$</td><td class="num">+92%</td></tr>
+          <tr><td>Restriction zones uniquement</td><td>BTCUSD</td><td class="num">69,67$</td><td class="num">344,50$</td><td class="num">≈×5</td></tr>
+          <tr><td>Verrou de profit élargi</td><td>XAUUSD Scalping</td><td class="num">50,98$</td><td class="num">79,30$</td><td class="num">+56%</td></tr>
+          <tr><td>Pyramidage (max 5)</td><td>XAUUSD</td><td class="num">81,01$</td><td class="num">210,66$</td><td class="num">+160%</td></tr>
+          <tr><td>Pyramidage (max 5)</td><td>BTCUSD</td><td class="num">427,70$</td><td class="num">1488,83$</td><td class="num">+248%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="dim">Détail complet des fenêtres réelles testées : <code class="inline">Strategie/strategie_scalping_zones.html</code> et <code class="inline">Bilan/Bilan_2026-08-18.html</code> (même dossier projet).</p>
+  </section>
+
+  <section id="portage">
+    <h2><span class="n">12</span> Notes de portage vers une autre application</h2>
+    <p>Ce qui doit exister côté receveur pour reproduire la logique :</p>
+    <ol class="steps">
+      <li><strong>Format des bougies</strong><p>OHLCV avec un timestamp par bougie : <code class="inline">{time, open, high, low, close, tick_volume}</code>. Toutes les fonctions ci-dessus en dépendent directement.</p></li>
+      <li><strong>Historique minimum</strong><p>Au moins 80 bougies pour les FVG/Order Blocks (lookback par défaut), idéalement 200+ pour une structure fiable.</p></li>
+      <li><strong>Accès broker en direct</strong><p>Pour le dimensionnement réel : <code class="inline">contract_size</code>, <code class="inline">volume_min</code>, <code class="inline">volume_step</code>, <code class="inline">volume_max</code> du symbole, plus l'equity réelle du compte — jamais une valeur codée en dur.</p></li>
+      <li><strong>Boucle de gestion de position indépendante</strong><p>La section 07 doit tourner sur son propre cycle (idéalement ~1s), séparément du cycle d'analyse/décision — sinon le verrou de profit rapide réagit trop lentement à un retournement de marché.</p></li>
+      <li><strong>État des positions ouvertes par symbole</strong><p>La section 08 a besoin de connaître, à chaque cycle, la liste des positions réellement ouvertes (direction, ticket) pour calculer l'exposition — pas un état local mis en cache, une lecture fraîche du broker.</p></li>
+    </ol>
+    <div class="callout warn">
+      <div class="label">Ce qui n'est PAS inclus dans ce document</div>
+      <p>Le moteur <code class="inline">microstructure</code> (carnet d'ordres Hyperliquid, BTCUSD uniquement) dépend d'une source de données externe spécifique à ce projet, non reproductible sans son propre accès. XAUUSD fonctionne sans lui (2 moteurs seulement) ; BTCUSD perdrait une partie de son edge réel sans cette troisième source, mais resterait fonctionnel avec smart_money + liquidity seuls.</p>
+    </div>
+  </section>
+
+  <footer>
+    AlphaTrade Global · EA_Bridge (Python) + Dist (React/Electron) · Extraction du 18/08/2026 · Code copié tel quel depuis la production v1.0.5, non réécrit pour ce document
+  </footer>
+
+</div>
+</body>
+</html>
