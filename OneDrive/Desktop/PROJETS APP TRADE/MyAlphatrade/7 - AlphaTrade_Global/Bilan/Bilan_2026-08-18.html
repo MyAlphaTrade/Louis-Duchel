@@ -18,8 +18,11 @@
     --accent-text: #1f47ad;
     --good: #12805c;
     --good-bg: #e0f3ea;
+    --good-strong: #0a663f;
     --warn: #92650b;
     --warn-bg: #faedd0;
+    --danger: #b3382a;
+    --danger-bg: #fbe4e0;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
     --sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   }
@@ -37,8 +40,11 @@
       --accent-text: #9db6ff;
       --good: #4ad39a;
       --good-bg: #103324;
+      --good-strong: #6fe6b6;
       --warn: #f0b429;
       --warn-bg: #3a2c0d;
+      --danger: #ff8a7a;
+      --danger-bg: #3a1710;
     }
   }
   :root[data-theme="dark"] {
@@ -54,8 +60,11 @@
     --accent-text: #9db6ff;
     --good: #4ad39a;
     --good-bg: #103324;
+    --good-strong: #6fe6b6;
     --warn: #f0b429;
     --warn-bg: #3a2c0d;
+    --danger: #ff8a7a;
+    --danger-bg: #3a1710;
   }
 
   * { box-sizing: border-box; }
@@ -69,9 +78,9 @@
   }
   ::selection { background: var(--accent-dim); }
 
-  .wrap { max-width: 760px; margin: 0 auto; padding: 52px 24px 100px; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 52px 24px 100px; }
 
-  header.doc-head { margin-bottom: 40px; }
+  header.doc-head { margin-bottom: 36px; }
   .eyebrow {
     font-family: var(--mono);
     font-size: 12px;
@@ -91,15 +100,52 @@
   .subtitle {
     color: var(--text-dim);
     font-size: 16px;
-    max-width: 62ch;
+    max-width: 64ch;
     margin: 0 0 20px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: var(--accent-dim);
+    color: var(--accent-text);
+  }
+
+  /* --- Trajectory strip --- */
+  .trajectory {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 18px;
+    margin-top: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  .traj-block { display: flex; flex-direction: column; justify-content: center; }
+  .traj-date { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
+  .traj-value { font-family: var(--mono); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .traj-value.neg { color: var(--danger); }
+  .traj-value.pos { color: var(--good-strong); }
+  .traj-sub { font-size: 13px; color: var(--text-dim); margin-top: 6px; }
+  .traj-arrow { display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 22px; }
+  @media (max-width: 620px) {
+    .trajectory { grid-template-columns: 1fr; text-align: left; }
+    .traj-arrow { transform: rotate(90deg); padding: 4px 0; }
   }
 
   .kpi-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 12px;
-    margin-top: 24px;
+    margin-top: 16px;
   }
   .kpi {
     background: var(--surface);
@@ -139,7 +185,7 @@
     gap: 10px;
   }
   h2 .n { color: var(--text-faint); }
-  p { margin: 0 0 12px; color: var(--text); max-width: 66ch; }
+  p { margin: 0 0 12px; color: var(--text); max-width: 68ch; }
   p.dim { color: var(--text-dim); font-size: 14.5px; }
   strong { font-weight: 650; }
   code {
@@ -151,6 +197,24 @@
     border-radius: 5px;
   }
 
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); }
+  td.pos { color: var(--good-strong); font-weight: 620; }
+  td.neg { color: var(--danger); font-weight: 620; }
+  td.muted { color: var(--text-faint); }
+
   .item-list { display: flex; flex-direction: column; gap: 10px; }
   .item {
     background: var(--surface);
@@ -160,7 +224,7 @@
     padding: 14px 18px;
   }
   .item.rejected { border-left-color: var(--text-faint); }
-  .item.good { border-left-color: var(--good); }
+  .item.danger { border-left-color: var(--danger); }
   .item-title { font-weight: 620; margin-bottom: 4px; font-size: 15px; }
   .item-detail { font-size: 13.5px; color: var(--text-dim); }
   .item-result {
@@ -174,22 +238,8 @@
     padding: 2px 9px;
     border-radius: 100px;
   }
-  .item-result.pos { background: var(--good-bg); color: var(--good); }
+  .item-result.pos { background: var(--good-bg); color: var(--good-strong); }
   .item-result.neutral { background: var(--surface-2); color: var(--text-dim); }
-
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    padding: 3px 10px;
-    border-radius: 100px;
-    background: var(--accent-dim);
-    color: var(--accent-text);
-  }
 
   .callout {
     background: var(--surface-2);
@@ -198,6 +248,7 @@
     padding: 18px 20px;
   }
   .callout.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  .callout.good { background: var(--good-bg); border-color: color-mix(in srgb, var(--good) 30%, transparent); }
   .callout p:last-child { margin-bottom: 0; }
   .callout .label {
     font-family: var(--mono);
@@ -208,6 +259,7 @@
     margin-bottom: 8px;
   }
   .callout.warn .label { color: var(--warn); }
+  .callout.good .label { color: var(--good-strong); }
 
   ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
   ol.steps li {
@@ -247,6 +299,7 @@
   @media (max-width: 560px) {
     h1 { font-size: 25px; }
     .wrap { padding: 34px 16px 80px; }
+    table { font-size: 12.5px; }
   }
 </style>
 </head>
@@ -256,24 +309,33 @@
   <header class="doc-head">
     <div class="eyebrow">AlphaTrade Global — Bilan de journée</div>
     <h1>Mardi 18 août 2026</h1>
-    <p class="subtitle">Ce qui a changé aujourd'hui, où en est le système, et ce qui est planifié ensuite. Document court, destiné à toute l'équipe.</p>
+    <p class="subtitle">Ce qui a changé aujourd'hui, avec les vrais montants de chaque backtest, la trajectoire depuis le point de départ, et ce qui est planifié ensuite.</p>
     <span class="badge">Version déployée : 1.0.4</span>
+
+    <div class="trajectory">
+      <div class="traj-block">
+        <div class="traj-date">27–29 juillet · audit réel, 53 trades</div>
+        <div class="traj-value neg">-279,59 $</div>
+        <div class="traj-sub">Profit factor 0,32 — perdant malgré 64,2% de trades gagnants (gains microscopiques, pertes lourdes)</div>
+      </div>
+      <div class="traj-arrow">→</div>
+      <div class="traj-block">
+        <div class="traj-date">18 août · backtests réels validés</div>
+        <div class="traj-value pos">jusqu'à +248%</div>
+        <div class="traj-sub">Pyramidage BTCUSD (427,70$ → 1488,83$) — détail complet des tests au point 02</div>
+      </div>
+    </div>
 
     <div class="kpi-row">
       <div class="kpi">
-        <div class="kpi-label">Bugs réels corrigés</div>
+        <div class="kpi-label">Backtests réels aujourd'hui</div>
+        <div class="kpi-value">6</div>
+        <div class="kpi-sub">4 validés, 2 écartés</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Bugs de production corrigés</div>
         <div class="kpi-value">3</div>
-        <div class="kpi-sub">ETHUSD, SOLUSD, protection de perte</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Gain confirmé (backtest)</div>
-        <div class="kpi-value">×2,6 à ×3</div>
-        <div class="kpi-sub">Pyramidage, XAUUSD/BTCUSD</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Idées testées et écartées</div>
-        <div class="kpi-value">2</div>
-        <div class="kpi-sub">BE progressif (2 variantes)</div>
+        <div class="kpi-sub">ETHUSD, SOLUSD, protection perte</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Actifs actifs</div>
@@ -284,89 +346,116 @@
   </header>
 
   <section>
-    <h2><span class="n">01</span> Bugs réels corrigés</h2>
-    <div class="item-list">
-      <div class="item good">
-        <div class="item-title">Rejets d'ordres ETHUSD (INVALID_VOLUME)</div>
-        <div class="item-detail">Le calcul de taille de position n'avait pas de plafond — un stop serré en Scalping pouvait produire une taille bien supérieure au maximum autorisé par le broker. Un ordre était alors rejeté au lieu d'être simplement limité à la taille maximale permise.</div>
-      </div>
-      <div class="item good">
-        <div class="item-title">Rejets d'ordres SOLUSD (PRICE_DRIFT)</div>
-        <div class="item-detail">Le contrôle de fraîcheur du prix avant envoi n'avait pas de seuil minimum absolu — un tout petit mouvement de prix (normal, 0,07%) pouvait être jugé "trop grand" à tort à cause d'un stop très serré. Un plancher a été ajouté.</div>
-      </div>
-      <div class="item good">
-        <div class="item-title">Protection de perte journalière mal calibrée</div>
-        <div class="item-detail">Le capital de référence utilisé pour calculer la limite de perte était resté à sa valeur par défaut (1 000$) au lieu du capital réel du compte (~4 960$) — jamais configuré. Corrigé, et la protection a été désactivée à la demande explicite de Louis en attendant un réglage définitif.</div>
-      </div>
-    </div>
+    <h2><span class="n">01</span> D'où on est parti</h2>
+    <p>L'audit du 27-29 juillet, sur données réelles du compte (53 positions), avait montré une stratégie qui <strong>perdait de l'argent malgré un bon taux de réussite</strong> : 64,2% de trades gagnants, mais un gain moyen de +3,84$ contre une perte moyenne de -23,86$ — un rapport de 1 pour 6,2. Deux causes réelles identifiées : l'ancien bot fermait par erreur les positions du nouveau, et les "moteurs" d'analyse ne recevaient encore aucune vraie donnée de marché (les niveaux étaient devinés, pas calculés). Les deux ont été corrigées début août — c'est la base sur laquelle tout ce qui suit a été construit et testé.</p>
   </section>
 
   <section>
-    <h2><span class="n">02</span> Améliorations confirmées par test réel</h2>
-    <div class="item-list">
-      <div class="item">
-        <div class="item-title">Verrou de profit élargi</div>
-        <div class="item-detail">Le seuil de verrouillage rapide des gains a été élargi (5$ / 0,15R → 15$ / 0,35R) pour laisser plus de place aux trades avant de sécuriser le profit.</div>
-        <div class="item-result pos">XAUUSD Scalping : +56% de PnL sur la période testée</div>
-      </div>
-      <div class="item">
-        <div class="item-title">Moteurs d'analyse resserrés (zones uniquement)</div>
-        <div class="item-detail">Pour XAUUSD et BTCUSD, l'analyse se concentre désormais sur les moteurs de zones institutionnelles (Order Blocks/FVG, Support-Résistance, et carnet d'ordres pour BTC) plutôt que sur l'ensemble complet des moteurs.</div>
-        <div class="item-result pos">XAUUSD +92% · BTCUSD ≈ ×5 (validation sur 6 fenêtres réelles)</div>
-      </div>
-      <div class="item">
-        <div class="item-title">Clôture anticipée sur retournement désactivée (Scalping)</div>
-        <div class="item-detail">Une position ne se ferme plus automatiquement à perte dès que l'IA change d'avis — elle attend désormais son propre stop, break-even ou verrou de profit.</div>
-      </div>
-      <div class="item good">
-        <div class="item-title">Pyramidage confirmé actif et vérifié</div>
-        <div class="item-detail">Le système peut déjà empiler jusqu'à 5 positions dans le même sens en Scalping (chaque renfort étant une décision fraîche, revalidée). Un problème séparé (l'app tournait encore sur d'anciens réglages en mémoire) a été trouvé et corrigé aujourd'hui pour que ce mécanisme soit réellement actif en direct.</div>
-        <div class="item-result pos">XAUUSD +160% · BTCUSD +248% (drawdown quasiment inchangé)</div>
-      </div>
+    <h2><span class="n">02</span> Backtests réels d'aujourd'hui — validés et activés</h2>
+    <p class="dim">Chaque ligne = un test réel, sur données de marché réelles, avant/après isolé. Tout ce qui suit est déjà actif dans la version déployée.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Test</th><th>Actif</th><th>Fenêtre réelle</th><th>Avant</th><th>Après</th><th>Écart</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Renforts même sens (pyramidage, max 5)</td><td>XAUUSD</td><td class="num">13→18 août (~4,9 j)</td>
+            <td class="num">81,01 $ <span style="color:var(--text-faint)">(68 trades)</span></td>
+            <td class="num pos">210,66 $ <span style="color:var(--text-faint)">(132 trades)</span></td>
+            <td class="num pos">+160%</td>
+          </tr>
+          <tr>
+            <td>Renforts même sens (pyramidage, max 5)</td><td>BTCUSD</td><td class="num">16→18 août (~2,8 j)</td>
+            <td class="num">427,70 $ <span style="color:var(--text-faint)">(116 trades)</span></td>
+            <td class="num pos">1488,83 $ <span style="color:var(--text-faint)">(200 trades)</span></td>
+            <td class="num pos">+248%</td>
+          </tr>
+          <tr>
+            <td class="muted">↳ confirmé sur fenêtre plus longue</td><td class="muted">XAUUSD</td><td class="num muted">~7,8 j (8000 barres)</td>
+            <td class="num muted">187,61 $</td><td class="num muted">314,30 $</td><td class="num muted">×1,68</td>
+          </tr>
+          <tr>
+            <td class="muted">↳ confirmé sur fenêtre plus longue</td><td class="muted">BTCUSD</td><td class="num muted">~5,6 j (8000 barres)</td>
+            <td class="num muted">640,39 $</td><td class="num muted">1923,93 $</td><td class="num muted">×3,00</td>
+          </tr>
+          <tr>
+            <td>Moteurs resserrés sur les zones</td><td>XAUUSD</td><td class="num">6 × ~30 j réelles</td>
+            <td class="num">690,36 $</td><td class="num pos">1328,82 $</td><td class="num pos">+92%</td>
+          </tr>
+          <tr>
+            <td>Moteurs resserrés sur les zones</td><td>BTCUSD</td><td class="num">6 × ~30 j réelles</td>
+            <td class="num">69,67 $</td><td class="num pos">344,50 $</td><td class="num pos">≈ ×5</td>
+          </tr>
+          <tr>
+            <td>Verrou de profit élargi (5$→15$)</td><td>XAUUSD Scalping</td><td class="num">~4,5 j (M1)</td>
+            <td class="num">50,98 $</td><td class="num pos">79,30 $</td><td class="num pos">+56%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="dim">Les lignes grisées confirment le même test sur une fenêtre de temps différente — l'écart réel varie selon la période (×1,68 à ×3,00), mais reste toujours dans le même sens.</p>
+    <div class="callout good" style="margin-top:14px">
+      <div class="label">À noter</div>
+      <p>Le resserrement des moteurs (zones) et le pyramidage n'ont pas encore été testés ensemble dans le même backtest — chacun a été validé isolément. Un test combiné est une prochaine vérification simple, pas encore faite aujourd'hui.</p>
     </div>
   </section>
 
   <section>
     <h2><span class="n">03</span> Testé et écarté (transparence)</h2>
-    <p class="dim">Deux idées d'amélioration de la gestion de position ont été testées sur données réelles et n'ont pas donné de meilleurs résultats — elles restent désactivées dans le code plutôt que retirées, en cas de réexamen futur.</p>
+    <p class="dim">Deux idées testées sur données réelles n'ont pas donné de meilleurs résultats — gardées en mémoire (code désactivé) plutôt que retirées.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Test</th><th>Résultat réel</th><th>Décision</th></tr></thead>
+        <tbody>
+          <tr><td>Break-even progressif (par paliers de 2$/50%)</td><td class="num neg">-59% de PnL</td><td>Rejeté</td></tr>
+          <tr><td>Break-even progressif (% continu du pic)</td><td class="num neg">Dégradé (même sens)</td><td>Rejeté</td></tr>
+          <tr><td>Risque par trade 0,8% → 1,6%</td><td class="num">+19% PnL, mais ratio 0,66→0,37 et drawdown 2,26%→3,70%</td><td>Non retenu (compromis trop lourd)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span> Bugs de production corrigés</h2>
     <div class="item-list">
-      <div class="item rejected">
-        <div class="item-title">Break-even progressif (par paliers, puis en % continu du pic)</div>
-        <div class="item-detail">L'idée de faire remonter le stop de sécurité au fur et à mesure du gain, plutôt qu'en un seul saut, a été testée sous deux formes. Dans les deux cas, ça coupe les trades trop tôt avant qu'ils atteignent la zone de verrouillage élargie du point 02.</div>
-        <div class="item-result neutral">-59% de PnL dans le pire cas — non retenu</div>
+      <div class="item danger">
+        <div class="item-title">ETHUSD — rejets d'ordres (INVALID_VOLUME)</div>
+        <div class="item-detail">Taille de position calculée sans plafond : jusqu'à ~82 lots demandés contre un maximum broker réel de 10. Plafond ajouté.</div>
       </div>
-      <div class="item rejected">
-        <div class="item-title">Risque par trade augmenté (0,8% → 1,6%)</div>
-        <div class="item-detail">Testé isolément : plus de gain brut, mais le rapport gain/perte et le drawdown se dégradent nettement. Le pyramidage (point 02) a apporté un gain plus important sans ce compromis — cette piste n'a donc pas été activée.</div>
-        <div class="item-result neutral">+19% de PnL mais ratio 0,66→0,37 — non retenu</div>
+      <div class="item danger">
+        <div class="item-title">SOLUSD — rejets d'ordres (PRICE_DRIFT)</div>
+        <div class="item-detail">Dérive réelle de 0,055 jugée "trop grande" par un seuil relatif sans plancher (~0,03) — un simple mouvement normal de prix bloquait l'ordre. Plancher absolu ajouté (0,113).</div>
+      </div>
+      <div class="item danger">
+        <div class="item-title">Protection de perte journalière mal calibrée</div>
+        <div class="item-detail">Capital de référence resté à sa valeur par défaut (1 000$) au lieu du capital réel (~4 960$), jamais configuré. Corrigé, et désactivée temporairement à la demande de Louis en attendant un réglage définitif.</div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2><span class="n">04</span> Déployé aujourd'hui</h2>
+    <h2><span class="n">05</span> Déployé aujourd'hui</h2>
     <div class="callout">
       <div class="label">Version 1.0.4</div>
-      <p>Regroupe l'ensemble des corrections et améliorations ci-dessus. Publiée via mise à jour automatique — l'application déjà installée la détecte et l'affiche en interne, aucune réinstallation manuelle n'est nécessaire.</p>
+      <p>Regroupe l'ensemble des points 02 à 04 ci-dessus. Publiée via mise à jour automatique — l'application déjà installée la détecte et l'affiche en interne, aucune réinstallation manuelle n'est nécessaire.</p>
     </div>
   </section>
 
   <hr class="divider" />
 
   <section>
-    <h2><span class="n">05</span> Prochaine étape (pas encore construite)</h2>
-    <p><strong>Renforts et rebonds conscients des zones.</strong> Le pyramidage actuel (point 02) empile des renforts tant que la confiance reste haute, sans jamais regarder si le prix approche déjà une zone où il pourrait s'inverser. L'idée : rendre le système capable de suspendre ses renforts à l'approche d'une telle zone, puis soit de reprendre si le prix la casse réellement, soit d'ouvrir une position inverse justifiée si le prix la rejette.</p>
+    <h2><span class="n">06</span> Prochaine étape (pas encore construite)</h2>
+    <p><strong>Renforts et rebonds conscients des zones.</strong> Le pyramidage du point 02 empile des renforts tant que la confiance reste haute, sans jamais regarder si le prix approche déjà une zone où il pourrait s'inverser. L'idée : suspendre les renforts à l'approche d'une telle zone, reprendre si elle casse réellement, ou ouvrir une position inverse justifiée si elle est rejetée.</p>
     <ol class="steps">
       <li><p>Identifier la zone la plus proche dans le sens du trade en cours.</p></li>
       <li><p>Suspendre les nouveaux renforts quand le prix s'en approche.</p></li>
       <li><p>Cassure confirmée → reprise des renforts sur la zone suivante.</p></li>
       <li><p>Rejet de la zone → ouverture d'une position inverse justifiée.</p></li>
     </ol>
-
     <div class="callout warn" style="margin-top:20px">
       <div class="label">Ce qu'on en aurait tiré aujourd'hui</div>
-      <p>Honnêtement : aucun chiffre réel n'existe encore pour cette idée — elle n'a jamais été codée ni backtestée, donc lui inventer un pourcentage de gain serait trompeur. La prochaine étape est précisément de produire ce chiffre par un vrai test sur données réelles.</p>
-      <p><strong>Règle de mise en service :</strong> cette extension sera d'abord construite et backtestée séparément, exactement comme tout ce qui est listé au point 02 aujourd'hui. Elle ne sera activée en direct que si elle bat, sur données réelles, les résultats déjà obtenus aujourd'hui — jamais avant.</p>
+      <p>Aucun chiffre réel n'existe encore — jamais codée ni backtestée, donc pas de pourcentage inventé ici. Vu la tendance de tout ce qui a été testé cette semaine (point 02), c'est un signal encourageant pour la suite — mais comme toujours, seul un vrai backtest sur données réelles décidera. Elle ne sera activée en direct que si elle bat les chiffres du point 02, jamais avant.</p>
     </div>
   </section>
 
