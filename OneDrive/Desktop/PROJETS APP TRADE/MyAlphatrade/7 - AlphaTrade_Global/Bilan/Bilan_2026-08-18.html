@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Bilan du 18 août 2026</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --border: #dbdfe6;
+    --text: #171a21;
+    --text-dim: #565d6b;
+    --text-faint: #8b91a0;
+    --accent: #2856c9;
+    --accent-dim: #e1e9fb;
+    --accent-text: #1f47ad;
+    --good: #12805c;
+    --good-bg: #e0f3ea;
+    --warn: #92650b;
+    --warn-bg: #faedd0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0e13;
+      --surface: #12141b;
+      --surface-2: #181b24;
+      --border: #262b38;
+      --text: #e8eaf0;
+      --text-dim: #a1a7b8;
+      --text-faint: #666e82;
+      --accent: #6d93ff;
+      --accent-dim: #1c2740;
+      --accent-text: #9db6ff;
+      --good: #4ad39a;
+      --good-bg: #103324;
+      --warn: #f0b429;
+      --warn-bg: #3a2c0d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0e13;
+    --surface: #12141b;
+    --surface-2: #181b24;
+    --border: #262b38;
+    --text: #e8eaf0;
+    --text-dim: #a1a7b8;
+    --text-faint: #666e82;
+    --accent: #6d93ff;
+    --accent-dim: #1c2740;
+    --accent-text: #9db6ff;
+    --good: #4ad39a;
+    --good-bg: #103324;
+    --warn: #f0b429;
+    --warn-bg: #3a2c0d;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-dim); }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 52px 24px 100px; }
+
+  header.doc-head { margin-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 32px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+    max-width: 62ch;
+    margin: 0 0 20px;
+  }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 21px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-text);
+  }
+  .kpi-sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+
+  section { margin-bottom: 40px; }
+  h2 {
+    font-size: 13px;
+    font-family: var(--mono);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin: 0 0 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .n { color: var(--text-faint); }
+  p { margin: 0 0 12px; color: var(--text); max-width: 66ch; }
+  p.dim { color: var(--text-dim); font-size: 14.5px; }
+  strong { font-weight: 650; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 5px;
+  }
+
+  .item-list { display: flex; flex-direction: column; gap: 10px; }
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+  }
+  .item.rejected { border-left-color: var(--text-faint); }
+  .item.good { border-left-color: var(--good); }
+  .item-title { font-weight: 620; margin-bottom: 4px; font-size: 15px; }
+  .item-detail { font-size: 13.5px; color: var(--text-dim); }
+  .item-result {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 620;
+    margin-top: 7px;
+    padding: 2px 9px;
+    border-radius: 100px;
+  }
+  .item-result.pos { background: var(--good-bg); color: var(--good); }
+  .item-result.neutral { background: var(--surface-2); color: var(--text-dim); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: var(--accent-dim);
+    color: var(--accent-text);
+  }
+
+  .callout {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .callout.warn { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+  .callout.warn .label { color: var(--warn); }
+
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 36px;
+    margin-bottom: 12px;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 1px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.steps li p { margin: 0; font-size: 14px; }
+
+  .divider { height: 1px; background: var(--border); margin: 44px 0; border: none; }
+
+  footer {
+    color: var(--text-faint);
+    font-size: 12.5px;
+    font-family: var(--mono);
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 25px; }
+    .wrap { padding: 34px 16px 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <div class="eyebrow">AlphaTrade Global — Bilan de journée</div>
+    <h1>Mardi 18 août 2026</h1>
+    <p class="subtitle">Ce qui a changé aujourd'hui, où en est le système, et ce qui est planifié ensuite. Document court, destiné à toute l'équipe.</p>
+    <span class="badge">Version déployée : 1.0.4</span>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Bugs réels corrigés</div>
+        <div class="kpi-value">3</div>
+        <div class="kpi-sub">ETHUSD, SOLUSD, protection de perte</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Gain confirmé (backtest)</div>
+        <div class="kpi-value">×2,6 à ×3</div>
+        <div class="kpi-sub">Pyramidage, XAUUSD/BTCUSD</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Idées testées et écartées</div>
+        <div class="kpi-value">2</div>
+        <div class="kpi-sub">BE progressif (2 variantes)</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Actifs actifs</div>
+        <div class="kpi-value">XAUUSD, BTCUSD</div>
+        <div class="kpi-sub">4 autres mis en pause</div>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="n">01</span> Bugs réels corrigés</h2>
+    <div class="item-list">
+      <div class="item good">
+        <div class="item-title">Rejets d'ordres ETHUSD (INVALID_VOLUME)</div>
+        <div class="item-detail">Le calcul de taille de position n'avait pas de plafond — un stop serré en Scalping pouvait produire une taille bien supérieure au maximum autorisé par le broker. Un ordre était alors rejeté au lieu d'être simplement limité à la taille maximale permise.</div>
+      </div>
+      <div class="item good">
+        <div class="item-title">Rejets d'ordres SOLUSD (PRICE_DRIFT)</div>
+        <div class="item-detail">Le contrôle de fraîcheur du prix avant envoi n'avait pas de seuil minimum absolu — un tout petit mouvement de prix (normal, 0,07%) pouvait être jugé "trop grand" à tort à cause d'un stop très serré. Un plancher a été ajouté.</div>
+      </div>
+      <div class="item good">
+        <div class="item-title">Protection de perte journalière mal calibrée</div>
+        <div class="item-detail">Le capital de référence utilisé pour calculer la limite de perte était resté à sa valeur par défaut (1 000$) au lieu du capital réel du compte (~4 960$) — jamais configuré. Corrigé, et la protection a été désactivée à la demande explicite de Louis en attendant un réglage définitif.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span> Améliorations confirmées par test réel</h2>
+    <div class="item-list">
+      <div class="item">
+        <div class="item-title">Verrou de profit élargi</div>
+        <div class="item-detail">Le seuil de verrouillage rapide des gains a été élargi (5$ / 0,15R → 15$ / 0,35R) pour laisser plus de place aux trades avant de sécuriser le profit.</div>
+        <div class="item-result pos">XAUUSD Scalping : +56% de PnL sur la période testée</div>
+      </div>
+      <div class="item">
+        <div class="item-title">Moteurs d'analyse resserrés (zones uniquement)</div>
+        <div class="item-detail">Pour XAUUSD et BTCUSD, l'analyse se concentre désormais sur les moteurs de zones institutionnelles (Order Blocks/FVG, Support-Résistance, et carnet d'ordres pour BTC) plutôt que sur l'ensemble complet des moteurs.</div>
+        <div class="item-result pos">XAUUSD +92% · BTCUSD ≈ ×5 (validation sur 6 fenêtres réelles)</div>
+      </div>
+      <div class="item">
+        <div class="item-title">Clôture anticipée sur retournement désactivée (Scalping)</div>
+        <div class="item-detail">Une position ne se ferme plus automatiquement à perte dès que l'IA change d'avis — elle attend désormais son propre stop, break-even ou verrou de profit.</div>
+      </div>
+      <div class="item good">
+        <div class="item-title">Pyramidage confirmé actif et vérifié</div>
+        <div class="item-detail">Le système peut déjà empiler jusqu'à 5 positions dans le même sens en Scalping (chaque renfort étant une décision fraîche, revalidée). Un problème séparé (l'app tournait encore sur d'anciens réglages en mémoire) a été trouvé et corrigé aujourd'hui pour que ce mécanisme soit réellement actif en direct.</div>
+        <div class="item-result pos">XAUUSD +160% · BTCUSD +248% (drawdown quasiment inchangé)</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span> Testé et écarté (transparence)</h2>
+    <p class="dim">Deux idées d'amélioration de la gestion de position ont été testées sur données réelles et n'ont pas donné de meilleurs résultats — elles restent désactivées dans le code plutôt que retirées, en cas de réexamen futur.</p>
+    <div class="item-list">
+      <div class="item rejected">
+        <div class="item-title">Break-even progressif (par paliers, puis en % continu du pic)</div>
+        <div class="item-detail">L'idée de faire remonter le stop de sécurité au fur et à mesure du gain, plutôt qu'en un seul saut, a été testée sous deux formes. Dans les deux cas, ça coupe les trades trop tôt avant qu'ils atteignent la zone de verrouillage élargie du point 02.</div>
+        <div class="item-result neutral">-59% de PnL dans le pire cas — non retenu</div>
+      </div>
+      <div class="item rejected">
+        <div class="item-title">Risque par trade augmenté (0,8% → 1,6%)</div>
+        <div class="item-detail">Testé isolément : plus de gain brut, mais le rapport gain/perte et le drawdown se dégradent nettement. Le pyramidage (point 02) a apporté un gain plus important sans ce compromis — cette piste n'a donc pas été activée.</div>
+        <div class="item-result neutral">+19% de PnL mais ratio 0,66→0,37 — non retenu</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span> Déployé aujourd'hui</h2>
+    <div class="callout">
+      <div class="label">Version 1.0.4</div>
+      <p>Regroupe l'ensemble des corrections et améliorations ci-dessus. Publiée via mise à jour automatique — l'application déjà installée la détecte et l'affiche en interne, aucune réinstallation manuelle n'est nécessaire.</p>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <h2><span class="n">05</span> Prochaine étape (pas encore construite)</h2>
+    <p><strong>Renforts et rebonds conscients des zones.</strong> Le pyramidage actuel (point 02) empile des renforts tant que la confiance reste haute, sans jamais regarder si le prix approche déjà une zone où il pourrait s'inverser. L'idée : rendre le système capable de suspendre ses renforts à l'approche d'une telle zone, puis soit de reprendre si le prix la casse réellement, soit d'ouvrir une position inverse justifiée si le prix la rejette.</p>
+    <ol class="steps">
+      <li><p>Identifier la zone la plus proche dans le sens du trade en cours.</p></li>
+      <li><p>Suspendre les nouveaux renforts quand le prix s'en approche.</p></li>
+      <li><p>Cassure confirmée → reprise des renforts sur la zone suivante.</p></li>
+      <li><p>Rejet de la zone → ouverture d'une position inverse justifiée.</p></li>
+    </ol>
+
+    <div class="callout warn" style="margin-top:20px">
+      <div class="label">Ce qu'on en aurait tiré aujourd'hui</div>
+      <p>Honnêtement : aucun chiffre réel n'existe encore pour cette idée — elle n'a jamais été codée ni backtestée, donc lui inventer un pourcentage de gain serait trompeur. La prochaine étape est précisément de produire ce chiffre par un vrai test sur données réelles.</p>
+      <p><strong>Règle de mise en service :</strong> cette extension sera d'abord construite et backtestée séparément, exactement comme tout ce qui est listé au point 02 aujourd'hui. Elle ne sera activée en direct que si elle bat, sur données réelles, les résultats déjà obtenus aujourd'hui — jamais avant.</p>
+    </div>
+  </section>
+
+  <footer>
+    AlphaTrade Global · Bilan quotidien #1 · Prochain bilan : à la fin de la prochaine journée de travail
+  </footer>
+
+</div>
+</body>
+</html>
