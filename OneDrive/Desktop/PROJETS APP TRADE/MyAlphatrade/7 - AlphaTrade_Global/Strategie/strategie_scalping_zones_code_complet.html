@@ -249,7 +249,7 @@
           <tr><td><strong>Order Blocks</strong></td><td class="dim">Dernière bougie opposée avant un mouvement impulsif (&gt;1,5×ATR)</td><td class="dim">Smart Money</td><td class="dim">Zone institutionnelle probable d'entrée d'ordres</td></tr>
           <tr><td><strong>Zones de liquidité</strong></td><td class="dim">Plus hauts/bas égaux (±0,05%)</td><td class="dim">Liquidity</td><td class="dim">Zones où les ordres stop se regroupent</td></tr>
           <tr><td><strong>Sweep de liquidité</strong></td><td class="dim">Mèche au-delà d'une zone puis clôture de l'autre côté</td><td class="dim">Liquidity</td><td class="dim">Signale une prise de liquidité avant retournement probable</td></tr>
-          <tr><td><strong>Carnet d'ordres (order flow)</strong></td><td class="dim">Données réelles Hyperliquid (BTCUSD uniquement)</td><td class="dim">Microstructure</td><td class="dim">Déséquilibre acheteur/vendeur réel, hors périmètre de ce document (source externe)</td></tr>
+          <tr><td><strong>Carnet d'ordres (order flow)</strong></td><td class="dim">Données réelles Hyperliquid (BTCUSD uniquement)</td><td class="dim">Microstructure</td><td class="dim">Déséquilibre acheteur/vendeur réel (OBI) — code complet en section 04, nécessite un accès API Hyperliquid côté receveur</td></tr>
         </tbody>
       </table>
     </div>
@@ -440,7 +440,12 @@
 
   <section id="scoring">
     <h2><span class="n">04</span> Scoring des moteurs actifs</h2>
-    <p>Seuls <strong>2 à 3 moteurs sur 13</strong> pèsent réellement dans la décision (voir section 05) : <code class="inline">smart_money</code>, <code class="inline">liquidity</code>, et pour BTCUSD uniquement <code class="inline">microstructure</code> (carnet d'ordres Hyperliquid, source externe non incluse ici). Chacun retourne une direction (haussier/baissier/neutre) et un niveau de confiance 0-100.</p>
+    <p>Seuls <strong>2 à 3 moteurs sur 13</strong> pèsent réellement dans la décision (voir section 05) : <code class="inline">smart_money</code>, <code class="inline">liquidity</code>, et pour BTCUSD uniquement <code class="inline">microstructure</code> (carnet d'ordres Hyperliquid réel — code complet plus bas, ce n'est plus hors périmètre).</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">engine_scoring.py</span><span class="file-desc">extrait — _clamp (utilisé par tous les moteurs)</span></div>
+      <pre><code><span class="kw">def</span> <span class="df">_clamp</span>(v, lo=<span class="st">0</span>, hi=<span class="st">100</span>):
+    <span class="kw">return</span> max(lo, min(hi, round(v)))</code></pre>
+    </div>
     <div class="file-card">
       <div class="file-head"><span class="file-name">engine_scoring.py</span><span class="file-desc">extrait — score_smart_money, score_liquidity</span></div>
       <pre><code><span class="kw">def</span> <span class="df">score_smart_money</span>(ctx):
@@ -506,6 +511,51 @@ ZONE_ONLY_CUT_MULTIPLIER = <span class="st">0.0</span>
       <div class="label">Poids d'origine (avant coupe)</div>
       <p><code class="inline">smart_money: 12</code> · <code class="inline">liquidity: 8</code> · <code class="inline">microstructure: 15</code> (le plus élevé de tous, BTCUSD uniquement) — sur un total de 13 moteurs pondérés dont les 10 ou 11 autres sont ramenés à zéro pour ces deux actifs.</p>
     </div>
+
+    <h3>Moteur microstructure (BTCUSD uniquement) — code réel, pas une approximation</h3>
+    <p>Contrairement à un simple <code class="inline">bullish/bearish/neutral → confiance fixe</code>, la confiance est <strong>linéairement proportionnelle à l'intensité réelle du déséquilibre du carnet d'ordres</strong> (OBI, Hyperliquid), pas une valeur devinée.</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">hyperliquid_connector.py</span><span class="file-desc">extrait — OBI réel + biais</span></div>
+      <pre><code>OBI_DEPTH = <span class="st">10</span>  <span class="cm"># N niveaux de prix de chaque côté du carnet</span>
+OBI_PRESSURE_THRESHOLD = <span class="st">0.15</span>  <span class="cm"># |OBI| en dessous = "neutral"</span>
+
+<span class="kw">def</span> <span class="df">order_book_imbalance</span>(book, depth=OBI_DEPTH):
+    <span class="cm"># OBI = (volume_achat - volume_vente) / (volume_achat + volume_vente)
+    # +1 = pression 100% acheteuse, -1 = pression 100% vendeuse, 0 = équilibré</span>
+    bid_vol = sum(float(lvl[<span class="st">"sz"</span>]) <span class="kw">for</span> lvl <span class="kw">in</span> book[<span class="st">"bids"</span>][:depth])
+    ask_vol = sum(float(lvl[<span class="st">"sz"</span>]) <span class="kw">for</span> lvl <span class="kw">in</span> book[<span class="st">"asks"</span>][:depth])
+    total = bid_vol + ask_vol
+    <span class="kw">if</span> total &lt;= <span class="st">0</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">return</span> {<span class="st">"obi"</span>: round((bid_vol - ask_vol) / total, <span class="st">4</span>), <span class="st">"bid_volume"</span>: round(bid_vol, <span class="st">4</span>), <span class="st">"ask_volume"</span>: round(ask_vol, <span class="st">4</span>)}
+
+<span class="kw">def</span> <span class="df">_pressure_from_obi</span>(obi):
+    <span class="kw">if</span> obi <span class="kw">is None</span>:
+        <span class="kw">return</span> <span class="st">"unknown"</span>
+    <span class="kw">if</span> obi &gt; OBI_PRESSURE_THRESHOLD:
+        <span class="kw">return</span> <span class="st">"bullish"</span>
+    <span class="kw">if</span> obi &lt; -OBI_PRESSURE_THRESHOLD:
+        <span class="kw">return</span> <span class="st">"bearish"</span>
+    <span class="kw">return</span> <span class="st">"neutral"</span></code></pre>
+    </div>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">market_brain.py</span><span class="file-desc">extrait — _microstructure_engine_result (confiance dynamique)</span></div>
+      <pre><code>MICROSTRUCTURE_CONFIDENCE_BASE = <span class="st">35</span>
+MICROSTRUCTURE_CONFIDENCE_MAX = <span class="st">85</span>
+
+<span class="kw">def</span> <span class="df">_microstructure_engine_result</span>(symbol):
+    <span class="cm"># coin = "BTC" ou "ETH" selon le symbole ; None sinon -> moteur absent
+    # snapshot = dernier CryptoIntelSnapshot réel stocké (Hyperliquid)
+    # pressure = biais déjà calculé par _pressure_from_obi ci-dessus
+    # obi = déséquilibre réel du carnet, même source que pressure</span>
+    threshold = hyperliquid_connector.OBI_PRESSURE_THRESHOLD
+    span = max(<span class="st">1e-9</span>, <span class="st">1.0</span> - threshold)
+    frac = max(<span class="st">0.0</span>, min(<span class="st">1.0</span>, (abs(obi) - threshold) / span))
+    confidence = round(MICROSTRUCTURE_CONFIDENCE_BASE + frac * (MICROSTRUCTURE_CONFIDENCE_MAX - MICROSTRUCTURE_CONFIDENCE_BASE))
+    <span class="kw">return</span> {<span class="st">"id"</span>: <span class="st">"microstructure"</span>, <span class="st">"bias"</span>: pressure, <span class="st">"confidence"</span>: confidence,
+            <span class="st">"findings"</span>: [f<span class="st">"Hyperliquid {coin}: OBI {obi:.2f}, funding {funding_rate}, OI {open_interest:.0f}"</span>]}</code></pre>
+    </div>
+    <p class="dim">Concret : OBI tout juste au-dessus du seuil (0,16) → confiance ≈35. Carnet totalement déséquilibré (OBI=1,0) → confiance ≈85. Une confiance fixe (ex. 65) est une approximation raisonnable en moyenne, mais pas la vraie mécanique.</p>
   </section>
 
   <section id="fusion">
@@ -558,6 +608,34 @@ STRUCTURALLY_NEUTRAL_ENGINES = {<span class="st">"volatility"</span>, <span clas
       </table>
     </div>
 
+    <h3>Risque dynamique (Scalping uniquement) — code réel du multiplicateur</h3>
+    <p>Le risque de 0,8% n'est pas fixe pour le Scalping — c'est un point d'ancrage que ce multiplicateur fait varier : ×0,7 à ×1,6 selon la confiance réelle de la décision, multiplié par ×0,7 à ×1,3 selon le régime de volatilité réel de l'instrument (donc ×0,49 à ×2,08 au total dans les cas extrêmes).</p>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">market_brain.py</span><span class="file-desc">extrait — _dynamic_risk_multiplier</span></div>
+      <pre><code>DYNAMIC_LOT_CONFIDENCE_MIN_MULT = <span class="st">0.7</span>   <span class="cm"># au plancher de confiance du profil</span>
+DYNAMIC_LOT_CONFIDENCE_MAX_MULT = <span class="st">1.6</span>   <span class="cm"># à confiance = 100</span>
+DYNAMIC_LOT_VOLATILITY_MULT = {<span class="st">"expansion"</span>: <span class="st">1.3</span>, <span class="st">"normal"</span>: <span class="st">1.0</span>, <span class="st">"compression"</span>: <span class="st">0.7</span>}
+
+<span class="kw">def</span> <span class="df">_dynamic_risk_multiplier</span>(confidence, min_confidence, volatility):
+    span = max(<span class="st">1</span>, <span class="st">100</span> - min_confidence)
+    conf_frac = max(<span class="st">0.0</span>, min(<span class="st">1.0</span>, (confidence - min_confidence) / span))
+    conf_mult = DYNAMIC_LOT_CONFIDENCE_MIN_MULT + conf_frac * (DYNAMIC_LOT_CONFIDENCE_MAX_MULT - DYNAMIC_LOT_CONFIDENCE_MIN_MULT)
+    vol_mult = DYNAMIC_LOT_VOLATILITY_MULT.get(volatility, <span class="st">1.0</span>)
+    <span class="kw">return</span> conf_mult * vol_mult
+
+<span class="cm"># Utilisation : effective_risk_percent = round(0.8 * _dynamic_risk_multiplier(...), 3)</span></code></pre>
+    </div>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">market_regime.py</span><span class="file-desc">extrait — d'où vient "volatility" (expansion/normal/compression)</span></div>
+      <pre><code>VOLATILITY_EXPANSION_RATIO = <span class="st">1.3</span>
+VOLATILITY_COMPRESSION_RATIO = <span class="st">0.7</span>
+
+<span class="cm"># atr_ratio = ATR(14) actuel / moyenne des 30 derniers ATR valides
+# atr_ratio > 1.3  -> "expansion"
+# atr_ratio < 0.7  -> "compression"
+# sinon            -> "normal"</span></code></pre>
+    </div>
+
     <h3>Stop-loss et take-profit — multiples d'ATR</h3>
     <div class="file-card">
       <div class="file-head"><span class="file-name">market_brain.py</span><span class="file-desc">extrait — calcul SL/TP</span></div>
@@ -604,7 +682,31 @@ STRUCTURALLY_NEUTRAL_ENGINES = {<span class="st">"volatility"</span>, <span clas
         lot = min(volume_max, lot)
     <span class="kw">return</span> round(lot, <span class="st">4</span>)</code></pre>
     </div>
-    <p class="dim"><code class="inline">contract_size</code> vient en priorité de MT5 en direct (<code class="inline">symbol_info().trade_contract_size</code>) ; à défaut, table de repli — <code class="inline">XAUUSD: 100</code>, <code class="inline">BTCUSD: 1</code>. <code class="inline">volume_min</code>/<code class="inline">volume_step</code>/<code class="inline">volume_max</code> viennent aussi en direct de MT5 (limites réelles du broker) — sans plafond, un stop très serré peut faire exploser le lot calculé bien au-delà du maximum autorisé (incident réel corrigé le 15/08/2026).</p>
+    <p class="dim"><code class="inline">contract_size</code> vient en priorité de MT5 en direct (<code class="inline">symbol_info().trade_contract_size</code>) ; à défaut, <code class="inline">resolve_contract_size()</code> ci-dessous. <code class="inline">volume_min</code>/<code class="inline">volume_step</code>/<code class="inline">volume_max</code> viennent aussi en direct de MT5 (limites réelles du broker) — sans plafond, un stop très serré peut faire exploser le lot calculé bien au-delà du maximum autorisé (incident réel corrigé le 15/08/2026).</p>
+
+    <h3>resolve_contract_size() — code complet (repli seulement, sans impact si MT5 est lu en direct)</h3>
+    <div class="file-card">
+      <div class="file-head"><span class="file-name">local_functions.py</span><span class="file-desc">extrait complet — CONTRACT_SIZES, _deriv_synthetic_contract_size, resolve_contract_size</span></div>
+      <pre><code>CONTRACT_SIZES = {
+    <span class="st">"XAUUSD"</span>: <span class="st">100</span>, <span class="st">"EURUSD"</span>: <span class="st">100000</span>, <span class="st">"GBPUSD"</span>: <span class="st">100000</span>, <span class="st">"USDJPY"</span>: <span class="st">100000</span>,
+    <span class="st">"BTCUSD"</span>: <span class="st">1</span>, <span class="st">"ETHUSD"</span>: <span class="st">1</span>, <span class="st">"SOLUSD"</span>: <span class="st">1</span>, <span class="st">"SP500"</span>: <span class="st">50</span>, <span class="st">"NAS100"</span>: <span class="st">20</span>,
+}
+
+<span class="kw">def</span> <span class="df">_deriv_synthetic_contract_size</span>(symbol):
+    <span class="cm"># Regle reelle confirmee sur 71 symboles synthetiques Deriv reels :
+    # seule la presence de "STEP" dans le nom determine 10.0 vs 1.0</span>
+    norm = re.sub(<span class="st">r"\s+"</span>, <span class="st">""</span>, (symbol <span class="kw">or</span> <span class="st">""</span>).upper())
+    <span class="kw">if not</span> re.search(<span class="st">r"(BOOM|CRASH|STEP|VOLATILITY|JUMP|RANGEBREAK|VOLOVER|SPOTUP)"</span>, norm):
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">return</span> <span class="st">10.0</span> <span class="kw">if</span> <span class="st">"STEP"</span> <span class="kw">in</span> norm <span class="kw">else</span> <span class="st">1.0</span>
+
+<span class="kw">def</span> <span class="df">resolve_contract_size</span>(symbol):
+    key = (symbol <span class="kw">or</span> <span class="st">""</span>).upper()
+    <span class="kw">if</span> key <span class="kw">in</span> CONTRACT_SIZES:
+        <span class="kw">return</span> CONTRACT_SIZES[key]
+    synthetic = _deriv_synthetic_contract_size(symbol)
+    <span class="kw">return</span> synthetic <span class="kw">if</span> synthetic <span class="kw">is not None</span> <span class="kw">else</span> <span class="st">100000</span>  <span class="cm"># repli Forex</span></code></pre>
+    </div>
   </section>
 
   <section id="management">
@@ -644,6 +746,11 @@ lot = pos.get(<span class="st">"lot"</span>) <span class="kw">or</span> <span cl
     <span class="kw">continue</span></code></pre>
     </div>
     <p class="dim">Contrairement à Intraday/Swing, une position Scalping n'est <strong>jamais</strong> clôturée partiellement par paliers (TP1/TP2) — elle garde sa taille pleine jusqu'à l'un des deux seuils ci-dessus.</p>
+
+    <div class="callout warn">
+      <div class="label">Piège réel — deux valeurs différentes pour "break-even trigger"</div>
+      <p><code class="inline">tradingProfiles.js</code> déclare <code class="inline">break_even_trigger: 0.5</code> pour le profil Scalping. Ce champ est <strong>mort pour le Scalping</strong> : la branche Scalping de <code class="inline">manage_open_positions()</code> ci-dessus utilise directement la constante <code class="inline">BREAK_EVEN_TRIGGER_USD = 1,5$</code> en dur — elle ne lit jamais <code class="inline">params["break_even_trigger"]</code>. Ce paramètre n'est consommé que par la branche générique à multiples de R (<code class="inline">be_trigger = params.get("break_even_trigger") or DEFAULT_BREAK_EVEN_TRIGGER</code>), utilisée uniquement par Intraday/Swing. <strong>1,5$ est la seule valeur qui gouverne réellement le Scalping</strong> — vérifié dans le code, pas une supposition.</p>
+    </div>
   </section>
 
   <section id="pyramidage">
@@ -756,13 +863,11 @@ lot = pos.get(<span class="st">"lot"</span>) <span class="kw">or</span> <span cl
       <li><strong>Format des bougies</strong><p>OHLCV avec un timestamp par bougie : <code class="inline">{time, open, high, low, close, tick_volume}</code>. Toutes les fonctions ci-dessus en dépendent directement.</p></li>
       <li><strong>Historique minimum</strong><p>Au moins 80 bougies pour les FVG/Order Blocks (lookback par défaut), idéalement 200+ pour une structure fiable.</p></li>
       <li><strong>Accès broker en direct</strong><p>Pour le dimensionnement réel : <code class="inline">contract_size</code>, <code class="inline">volume_min</code>, <code class="inline">volume_step</code>, <code class="inline">volume_max</code> du symbole, plus l'equity réelle du compte — jamais une valeur codée en dur.</p></li>
+      <li><strong>Régime de volatilité par instrument</strong><p>Pour le risque dynamique (section 05) : un calcul ATR-ratio type <code class="inline">market_regime.py</code> (expansion/normal/compression), recalculé à chaque décision.</p></li>
       <li><strong>Boucle de gestion de position indépendante</strong><p>La section 07 doit tourner sur son propre cycle (idéalement ~1s), séparément du cycle d'analyse/décision — sinon le verrou de profit rapide réagit trop lentement à un retournement de marché.</p></li>
       <li><strong>État des positions ouvertes par symbole</strong><p>La section 08 a besoin de connaître, à chaque cycle, la liste des positions réellement ouvertes (direction, ticket) pour calculer l'exposition — pas un état local mis en cache, une lecture fraîche du broker.</p></li>
+      <li><strong>Accès API Hyperliquid (BTCUSD uniquement)</strong><p>Pour le moteur microstructure (section 04) : un appel <code class="inline">l2Book</code> public Hyperliquid, rafraîchi périodiquement et stocké (le code ne l'appelle pas en direct à chaque décision). XAUUSD fonctionne sans lui (2 moteurs seulement).</p></li>
     </ol>
-    <div class="callout warn">
-      <div class="label">Ce qui n'est PAS inclus dans ce document</div>
-      <p>Le moteur <code class="inline">microstructure</code> (carnet d'ordres Hyperliquid, BTCUSD uniquement) dépend d'une source de données externe spécifique à ce projet, non reproductible sans son propre accès. XAUUSD fonctionne sans lui (2 moteurs seulement) ; BTCUSD perdrait une partie de son edge réel sans cette troisième source, mais resterait fonctionnel avec smart_money + liquidity seuls.</p>
-    </div>
   </section>
 
   <footer>
