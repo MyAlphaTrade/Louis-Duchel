@@ -1355,8 +1355,16 @@ def daily_goal_status(params):
     daily_goal_amount/max_daily_loss_amount (fixed $, settable in Settings)
     take precedence when set — most users think in dollars, not in percent
     of a capital figure they may never have configured. Falls back to the
-    original percent-of-capital calculation for backward compatibility."""
+    original percent-of-capital calculation for backward compatibility.
+
+    override_active (2026-08-19, real Louis request — mirrors AlphaTrade
+    Gold's "Nouvelle session" button/NEW_SESSION command): a same-day opt-in
+    to keep trading past the goal/loss limit, set via daily_goal_override()
+    below. Stored as a single date stamp on Parameter — naturally expires
+    the moment _local_today() rolls over, no reset job needed, and never
+    touches the real pnl/trade history it's layered on top of."""
     capital = params.get("capital") or 1000
+    today = _local_today()
     today_trades = _today_closed_trades()
     pnl = sum(t.get("pnl") or 0 for t in today_trades)
 
@@ -1368,15 +1376,42 @@ def daily_goal_status(params):
     goal_reached = goal_amount > 0 and pnl >= goal_amount
     protection_triggered = loss_limit > 0 and pnl <= -loss_limit
     progress_pct = round(min(100, max(0, pnl / goal_amount * 100))) if goal_amount > 0 else 0
+    override_active = params.get("daily_override_date") == today
     return {
         "pnl": round(pnl, 2), "goal_amount": round(goal_amount, 2), "loss_limit": round(loss_limit, 2),
         "progress_pct": progress_pct, "goal_reached": goal_reached, "protection_triggered": protection_triggered,
-        "stop_trading": goal_reached or protection_triggered,
+        "override_active": override_active,
+        "stop_trading": (goal_reached or protection_triggered) and not override_active,
     }
+
+
+def daily_goal_override(params):
+    """Real user-initiated override (2026-08-19) — lets today's goal/loss
+    limit be bypassed for the rest of THIS calendar day only, same intent
+    as AlphaTrade Gold's NEW_SESSION command. Unlike Gold, Global has no
+    separate "session" concept — pnl is always the real sum of today's
+    closed trades — so there is nothing to reset here: the override just
+    stops daily_goal_status() from blocking new entries; the real pnl and
+    trade history it was computed from are untouched."""
+    today = _local_today()
+    params_list = list_entities("Parameter", sort="-created_date", limit=1)
+    if params_list:
+        update_entity("Parameter", params_list[0]["id"], {"daily_override_date": today})
+    else:
+        create_entity("Parameter", {"daily_override_date": today})
+    create_entity("AppLog", {
+        "level": "info", "category": "trade",
+        "message": f"Limite journalière levée manuellement — trading autonome reprend pour le reste du {today}.",
+        "source": "dailyGoalOverride", "payload": {},
+    })
+    return {"ok": True, "override_active": True, "date": today}
 
 
 def score_daily_goal(params):
     status = daily_goal_status(params)
+    if status["override_active"] and (status["protection_triggered"] or status["goal_reached"]):
+        return {"confidence": status["progress_pct"], "bias": "neutral", "findings": [
+            f"Limite du jour atteinte mais reprise manuelle activée — trading autonome continue (PnL: {status['pnl']:.2f}$)"]}
     if status["protection_triggered"]:
         return {"confidence": 100, "bias": "neutral", "findings": [
             f"Protection de capital déclenchée : perte du jour {status['pnl']:.2f}$ ≥ limite -{status['loss_limit']:.2f}$ — trading autonome arrêté pour aujourd'hui"]}

@@ -2238,6 +2238,13 @@ def call_function(function_name):
         params = params_list[0] if params_list else {}
         return jsonify({"ok": True, **local_functions.daily_goal_status(params)})
 
+    if function_name == "dailyGoalOverride":
+        # Real user-initiated "continue today" (2026-08-19) — see
+        # local_functions.daily_goal_override()'s docstring.
+        params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+        params = params_list[0] if params_list else {}
+        return jsonify(local_functions.daily_goal_override(params))
+
     if function_name == "telegramNotifier":
         # Real send (2026-08-19) — replaces the old slackNotifier no-op
         # stub. See telegram_notifier.py's module docstring: one shared
