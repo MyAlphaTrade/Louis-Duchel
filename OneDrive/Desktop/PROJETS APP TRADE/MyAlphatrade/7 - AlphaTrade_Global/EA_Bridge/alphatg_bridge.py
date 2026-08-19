@@ -60,6 +60,7 @@ import portfolio_risk
 import asset_validation
 import learning_engine
 import instance_lock
+import telegram_notifier
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -1212,6 +1213,33 @@ def _asset_revalidation_scheduler_loop():
 def start_asset_revalidation_scheduler():
     threading.Thread(target=_asset_revalidation_scheduler_loop, daemon=True).start()
 
+
+# ── Telegram economic-event alerts (2026-08-19) ────────────────────
+# Independent of the JS decision cycle on purpose: a real high-impact
+# event is time-based, not decision-based — it should fire whether or
+# not the app happens to be mid-analysis right now. See
+# telegram_notifier.check_and_send_economic_alerts's own docstring.
+_economic_alerts_sent = set()  # dedup guard, lives for this process's lifetime
+
+
+def _telegram_economic_alert_loop():
+    while True:
+        try:
+            if _connection["initialized"]:
+                params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
+                params = params_list[0] if params_list else {}
+                if params.get("telegram_notifications_enabled") and params.get("telegram_chat_id"):
+                    telegram_notifier.check_and_send_economic_alerts(
+                        params["telegram_chat_id"], _economic_alerts_sent,
+                    )
+        except Exception as e:
+            log.warning("[TELEGRAM] economic alert scheduler error: %s", e)
+        time.sleep(telegram_notifier.ECONOMIC_ALERT_CHECK_INTERVAL_SEC)
+
+
+def start_telegram_economic_alert_scheduler():
+    threading.Thread(target=_telegram_economic_alert_loop, daemon=True).start()
+
 # ── SSE stream endpoint ──────────────────────────────────────────
 
 @app.route("/stream", methods=["GET"])
@@ -2210,6 +2238,19 @@ def call_function(function_name):
         params = params_list[0] if params_list else {}
         return jsonify({"ok": True, **local_functions.daily_goal_status(params)})
 
+    if function_name == "telegramNotifier":
+        # Real send (2026-08-19) — replaces the old slackNotifier no-op
+        # stub. See telegram_notifier.py's module docstring: one shared
+        # bot token for the whole team, each collaborator's own chat_id
+        # is what's passed here (never trusted from anywhere but this
+        # install's own Parameter, same discipline as capital/equity
+        # elsewhere in this file — never take a value the caller could
+        # forge for something that reaches outside this process).
+        chat_id = body.get("chat_id")
+        kind = body.get("kind") or "test"
+        result = telegram_notifier.notify(kind, chat_id, body)
+        return jsonify(result), (200 if result.get("ok") else 400)
+
     if function_name == "learningPatterns":
         # AI Trade Memory (2026-08-07) — read-only diagnostic, see
         # learning_engine.py's module docstring for why this doesn't
@@ -2303,5 +2344,6 @@ if __name__ == "__main__":
     # before doing anything, same pattern as the crypto loop above.
     start_asset_validation_worker()
     start_asset_revalidation_scheduler()
+    start_telegram_economic_alert_scheduler()
 
     app.run(host=host, port=port, debug=False, threaded=True)

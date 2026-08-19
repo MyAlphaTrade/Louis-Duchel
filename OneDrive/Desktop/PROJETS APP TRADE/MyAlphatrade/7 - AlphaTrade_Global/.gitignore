@@ -7,6 +7,11 @@ alpha-intel-lab.zip
 # Secrets — the bridge's local API key, generated per-machine, never committed.
 EA_Bridge/bridge_api_key.txt
 
+# Secret — the shared Telegram bot token (2026-08-19), placed once per
+# machine that should send real alerts, never committed (see
+# telegram_notifier.py's module docstring).
+EA_Bridge/telegram_bot_token.txt
+
 # Local entity database (replaces Base44) — per-machine data, never committed.
 EA_Bridge/alphatg_local.db
 

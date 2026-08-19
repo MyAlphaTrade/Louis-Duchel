@@ -1512,7 +1512,10 @@ def engine_test(body, fetch_candles_fn, get_positions_fn=None, modify_position_f
 _STUB_LABEL = "Moteur en cours de portage vers une logique déterministe Python (LLM retiré) — pas encore actif."
 
 _STUB_DECISIONS = {"strategyTester"}
-_STUB_NOOPS = {"slackNotifier"}
+# slackNotifier removed (2026-08-19) — real Telegram implementation now
+# handles its own route directly in alphatg_bridge.py's call_function(),
+# never falls through to this generic no-op path anymore.
+_STUB_NOOPS = set()
 
 
 def deterministic_stub_response(function_name, body):
