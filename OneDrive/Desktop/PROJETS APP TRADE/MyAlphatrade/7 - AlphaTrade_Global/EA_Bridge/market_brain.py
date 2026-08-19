@@ -357,7 +357,7 @@ def _find_actionable_zone(breakdown, decision_bias):
 def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strategy=None, capital=1000, risk_percent=1,
             use_regime_modulation=False, use_category_modulation=False, use_abstention_exclusion=False,
             use_momentum_catchup=False, use_zone_only_fusion=False, profile_key=None, profile_min_confidence=None,
-            profile_base_risk_percent=None):
+            profile_base_risk_percent=None, scalping_tp_mult=None):
     """
     candles: primary-timeframe candle list (oldest→newest, real MT5 data)
     multi_tf_candles: {timeframe: candles} for confluence (D1/H4/H1/M15/M5)
@@ -368,6 +368,12 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
       PROFILE_BASE_RISK_PERCENT) — only consumed by the dynamic lot-sizing
       formula below (Scalping only); unrelated to the legacy risk_percent
       param above, which this function has never used for any computation.
+    scalping_tp_mult: None (default, unchanged 3.0/5.0 ATR multiples) | a
+      (tp1_mult, tp2_mult) tuple. Opt-in test, 2026-08-19 — see the comment
+      above the sl_mult/tp1_mult/tp2_mult line for the real finding behind
+      this (a real live Scalping TP sat at 48$, well past where the
+      dollar-based quick-profit-lock already intervenes). Only takes effect
+      when profile_key == "scalping"; ignored otherwise.
     profile_key: None (default, unchanged behavior) | "scalping" | "intraday" | "swing".
       ACTIVE, not an experiment flag — real trader spec, 2026-08-13: Scalping
       never plans a pending (LIMIT/STOP) order, ever. Intraday/Swing are fine
@@ -604,6 +610,25 @@ def analyze(symbol, timeframe, candles, multi_tf_candles=None, validated_strateg
             entry_type = "wait_confirmation"
 
         sl_mult, tp1_mult, tp2_mult = 1.5, 3.0, 5.0
+        # 2026-08-19 — opt-in test (Louis's real observation): the 3.0/5.0
+        # ATR multiples above were never profile-aware — a flat value
+        # shared by Scalping/Intraday/Swing alike, unlike break-even/quick-
+        # profit-lock, which WERE deliberately recalibrated to real dollar
+        # amounts for Scalping specifically (2026-08-13). Confirmed on a
+        # real live XAUUSD Scalping trade the same day: TP1 sat at 48.31$
+        # of real profit — over 3x QUICK_PROFIT_LOCK_USD (15$), the level
+        # that in practice already tightens the stop long before price gets
+        # anywhere near this TP. Scalping's own resting take_profit is a
+        # REAL broker-side order (see alphatg_bridge.py's /send_order "tp"
+        # field) that manage_open_positions() never touches after entry —
+        # so it stays live at this wide level for the trade's whole life,
+        # inconsistent with a strategy meant to bank fast, tight gains.
+        # scalping_tp_mult, when provided (Scalping only — see below),
+        # overrides tp1_mult/tp2_mult for a real backtest A/B — sl_mult (the
+        # actual risk unit) is never touched by this, on purpose. None
+        # everywhere in the live decision path until validated on real data.
+        if profile_key == "scalping" and scalping_tp_mult is not None:
+            tp1_mult, tp2_mult = scalping_tp_mult
         if decision == "BUY":
             stop_loss = ideal_entry - atr_val * sl_mult
             take_profit_1 = ideal_entry + atr_val * tp1_mult

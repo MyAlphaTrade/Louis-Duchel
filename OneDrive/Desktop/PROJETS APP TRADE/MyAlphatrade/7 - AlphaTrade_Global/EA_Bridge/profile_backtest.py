@@ -56,6 +56,17 @@ Known, disclosed scope limits (same category as fusion_backtest.py's own):
     AnalysisSessionStore.jsx's own exposure gate (up to 5 same-direction
     for Scalping, 2 for Intraday/Swing in production) instead of silently
     understating real live throughput.
+  - FIXED 2026-08-19 (was: Scalping trades only ever checked stop_loss
+    for an exit, never take_profit — a real, undisclosed modeling gap
+    found while investigating Louis's own observation about a real 48$
+    Scalping TP) — Scalping positions now also check a real touch of
+    take_profit_1 (see the "1b." step in run_profile_backtest's loop),
+    matching the real resting "tp" order /send_order sets at MT5, which
+    manage_open_positions() never modifies after entry. Every PRIOR
+    Scalping result in this session was produced WITHOUT this check —
+    re-running the exact same inputs after this fix can shift $ figures
+    (a trade that used to only ever exit via SL/BE/quick-lock can now also
+    exit at take_profit_1), disclosed here rather than silently.
   - Lot size uses local_functions.calculate_lot with CONTRACT_SIZES's
     fallback (100000) for any symbol not in that dict — same known,
     disclosed limitation fusion_backtest.py already carries for
@@ -207,8 +218,18 @@ def _finalize_trade(trades, open_position, exit_price, exit_date, exit_reason, c
 
 
 def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_bars=210,
-                          use_momentum_catchup=False, max_concurrent_positions=1):
+                          use_momentum_catchup=False, max_concurrent_positions=1, scalping_tp_mult=None):
     """
+    scalping_tp_mult: None (default, unchanged 3.0/5.0 ATR TP multiples) |
+      (tp1_mult, tp2_mult) tuple — forwarded to market_brain.analyze(), see
+      its own docstring. 2026-08-19 real test (Louis): the Scalping TP was
+      never profile-tuned like break-even/quick-profit-lock were, and a
+      real live trade showed a 48$ TP1 — far past QUICK_PROFIT_LOCK_USD
+      (15$), which in practice already tightens the stop first. Combined
+      with the take_profit-touch check added to this harness the same day
+      (see the "1b." step below), this lets a tighter TP be A/B tested on
+      equal footing against the current default.
+
     all_candles: {timeframe: full_candle_list} — REAL MT5 data covering the
       SAME real period for every timeframe this profile might touch: the
       standard MULTI_TIMEFRAMES (D1/H4/H1/M15/M5) PLUS this profile's own
@@ -340,6 +361,28 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                 _finalize_trade(trades, pos, current_sl, now, reason, remaining_lot, contract_size, capital)
                 closed = True
 
+            # 1b. Real broker-side take-profit touch — Scalping only.
+            # 2026-08-19, real gap found (Louis's own observation about a
+            # real 48$ Scalping TP): this harness used to check ONLY the
+            # stop-loss for Scalping trades, never the take_profit — but in
+            # live trading /send_order DOES set a real resting "tp" on the
+            # broker (see alphatg_bridge.py), and manage_open_positions()
+            # only ever modifies stop_loss, never take_profit, so that wide
+            # ATR-based level stays live at MT5 for the trade's whole life.
+            # A backtest that never checks it silently overstated how often
+            # Scalping trades "ride the trailing stop" vs. actually banking
+            # at the far TP — this closes that gap so scalping_tp_mult (see
+            # run_profile_backtest) can be tested on equal footing against
+            # the CURRENT (untuned) 3.0/5.0 ATR default, not against a
+            # baseline that was never modeling the real broker-side order.
+            if not closed and profile_key == "scalping" and pos.get("take_profit_1"):
+                tp_price = pos["take_profit_1"]
+                tp_hit = (bar["high"] >= tp_price) if direction == "BUY" else (bar["low"] <= tp_price)
+                if tp_hit:
+                    _finalize_trade(trades, pos, tp_price, now, "take_profit", remaining_lot, contract_size, capital)
+                    daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
+                    closed = True
+
             # 2. TP1/TP2 partials — NEVER for Scalping, unchanged rationale.
             if not closed and profile_key != "scalping":
                 if "tp1_partial" not in events:
@@ -432,7 +475,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                     # reused rather than once per position.
                     if not reversal_checked:
                         reversal_checked = True
-                        reversal_result = _run_one_decision(symbol, profile_key, slice_to(now), allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence)
+                        reversal_result = _run_one_decision(symbol, profile_key, slice_to(now), allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence, scalping_tp_mult=scalping_tp_mult)
                     if reversal_result and reversal_result["decision"] in ("BUY", "SELL") and reversal_result["decision"] != direction and reversal_result["confidence"] >= min_confidence:
                         _finalize_trade(trades, pos, bar["close"], now, "reversal_close", remaining_lot, contract_size, capital)
                         daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
@@ -450,7 +493,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             continue
 
         window_by_tf = slice_to(now)
-        result = _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence)
+        result = _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=min_confidence, scalping_tp_mult=scalping_tp_mult)
         if not result or result["decision"] not in ("BUY", "SELL") or result["confidence"] < min_confidence:
             continue
         if result["entry_type"] not in ("immediate", "pending_order"):
@@ -507,7 +550,7 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
     return {"trades": trades, "stats": compute_stats(trades, capital)}
 
 
-def _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=None):
+def _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capital, risk_percent, use_momentum_catchup, min_confidence=None, scalping_tp_mult=None):
     """One real market_brain.analyze() call, timeframe chosen exactly like
     local_functions.market_brain_analyze()'s AUTO path does live for this
     profile — reused for both the flat-scan and the reversal-check, so
@@ -539,4 +582,5 @@ def _run_one_decision(symbol, profile_key, window_by_tf, allowed, fallback, capi
         # diverges from what the live app actually does.
         profile_key=profile_key,
         profile_min_confidence=min_confidence, profile_base_risk_percent=risk_percent,
+        scalping_tp_mult=scalping_tp_mult,
     )
