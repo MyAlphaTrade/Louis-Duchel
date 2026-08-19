@@ -768,10 +768,29 @@ def _structured_error(error_code, message, symbol=None, extra=None):
 def _reject_if_duplicate_bridge():
     """Guard for every order-mutating route (send_order, send_pending_order,
     close_position, modify_position) — see instance_lock.py's module
-    docstring for the real incident this closes. Returns a Flask response
-    tuple to return immediately if this process must not touch orders on
-    the current MT5 account, or None if it's safe to proceed."""
-    if not instance_lock.is_held_by_this_process(os.path.dirname(local_store.DB_PATH), _connection.get("login")):
+    docstring for the real incident this closes.
+
+    Real incident (2026-08-19): this used to be a read-only check
+    (is_held_by_this_process). A process that lost the lock race at
+    startup — because it happened to start within LOCK_STALE_SECONDS of
+    the previous process dying, seeing its heartbeat as still "fresh" —
+    never retried, and stayed rejected for its entire remaining lifetime
+    even once the other process was long gone and the lock had gone
+    stale. Confirmed in production: 6 real >=80%-confidence signals
+    refused over ~50 minutes after a routine app restart. Fixed by
+    calling acquire_or_check() (not the read-only check) here too, so
+    every order attempt is also a retry — acquire_or_check() is a no-op
+    refresh when we already hold it, so this changes nothing for the
+    normal case.
+
+    Returns a Flask response tuple to return immediately if this process
+    must not touch orders on the current MT5 account, or None if it's
+    safe to proceed."""
+    acquired, _holder = instance_lock.acquire_or_check(
+        os.path.dirname(local_store.DB_PATH), _connection.get("login")
+    )
+    _connection["instance_lock_acquired"] = acquired
+    if not acquired:
         return jsonify(_structured_error(
             "DUPLICATE_BRIDGE",
             "Un autre processus pont gère déjà ce compte MT5 — action refusée pour éviter un conflit d'ordres.",
@@ -1075,11 +1094,32 @@ def _position_manager_loop():
     db_dir = os.path.dirname(local_store.DB_PATH)
     while _connection["initialized"]:
         try:
-            # Refresh this process's ownership of the account lock every
-            # cycle — see instance_lock.py. Cheap (one small file write);
-            # keeps a crashed process's lock from blocking a legitimate
-            # restart for more than LOCK_STALE_SECONDS.
-            instance_lock.heartbeat(db_dir, _connection["login"])
+            # Retry (not just refresh) the account lock every cycle — see
+            # instance_lock.py. acquire_or_check() is a cheap no-op refresh
+            # when we already hold it (same as the old heartbeat() call),
+            # but if this process lost the race at startup (saw the
+            # previous process's heartbeat as still fresh in the narrow
+            # window before it went stale), this also retries acquisition
+            # every cycle instead of staying locked out forever.
+            #
+            # Real incident (2026-08-19): a restart landed inside that
+            # window, this process never held the lock, and — because the
+            # old code called the now-removed one-shot heartbeat() here
+            # instead — Position Manager silently never managed a single
+            # position for ~50 minutes even after the stale lock cleared.
+            acquired, holder = instance_lock.acquire_or_check(db_dir, _connection["login"])
+            was_acquired = _connection.get("instance_lock_acquired")
+            _connection["instance_lock_acquired"] = acquired
+            if acquired and not was_acquired:
+                log.info("[INSTANCE_LOCK] Verrou acquis (ou re-acquis) — la gestion de position démarre/reprend.")
+            elif not acquired:
+                if was_acquired is not False:
+                    log.warning("[INSTANCE_LOCK] Un autre processus pont (pid %s) tient le verrou pour ce compte — "
+                                "gestion de position en pause, nouvel essai au prochain cycle.",
+                                holder.get("pid") if holder else "?")
+                time.sleep(POSITION_MANAGER_INTERVAL_SEC)
+                continue
+
             params_list = local_store.list_entities("Parameter", sort="-created_date", limit=1)
             params = params_list[0] if params_list else {}
             snap = get_account_snapshot()
@@ -1101,14 +1141,16 @@ def _position_manager_loop():
 
 def start_position_manager():
     global _position_manager_thread
-    # Instance lock guard (2026-08-07) — see instance_lock.py's module
-    # docstring for the real incident this prevents. A second bridge
-    # process connected to the same MT5 account must never run its own
-    # Position Manager alongside the one that already holds the lock.
+    # Instance lock (2026-08-07, retry added 2026-08-19) — see
+    # instance_lock.py's module docstring for the real incident this
+    # prevents. The thread now always starts: if the lock isn't ours yet,
+    # _position_manager_loop() above retries every cycle and simply skips
+    # position management until it self-heals, instead of this function
+    # refusing to start the thread at all based on a one-time snapshot
+    # that could go stale seconds later.
     if not _connection.get("instance_lock_acquired"):
-        log.error("Position Manager NOT started — another bridge process already holds "
-                   "the instance lock for this MT5 account (see DUPLICATE BRIDGE DETECTED above).")
-        return
+        log.warning("Position Manager starting without the instance lock yet — another bridge process "
+                    "may still hold it (see DUPLICATE BRIDGE DETECTED above). Will retry every cycle.")
     if _position_manager_thread and _position_manager_thread.is_alive():
         return
     _position_manager_thread = threading.Thread(target=_position_manager_loop, daemon=True)

@@ -20,6 +20,25 @@ lock is only considered "held" while its last heartbeat is fresher than
 LOCK_STALE_SECONDS. A process that can't acquire the lock for the account
 it just connected to must not start position management or accept any
 order-mutating request — see alphatg_bridge.py's use of this module.
+
+Real incident (2026-08-19, no losses, but ~50 real minutes of blocked
+trading): the self-healing above only works if something actually RETRIES
+acquire_or_check() later. The original alphatg_bridge.py called it exactly
+once, at connect time, and cached the result for the process's whole
+lifetime — a heartbeat() call and a read-only is_held_by_this_process()
+check filled in afterward. A routine app restart landed inside the ~15s
+window where the just-killed process's last heartbeat still looked fresh:
+the new process was correctly denied the lock at that instant, but then
+never asked again — Position Manager never started and every order was
+refused with DUPLICATE_BRIDGE for the rest of that run, long after the
+old process (and its stale lock) were gone. Fixed by having every caller
+(the Position Manager loop, every cycle, and the order-mutating guard, on
+every request) call acquire_or_check() itself instead of a separate
+heartbeat/read-only check — it's a no-op refresh when already held, so
+this is also, transparently, a retry. heartbeat() and
+is_held_by_this_process() were removed as this module's only 2026-08-07
+callers switched to acquire_or_check(); reintroduce a heartbeat-only path
+only if a future caller genuinely needs "refresh without ever retrying".
 """
 import json
 import os
@@ -61,17 +80,23 @@ def _write(path, login):
 
 
 def acquire_or_check(db_dir, login):
-    """Call once, right after a successful MT5 connection, before starting
-    the Position Manager. Returns (acquired: bool, holder: dict|None).
+    """Call right after a successful MT5 connection, before starting the
+    Position Manager — AND call again on every later attempt to manage
+    positions or mutate an order. Cheap (one small file read + maybe one
+    atomic write), safe to call as often as needed: a no-op refresh when
+    this process already holds the lock, a real (re-)acquisition attempt
+    otherwise. Calling it only once at startup is what caused the real
+    2026-08-19 incident documented in this module's docstring — always
+    call it again rather than caching the result past a single check.
+    Returns (acquired: bool, holder: dict|None).
 
     acquired=True: this process now owns the lock for `login` (the lock was
-    free, stale, or already owned by this exact process) — safe to start
-    managing positions and to accept order-mutating requests.
-    acquired=False: a DIFFERENT, live process already holds the lock for
+    free, stale, or already owned by this exact process) — safe to manage
+    positions and to accept order-mutating requests right now.
+    acquired=False: a DIFFERENT, live process currently holds the lock for
     this SAME login — `holder` describes it (pid/login/heartbeat_at). This
-    process must not start the Position Manager and must refuse order
-    writes until the situation is resolved (the other bridge stopped, or
-    this one is the wrong one to be running).
+    process must not manage positions or accept order writes THIS time;
+    call again next cycle rather than remembering this result.
     """
     path = _lock_path(db_dir)
     holder = _read(path)
@@ -85,21 +110,3 @@ def acquire_or_check(db_dir, login):
 
     _write(path, login)
     return True, None
-
-
-def heartbeat(db_dir, login):
-    """Call periodically (from the Position Manager loop) to keep this
-    process's ownership of the lock fresh, so a crashed process's lock
-    goes stale quickly instead of blocking a legitimate restart forever."""
-    _write(_lock_path(db_dir), login)
-
-
-def is_held_by_this_process(db_dir, login):
-    """True if this process currently owns a fresh lock for `login`. Used
-    to gate order-mutating endpoints against a bridge that lost the race
-    at startup (or whose lock went stale mid-run some other way)."""
-    holder = _read(_lock_path(db_dir))
-    if not holder:
-        return False
-    is_fresh = (time.time() - holder.get("heartbeat_ts", 0)) < LOCK_STALE_SECONDS
-    return is_fresh and holder.get("pid") == os.getpid() and holder.get("login") == login
