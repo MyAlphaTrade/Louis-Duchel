@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Stratégie Scalping — Zones &amp; Renforts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --surface: #ffffff;
+    --surface-2: #eef1ee;
+    --border: #d9ded9;
+    --text: #14201a;
+    --text-dim: #58685e;
+    --text-faint: #8b9a90;
+    --accent: #0f8b5c;
+    --accent-dim: #d9f0e4;
+    --accent-text: #086b46;
+    --warn: #92650b;
+    --warn-bg: #faedd0;
+    --danger: #a3372c;
+    --danger-bg: #f6e0dc;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f0d;
+      --surface: #101512;
+      --surface-2: #161c18;
+      --border: #223029;
+      --text: #e7ece8;
+      --text-dim: #9aab9f;
+      --text-faint: #64766a;
+      --accent: #34d399;
+      --accent-dim: #12332580;
+      --accent-text: #6ee7b7;
+      --warn: #f0b429;
+      --warn-bg: #3a2c0d;
+      --danger: #f0847a;
+      --danger-bg: #3a1815;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f0d;
+    --surface: #101512;
+    --surface-2: #161c18;
+    --border: #223029;
+    --text: #e7ece8;
+    --text-dim: #9aab9f;
+    --text-faint: #64766a;
+    --accent: #34d399;
+    --accent-dim: #12332580;
+    --accent-text: #6ee7b7;
+    --warn: #f0b429;
+    --warn-bg: #3a2c0d;
+    --danger: #f0847a;
+    --danger-bg: #3a1815;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-dim); }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 56px 24px 120px; }
+
+  header.doc-head { margin-bottom: 48px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 34px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    font-weight: 700;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+    max-width: 60ch;
+    margin: 0 0 24px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 100px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .chip-actif { background: var(--accent-dim); color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .chip-teste { background: var(--surface-2); color: var(--text-dim); border-color: var(--border); }
+  .chip-attente { background: var(--warn-bg); color: var(--warn); }
+  .chip-invalide { background: var(--danger-bg); color: var(--danger); }
+  .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  section { margin-bottom: 44px; }
+  h2 {
+    font-size: 13px;
+    font-family: var(--mono);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin: 0 0 20px;
+  }
+  h3 {
+    font-size: 18px;
+    font-weight: 650;
+    margin: 28px 0 10px;
+    text-wrap: balance;
+  }
+  p { margin: 0 0 14px; color: var(--text); max-width: 68ch; }
+  p.dim { color: var(--text-dim); }
+  a { color: var(--accent-text); }
+  strong { font-weight: 650; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 0.05em 0.4em;
+    border-radius: 5px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    margin-bottom: 16px;
+  }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-value.pos { color: var(--accent-text); }
+  .stat-value.neg { color: var(--danger); }
+  .stat-sub { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: var(--surface-2);
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); }
+  td.pos { color: var(--accent-text); }
+  td.neg { color: var(--danger); }
+
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 40px;
+    margin-bottom: 18px;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  ol.steps li strong { display: block; margin-bottom: 3px; }
+  ol.steps li p { margin: 0; font-size: 14.5px; color: var(--text-dim); }
+
+  .example-box {
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-size: 14.5px;
+  }
+  .example-box .ex-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 48px 0; border: none; }
+
+  footer {
+    color: var(--text-faint);
+    font-size: 12.5px;
+    font-family: var(--mono);
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 27px; }
+    .wrap { padding: 36px 16px 90px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <div class="eyebrow">AlphaTrade Global — Documentation de stratégie</div>
+    <h1>Scalping : zones, gestion de position et pyramidage</h1>
+    <p class="subtitle">Spécification de la stratégie de Scalping réellement active aujourd'hui (XAUUSD + BTCUSD), et extension proposée (renforts + rebonds sur zones) — statut de chaque composant, chiffres réels de validation.</p>
+    <div class="meta-row">
+      <span class="chip chip-actif"><span class="chip-dot"></span>Actif en production</span>
+      <span class="chip chip-teste"><span class="chip-dot"></span>Testé sur données réelles</span>
+      <span class="chip chip-attente"><span class="chip-dot"></span>Proposé, non implémenté</span>
+      <span class="chip chip-invalide"><span class="chip-dot"></span>Testé et rejeté</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>01 — Périmètre actuel</h2>
+    <div class="card-grid">
+      <div class="stat">
+        <div class="stat-label">Actifs actifs</div>
+        <div class="stat-value">XAUUSD, BTCUSD</div>
+        <div class="stat-sub">SOLUSD, ETHUSD, XAGUSD, Volatility75Index désactivés (2026-08-18)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Profil</div>
+        <div class="stat-value">Scalping</div>
+        <div class="stat-sub">Horloge M1, timeframe adaptatif M1/M5/M15</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Confiance minimum</div>
+        <div class="stat-value">80%</div>
+        <div class="stat-sub">Seuil du profil, celui réellement backtesté</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Risque par trade</div>
+        <div class="stat-value">0,8%</div>
+        <div class="stat-sub">Du capital réel, ajusté dynamiquement selon confiance/volatilité</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>02 — Moteurs de décision (zone_only_fusion)</h2>
+    <p>Au lieu de la fusion complète à ~13 moteurs, l'or et le bitcoin sont analysés avec un sous-ensemble restreint, choisi parce que c'est le seul qui a survécu à une vraie validation walk-forward cette session — chaque autre tentative (modulation par régime, par catégorie, exclusion des abstentions) a été testée et rejetée sur données réelles.</p>
+
+    <h3>XAUUSD — <code>smart_money</code> + <code>liquidity</code></h3>
+    <p class="dim">Fair Value Gaps et Order Blocks (structure institutionnelle) + zones de Support/Résistance et sweeps de liquidité. Tous les autres moteurs (structure de marché, indicateurs techniques, volatilité, session…) sont neutralisés — poids ramené à zéro dans la fusion.</p>
+
+    <h3>BTCUSD — <code>smart_money</code> + <code>liquidity</code> + <code>microstructure</code></h3>
+    <p class="dim">Identique à l'or, plus le carnet d'ordres réel Hyperliquid (déséquilibre acheteur/vendeur). Conservé pour BTC sur la base de sa propre validation antérieure (79% de justesse directionnelle réelle sur 319 snapshots) — non re-testé spécifiquement en combinaison avec les zones, ce qui est explicitement documenté comme une limite connue plutôt que caché.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Actif</th><th>Fenêtres réelles</th><th>Baseline</th><th>Restreint (zones)</th><th>Écart</th></tr></thead>
+        <tbody>
+          <tr><td>XAUUSD</td><td class="num">6 × ~30j</td><td class="num">690,36 $</td><td class="num pos">1328,82 $</td><td class="num pos">+92%</td></tr>
+          <tr><td>BTCUSD</td><td class="num">6 × ~30j</td><td class="num">69,67 $</td><td class="num pos">344,50 $</td><td class="num pos">≈ ×5</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>03 — Gestion de position</h2>
+
+    <h3>Verrou de profit rapide + break-even (dollars réels)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Paramètre</th><th>Valeur</th><th>Rôle</th></tr></thead>
+        <tbody>
+          <tr><td><code>BREAK_EVEN_TRIGGER_USD</code></td><td class="num">1,5 $</td><td>Dès ce profit réel, le stop peut monter au-dessus de l'entrée</td></tr>
+          <tr><td><code>BREAK_EVEN_BUFFER_USD</code></td><td class="num">0,5 $</td><td>Marge de sécurité au-dessus de l'entrée (jamais pile dessus)</td></tr>
+          <tr><td><code>QUICK_PROFIT_LOCK_USD</code></td><td class="num">15 $</td><td>Dès ce profit réel, trail serré — élargi le 18/08 (était 5 $)</td></tr>
+          <tr><td><code>QUICK_PROFIT_TRAIL_DISTANCE_R</code></td><td class="num">0,35 R</td><td>Distance du trail sous le meilleur prix atteint — élargi le 18/08 (était 0,15 R)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="dim" style="margin-top:14px">Résultat réel de l'élargissement (XAUUSD Scalping, ~4,5 jours M1) : PnL 50,98 $ → 79,30 $ (+56%), ratio gain/perte 0,45 → 0,61.</p>
+
+    <div class="card" style="margin-top:20px">
+      <span class="chip chip-invalide" style="margin-bottom:12px"><span class="chip-dot"></span>Testé et rejeté</span>
+      <p style="margin:0 0 8px"><strong>BE progressif (par paliers ou % continu du pic)</strong></p>
+      <p class="dim" style="margin:0">Idée : faire remonter le break-even au fur et à mesure du profit plutôt qu'un saut unique, pour éviter qu'un pic à 20$ ne retombe à seulement 0,5$ verrouillé. Deux variantes testées (paliers de 2$/50%, puis fraction continue du pic à 50%) — toutes deux dégradent le résultat (-59% dans le pire cas) : remonter le stop, même progressivement, coupe les trades avant qu'ils atteignent la zone du verrou élargi. Code conservé, désactivé (<code>BE_RATCHET_ENABLED</code> / <code>BE_TRAIL_PEAK_ENABLED</code> = False).</p>
+    </div>
+
+    <h3>Clôture sur retournement</h3>
+    <p><strong>Désactivée pour le Scalping</strong> (décision explicite, 2026-08-15) — une position opposée n'est plus fermée sur un simple changement d'avis de l'IA ; elle attend son propre stop / break-even / verrou de profit. Reste active pour Intraday et Swing.</p>
+  </section>
+
+  <section>
+    <h2>04 — Renforts (pyramidage même sens)</h2>
+    <p class="chip chip-actif" style="margin-bottom:14px"><span class="chip-dot"></span>Déjà implémenté et actif — vérifié le 18/08</p>
+    <p>Jusqu'à <strong>5 positions dans le même sens</strong> par actif en Scalping (2 pour Intraday/Swing). Chaque renfort est une décision fraîche, revalidée indépendamment à ≥80% de confiance — jamais un simple empilement automatique. Une direction opposée bloque tout nouvel ordre tant qu'aucune position existante n'est fermée (pas de clôture forcée, voir section 3).</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Actif</th><th>Mono-position</th><th>Pyramidage réel (n=5)</th><th>Écart</th><th>Drawdown max</th></tr></thead>
+        <tbody>
+          <tr><td>XAUUSD</td><td class="num">81,01 $ (68 trades)</td><td class="num pos">210,66 $ (132 trades)</td><td class="num pos">+160%</td><td class="num">3,66% → 3,87%</td></tr>
+          <tr><td>BTCUSD</td><td class="num">427,70 $ (116 trades)</td><td class="num pos">1488,83 $ (200 trades)</td><td class="num pos">+248%</td><td class="num">3,15% → 3,51%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="dim" style="margin-top:14px">~4,5 jours réels M1 par actif. Le drawdown bouge à peine — le pyramidage capte de vraies opportunités supplémentaires, il ne se contente pas de miser plus gros.</p>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <div class="chip chip-attente" style="margin-bottom:16px"><span class="chip-dot"></span>Proposé — non implémenté</div>
+    <h2 style="border:none; padding:0; margin-bottom:12px">05 — Extension proposée : renforts et rebonds conscients des zones</h2>
+    <p>Constat de départ : le pyramidage actuel (section 4) ajoute des renforts tant que la confiance reste haute, <strong>sans jamais regarder si le prix approche déjà la prochaine zone opposée</strong> (résistance pour un achat, support pour une vente). Cette extension propose de rendre le système conscient de sa propre cible avant d'y arriver, plutôt qu'après.</p>
+
+    <div class="example-box">
+      <div class="ex-label">Exemple</div>
+      Le prix est à 4000. L'analyse indique un objectif vers 4050 — les renforts se concentrent en BUY. À l'approche de 4050, plus aucun nouveau renfort n'est ouvert : le système attend la réaction du marché à cette zone. Si le prix casse 4050 avec confirmation, la tendance est validée — les renforts reprennent, réajustés sur la zone suivante. Si le prix rejette 4050, c'est un retracement justifié : ouverture d'un <strong>rebond</strong> (position à contre-sens), motivé spécifiquement par ce rejet de zone — pas un retournement générique.
+    </div>
+
+    <h3>Mécanique proposée</h3>
+    <ol class="steps">
+      <li>
+        <strong>Zone cible dans le sens du trade</strong>
+        <p>À chaque cycle, identifier la zone opposée la plus proche dans la direction de la position (résistance au-dessus pour un BUY, support en-dessous pour un SELL) — en réutilisant les zones déjà détectées par les moteurs <code>smart_money</code> (FVG/Order Blocks) et <code>liquidity</code> (S/R), pas un nouveau détecteur.</p>
+      </li>
+      <li>
+        <strong>Pause des renforts en approche</strong>
+        <p>Si le prix se trouve à moins d'une distance ATR-relative de cette zone, aucun nouveau renfort n'est ajouté. Les positions déjà ouvertes continuent d'être gérées normalement (stop, break-even, verrou de profit).</p>
+      </li>
+      <li>
+        <strong>Cassure confirmée → ré-ancrage</strong>
+        <p>Si une vraie cassure de structure (BOS, déjà détectée par le moteur <code>market_structure</code>) valide la continuation, la zone suivante devient la nouvelle cible et les renforts reprennent.</p>
+      </li>
+      <li>
+        <strong>Rejet → rebond</strong>
+        <p>Si le prix échoue à casser la zone et se retourne, ouverture d'une position à contre-sens, sizée et justifiée spécifiquement par ce rejet — distincte d'un retournement générique de l'IA.</p>
+      </li>
+    </ol>
+
+    <h3>Plan de validation</h3>
+    <p class="dim">Même discipline que le reste de cette stratégie : construit d'abord comme variante isolée et testable dans l'outil de backtest (pas branché en direct), comparé sur données réelles à la configuration actuelle (section 4) avant toute activation. Non commencé à ce jour.</p>
+  </section>
+
+  <footer>
+    AlphaTrade Global · EA_Bridge (Python) + Dist (React/Electron) · Document généré le 2026-08-18 · Branche v1.0.1
+  </footer>
+
+</div>
+</body>
+</html>
