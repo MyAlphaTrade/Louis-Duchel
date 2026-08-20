@@ -1954,7 +1954,18 @@ def close_position_direct(ticket, volume=None):
     volume is rounded to the symbol's real lot step, and if what would be
     LEFT over falls below the broker's minimum tradeable size, closes
     everything instead of stranding an un-tradeable sliver — the caller
-    finds out via the returned closed_volume, never silently wrong."""
+    finds out via the returned closed_volume, never silently wrong.
+
+    ticket cast to int (2026-08-20, real bug found — Louis): get_open_positions()
+    returns "ticket" as a str (JSON-safety for the frontend's /positions GET),
+    and manage_open_positions()'s automated loop passes that str straight
+    through as close_fn's argument. mt5.positions_get(ticket=...) silently
+    returns empty for a str ticket (MT5's API wants a real int) — every
+    automated action (break-even, trailing, TP1/TP2, emergency close) was
+    failing with "Position not found" on every real trade, while the manual
+    /close_position and /modify_position HTTP routes worked fine because
+    they already did int(data.get("ticket")) before calling here."""
+    ticket = int(ticket)
     if not _connection["initialized"]:
         return {"ok": False, "error": "MT5 not connected"}
 
@@ -2039,7 +2050,12 @@ def close_position():
 def modify_position_direct(ticket, stop_loss=None, take_profit=None):
     """In-process SL/TP change (TRADE_ACTION_SLTP) — shared by the HTTP
     endpoint and the position-management engine (manage_open_positions),
-    which calls this directly without a round trip to itself."""
+    which calls this directly without a round trip to itself.
+
+    ticket cast to int (2026-08-20) — see close_position_direct's docstring,
+    same real bug: this is the reason break-even/trailing never actually
+    moved a stop on any real position."""
+    ticket = int(ticket)
     if not _connection["initialized"]:
         return {"ok": False, "error": "MT5 not connected"}
 
