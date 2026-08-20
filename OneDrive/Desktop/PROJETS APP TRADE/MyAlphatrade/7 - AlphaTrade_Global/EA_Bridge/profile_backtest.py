@@ -218,8 +218,50 @@ def _finalize_trade(trades, open_position, exit_price, exit_date, exit_reason, c
 
 
 def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_bars=210,
-                          use_momentum_catchup=False, max_concurrent_positions=1, scalping_tp_mult=None):
+                          use_momentum_catchup=False, max_concurrent_positions=1, scalping_tp_mult=None,
+                          quick_profit_trail_r=None, scalping_be_trigger_usd=None,
+                          scalping_disable_protection=False, scalping_pct_ladder=False):
     """
+    scalping_pct_ladder: False (default) | True — real test (2026-08-20,
+      Louis's own proposal), a completely different Scalping protection
+      scheme measured in % of the real distance to take_profit_1 rather
+      than $: at 30% of the way to TP, locks 5% of that distance as
+      profit; at 50%+, locks 25% and FREEZES there — no further movement
+      at all until either take_profit_1 (100%) or a reversal hits that
+      frozen level. Replaces the $-based BE/quick-profit-lock branch
+      entirely for Scalping when True (scalping_be_trigger_usd/
+      quick_profit_trail_r are ignored, nothing left for them to touch).
+      Needs a real take_profit_1 on the position — silently does nothing
+      for a position without one (nothing to measure % progress against).
+
+    scalping_disable_protection: False (default) | True — skips the ENTIRE
+      BE/quick-profit-lock branch for Scalping, real test (2026-08-20,
+      Louis): a position then only ever exits via its real stop_loss or
+      take_profit touch, current_sl never moves — reproducing exactly what
+      live actually did before today's MT5-ticket-type bug fix (every
+      modify_position_direct call silently failed, not just break-even's),
+      the same conditions behind Louis's real +400$ day with no BE ever
+      firing. Ignores scalping_be_trigger_usd/quick_profit_trail_r when True
+      (nothing left for either to override).
+
+    scalping_be_trigger_usd: None (default, real production value —
+      BREAK_EVEN_TRIGGER_USD = 1.5$) | a float override, real test
+      (2026-08-20, Louis, after watching two real live losses: BE moved the
+      stop to entry+0.5$ within seconds of hitting just 1.5$ profit, then
+      an ordinary pullback stopped both out for a small loss before either
+      got anywhere near the 15$ quick-profit-lock tier — "ça ne laisse pas
+      le temps à la position de respirer"). Only touches the scalping
+      break-even branch's OWN threshold — if set >= QUICK_PROFIT_LOCK_USD,
+      the quick-profit-lock branch (checked first every cycle) fires
+      before break-even ever can, which is exactly Louis's proposal:
+      no stop movement at all until the same 15$ level that already
+      protects/trails real momentum. Related but NOT identical to the
+      already-tested BE_RATCHET_ENABLED/BE_TRAIL_PEAK_ENABLED ideas above
+      (both invalidated 2026-08-15) — those gradually raised the stop
+      between 1.5$ and 15$; this removes that gradual step entirely
+      rather than softening it, a real difference worth testing on its
+      own rather than assuming the old verdict still applies.
+
     scalping_tp_mult: None (default, unchanged 3.0/5.0 ATR TP multiples) |
       (tp1_mult, tp2_mult) tuple — forwarded to market_brain.analyze(), see
       its own docstring. 2026-08-19 real test (Louis): the Scalping TP was
@@ -229,6 +271,15 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
       with the take_profit-touch check added to this harness the same day
       (see the "1b." step below), this lets a tighter TP be A/B tested on
       equal footing against the current default.
+
+    quick_profit_trail_r: None (default, real production value —
+      QUICK_PROFIT_TRAIL_DISTANCE_R = 0.35) | a float override, real
+      test (2026-08-20, Louis: after the real MT5 ticket-type bug — see
+      alphatg_bridge.py's modify_position_direct — was fixed and a real
+      live Scalping trade rode the 0.35R trail to +39.95$, asked whether
+      an even wider trail leaves more room to run). Only touches the
+      quick-profit-lock tier (>= 15$ real profit); break-even/BE-ratchet
+      untouched.
 
     all_candles: {timeframe: full_candle_list} — REAL MT5 data covering the
       SAME real period for every timeframe this profile might touch: the
@@ -266,6 +317,8 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
     max_daily_trades = config["max_daily_trades"]
     be_trigger = config["break_even_trigger"]
     trail_trigger = DEFAULT_PROFIT_PROTECTION_TRIGGER
+    effective_trail_r = quick_profit_trail_r if quick_profit_trail_r is not None else QUICK_PROFIT_TRAIL_DISTANCE_R
+    effective_be_trigger_usd = scalping_be_trigger_usd if scalping_be_trigger_usd is not None else BREAK_EVEN_TRIGGER_USD
 
     clock_candles = all_candles[clock_tf]
     if not clock_candles:
@@ -350,7 +403,11 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             # 1. Real stop-loss check FIRST — unchanged.
             hit_sl = (bar["low"] <= current_sl) if direction == "BUY" else (bar["high"] >= current_sl)
             if hit_sl:
-                if "quick_profit_lock" in events:
+                if "pct_ladder_tier2" in events:
+                    reason = "pct_ladder_tier2"
+                elif "pct_ladder_tier1" in events:
+                    reason = "pct_ladder_tier1"
+                elif "quick_profit_lock" in events:
                     reason = "quick_profit_lock"
                 elif "trailing_stop" in events:
                     reason = "trailing_stop"
@@ -416,20 +473,54 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                 at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
                 sign = 1 if direction == "BUY" else -1
 
-                if profile_key == "scalping":
+                if profile_key == "scalping" and scalping_pct_ladder:
+                    # Palier en % de la distance vers le vrai take_profit_1
+                    # (2026-08-20, proposition de Louis) — pas en $ comme le
+                    # reste du fichier: a 30% du chemin vers le TP, verrouille
+                    # 5% de cette distance ; a 50%+, verrouille 25% et se
+                    # FIGE la (plus aucun mouvement) jusqu'au TP (100%) ou un
+                    # retour toucher ce niveau. Chaque palier ne se declenche
+                    # qu'une fois (events) ; le palier 25% remplace toujours
+                    # le 5% (25% > 5%, jamais un recul). Sans take_profit_1
+                    # reel, rien a mesurer — le stop reste inchange.
+                    tp_price = pos.get("take_profit_1")
+                    if tp_price:
+                        tp_distance = abs(tp_price - entry_price)
+                        if tp_distance > 0:
+                            progress = abs(favorable_price - entry_price) / tp_distance
+                            if "pct_ladder_tier2" not in events and progress >= 0.50:
+                                candidate = entry_price + sign * (tp_distance * 0.25)
+                                pos["current_sl"] = candidate
+                                events.add("pct_ladder_tier2")
+                            elif ("pct_ladder_tier2" not in events and "pct_ladder_tier1" not in events
+                                  and progress >= 0.30):
+                                candidate = entry_price + sign * (tp_distance * 0.05)
+                                pos["current_sl"] = candidate
+                                events.add("pct_ladder_tier1")
+                elif profile_key == "scalping" and scalping_disable_protection:
+                    # No BE / quick-profit-lock AT ALL (2026-08-20 test,
+                    # Louis: real yesterday, +400$ real day, lots of real
+                    # positions reaching real take_profit — under the
+                    # ticket-type bug that silently no-op'd EVERY
+                    # modify_position_direct call, not just break-even's).
+                    # Reproduces that exact real state: a position only
+                    # ever exits via its real stop_loss or take_profit
+                    # touch (see step "1b." above), current_sl never moves.
+                    pass
+                elif profile_key == "scalping":
                     profit_usd = (
                         (favorable_price - entry_price) * remaining_lot * contract_size
                         if direction == "BUY"
                         else (entry_price - favorable_price) * remaining_lot * contract_size
                     )
                     if profit_usd >= QUICK_PROFIT_LOCK_USD:
-                        tight_offset = original_risk * QUICK_PROFIT_TRAIL_DISTANCE_R
+                        tight_offset = original_risk * effective_trail_r
                         candidate = favorable_price - sign * tight_offset
                         better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
                         if better:
                             pos["current_sl"] = candidate
                             events.add("quick_profit_lock")
-                    elif profit_usd >= BREAK_EVEN_TRIGGER_USD and remaining_lot > 0:
+                    elif profit_usd >= effective_be_trigger_usd and remaining_lot > 0:
                         if BE_TRAIL_PEAK_ENABLED:
                             locked_profit_usd = max(BREAK_EVEN_BUFFER_USD, profit_usd * BE_TRAIL_PEAK_FRACTION)
                             offset = locked_profit_usd / (remaining_lot * contract_size)

@@ -611,8 +611,19 @@ BREAK_EVEN_BUFFER_USD = 0.5
 # real profit — this widening gives real momentum more room before
 # anything gets locked at all, so the trades that DO reach the lock tier
 # are keeping meaningfully more of their real move.
+# 2026-08-20 — real A/B/C backtest (Louis, XAUUSD Scalping, 55 real trades,
+# 8 real M1 days, profile_backtest.py's quick_profit_trail_r override),
+# run right after fixing the real MT5-ticket-type bug that had silently
+# disabled ALL automated position management (see modify_position_direct/
+# close_position_direct in alphatg_bridge.py) — this is the first real
+# measurement of the trail distance on a bridge where it actually fires.
+# 0.35R (then-current): pnl 153.59$. 0.45R: pnl 197.21$ (+28%), avg_win
+# 4.52 -> 5.36. 0.50R: pnl 182.22$ — WORSE than 0.45R, confirming this
+# isn't "wider is always better": too loose gives back real profit before
+# the quick-lock tier catches it. 0.45R is a real, tested optimum, not a
+# guess — kept here instead of 0.50R for that reason.
 QUICK_PROFIT_LOCK_USD = 15.0
-QUICK_PROFIT_TRAIL_DISTANCE_R = 0.35
+QUICK_PROFIT_TRAIL_DISTANCE_R = 0.45
 
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
@@ -724,6 +735,22 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
 
         current_sl = trade.get("trailing_stop") or original_sl
         at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
+
+        # scalping_intermediate_protection_enabled (2026-08-20, real Louis
+        # decision) — default True (unset means enabled): a real Parameter
+        # toggle, not a code revert, for the BE/quick-profit-lock tiers
+        # below. Real context: 2026-08-20's MT5 ticket-type bug fix (see
+        # alphatg_bridge.py's modify_position_direct/close_position_direct)
+        # made this logic actually reach the broker for the first time —
+        # 5 A/B backtests the same day all confirmed it as the best real
+        # config found (173.67$ vs -42.47$ worst variant, same 8-day XAUUSD
+        # window) — but Louis chose to turn it back OFF live for now
+        # anyway (matches a real +400$ day he'd already had without it) and
+        # decide later, without losing the fix itself. Flip this Parameter
+        # back to true/unset whenever ready — no redeploy needed.
+        scalping_protection_enabled = params.get("scalping_intermediate_protection_enabled", True)
+        if is_scalping and not scalping_protection_enabled:
+            continue
 
         if is_scalping:
             # Scalping — exactly two tiers now (2026-08-13, real trader
