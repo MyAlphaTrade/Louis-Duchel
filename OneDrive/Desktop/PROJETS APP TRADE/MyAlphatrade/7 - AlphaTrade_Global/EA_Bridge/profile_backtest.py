@@ -416,7 +416,9 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             # 1. Real stop-loss check FIRST — unchanged.
             hit_sl = (bar["low"] <= current_sl) if direction == "BUY" else (bar["high"] >= current_sl)
             if hit_sl:
-                if "variant_lock2" in events:
+                if "variant_peak_trail" in events:
+                    reason = "variant_peak_trail"
+                elif "variant_lock2" in events:
                     reason = "variant_lock2"
                 elif "variant_lock1" in events:
                     reason = "variant_lock1"
@@ -533,15 +535,25 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                                     pos["current_sl"] = entry_price + sign * (tp_distance * 0.15)
                                     events.add("variant_lock1")
                             elif scalping_variant == "v3":
-                                if "variant_floor" not in events and progress >= 0.30 and remaining_lot > 0:
-                                    buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
-                                    pos["current_sl"] = entry_price + sign * buffer_offset
-                                    events.add("variant_floor")
-                                if peak_progress >= 0.30 and progress <= peak_progress * 0.80:
-                                    _finalize_trade(trades, pos, favorable_price, now, "variant_trail_close",
-                                                     remaining_lot, contract_size, capital)
-                                    daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
-                                    closed = True
+                                # CORRIGE 2026-08-20 (aligne sur le vrai
+                                # correctif live, local_functions.py) — plus
+                                # de cloture separee via close_fn : un seul
+                                # stop reel qui suit en continu
+                                # max(plancher minimum, pic*(1-20%)), verifie
+                                # comme n'importe quel stop_loss a l'etape 1.
+                                # L'ancienne version (plancher fixe + cloture
+                                # separee) courait toujours plus vite sur le
+                                # broker reel — jamais reproductible fidelement
+                                # par un backtest sur barres de toute facon.
+                                if peak_progress >= 0.30 and remaining_lot > 0:
+                                    floor_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
+                                    floor_progress = floor_offset / tp_distance
+                                    trail_progress = max(floor_progress, peak_progress * 0.80)
+                                    candidate = entry_price + sign * (tp_distance * trail_progress)
+                                    better = (candidate > pos["current_sl"]) if direction == "BUY" else (candidate < pos["current_sl"])
+                                    if better:
+                                        pos["current_sl"] = candidate
+                                        events.add("variant_peak_trail")
                 elif profile_key == "scalping" and scalping_pct_ladder:
                     # Palier en % de la distance vers le vrai take_profit_1
                     # (2026-08-20, proposition de Louis) — pas en $ comme le
