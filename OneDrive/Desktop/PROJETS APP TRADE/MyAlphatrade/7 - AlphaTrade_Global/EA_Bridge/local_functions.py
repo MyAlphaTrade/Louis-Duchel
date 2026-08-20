@@ -766,19 +766,25 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
             continue
 
         if is_scalping and scalping_protection_mode == "peak_trail":
-            # % of the REAL distance to take_profit (not $, not R): once a
-            # position has gone PEAK_TRAIL_FLOOR_PROGRESS (30%) of the way
-            # to its own real target, a small floor (same BREAK_EVEN_BUFFER_USD
-            # tampon as the $ scheme) locks in once; independently, once the
-            # real peak progress ever reached clears that same 30% mark, a
-            # real PEAK_TRAIL_RETRACE_FRACTION (20%) giveback FROM THAT PEAK
-            # closes the position outright — not a stop move, a real close
-            # now, at the current price. Both checked every ~1s cycle
-            # (finer-grained live than the M1-bar backtest that validated
-            # this), peak_progress_pct persisted on the Trade record so it
-            # survives across cycles/restarts.
+            # % of the REAL distance to take_profit (not $, not R).
+            # FIXED 2026-08-20 (real live bug found — Louis, watching real
+            # trades): the original version placed a tiny FLOOR (fixed near
+            # entry) as a real broker-side stop, THEN separately checked a
+            # WIDER 20%-of-peak retracement level in Python to trigger a
+            # full close. On a real fast reversal, MT5 executes the near
+            # floor INSTANTLY (broker-side), before the ~1s Python cycle
+            # ever gets to evaluate the wider retracement condition — the
+            # floor always won the race, so the retracement close NEVER
+            # fired once, on any real trade (12/12 real wins that day all
+            # exited via the floor, 0 via the intended retracement). Fixed
+            # by making the REAL stop itself track the retracement level —
+            # one continuously-ratcheting broker stop, never below the
+            # tiny floor, but pulled up to peak*(1-20%) as the peak grows —
+            # so there is no second, slower Python-side check to lose a
+            # race against: whichever level is live on the broker IS the
+            # real trigger, executed instantly like any stop-loss.
             tp_price = trade.get("take_profit")
-            if close_fn and tp_price:
+            if tp_price:
                 tp_distance = abs(tp_price - entry_price)
                 current_price = pos["current_price"]
                 if tp_distance > 0:
@@ -791,29 +797,26 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
                     if peak_progress > prior_peak:
                         update_entity("Trade", trade["id"], {"peak_progress_pct": peak_progress})
 
-                    if peak_progress >= PEAK_TRAIL_FLOOR_PROGRESS and progress <= peak_progress * (1 - PEAK_TRAIL_RETRACE_FRACTION):
-                        result = close_fn(pos["ticket"])
-                        if result.get("ok"):
-                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_close", "peak_progress": round(peak_progress, 3)})
-                            protected += 1
-                        else:
-                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_close_failed", "error": result.get("error")})
-                        continue
-
-                    if "peak_trail_floor" not in events and progress >= PEAK_TRAIL_FLOOR_PROGRESS and pos.get("lot"):
+                    if peak_progress >= PEAK_TRAIL_FLOOR_PROGRESS and pos.get("lot"):
                         contract_size = resolve_contract_size(pos.get("symbol"))
-                        buffer_offset = BREAK_EVEN_BUFFER_USD / (pos["lot"] * contract_size)
-                        floor_level = (entry_price + buffer_offset) if direction == "BUY" else (entry_price - buffer_offset)
-                        result = modify_fn(pos["ticket"], stop_loss=round(floor_level, 5))
-                        if result.get("ok"):
-                            update_entity("Trade", trade["id"], {
-                                "trailing_stop": floor_level,
-                                "management_events": events + ["peak_trail_floor"],
-                            })
-                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_floor", "new_stop_loss": round(floor_level, 5)})
-                            protected += 1
+                        floor_offset = BREAK_EVEN_BUFFER_USD / (pos["lot"] * contract_size)
+                        floor_progress = floor_offset / tp_distance
+                        trail_progress = max(floor_progress, peak_progress * (1 - PEAK_TRAIL_RETRACE_FRACTION))
+                        candidate = entry_price + sign * (tp_distance * trail_progress)
+                        better = (candidate > current_sl) if direction == "BUY" else (candidate < current_sl)
+                        if better:
+                            result = modify_fn(pos["ticket"], stop_loss=round(candidate, 5))
+                            if result.get("ok"):
+                                update_entity("Trade", trade["id"], {
+                                    "trailing_stop": candidate,
+                                    "management_events": events + ["peak_trail"],
+                                })
+                                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail", "new_stop_loss": round(candidate, 5), "peak_progress": round(peak_progress, 3)})
+                                protected += 1
+                            else:
+                                actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_failed", "error": result.get("error")})
                         else:
-                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_floor_failed", "error": result.get("error")})
+                            protected += 1
                     else:
                         protected += 1
             continue
