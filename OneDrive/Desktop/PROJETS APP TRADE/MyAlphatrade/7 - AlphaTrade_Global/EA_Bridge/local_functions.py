@@ -625,6 +625,16 @@ BREAK_EVEN_BUFFER_USD = 0.5
 QUICK_PROFIT_LOCK_USD = 15.0
 QUICK_PROFIT_TRAIL_DISTANCE_R = 0.45
 
+# Peak-trail scheme (2026-08-20, Louis's real proposal #3, scalping_protection_mode
+# = "peak_trail" above) — measured in % of the real distance to
+# take_profit, not $. Real backtest (XAUUSD Scalping, 8 real M1 days, same
+# window the $-scheme above was re-validated on the same day): pnl 311.41$
+# vs the $-scheme's 173.67$ (+79%), win rate 68.9% — beat every other
+# scheme tested that day, dollar-based included. See profile_backtest.py's
+# scalping_variant="v3" for the exact tested version this mirrors.
+PEAK_TRAIL_FLOOR_PROGRESS = 0.30
+PEAK_TRAIL_RETRACE_FRACTION = 0.20
+
 # Emergency close: the one case break-even/trailing/TP can never reach,
 # because all of them need an original stop loss to measure R against.
 # A position with NO recorded stop (opened manually with none, or a Trade
@@ -736,20 +746,76 @@ def manage_open_positions(get_positions_fn, modify_fn, params=None, close_fn=Non
         current_sl = trade.get("trailing_stop") or original_sl
         at_breakeven_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
 
-        # scalping_intermediate_protection_enabled (2026-08-20, real Louis
-        # decision) — default True (unset means enabled): a real Parameter
-        # toggle, not a code revert, for the BE/quick-profit-lock tiers
-        # below. Real context: 2026-08-20's MT5 ticket-type bug fix (see
-        # alphatg_bridge.py's modify_position_direct/close_position_direct)
-        # made this logic actually reach the broker for the first time —
-        # 5 A/B backtests the same day all confirmed it as the best real
-        # config found (173.67$ vs -42.47$ worst variant, same 8-day XAUUSD
-        # window) — but Louis chose to turn it back OFF live for now
-        # anyway (matches a real +400$ day he'd already had without it) and
-        # decide later, without losing the fix itself. Flip this Parameter
-        # back to true/unset whenever ready — no redeploy needed.
-        scalping_protection_enabled = params.get("scalping_intermediate_protection_enabled", True)
-        if is_scalping and not scalping_protection_enabled:
+        # scalping_protection_mode (2026-08-20, real Louis decision chain)
+        # — a real Parameter selector, not a code revert: "off" | "dollar"
+        # (default, unset too — the original $-based scheme below) |
+        # "peak_trail" (the new scheme just below that). Same day's real
+        # history: the MT5 ticket-type bug fix (see alphatg_bridge.py's
+        # modify_position_direct/close_position_direct) made ANY of this
+        # actually reach the broker for the first time; 5 real A/B
+        # backtests then confirmed the $-based scheme (below) as the best
+        # $-based config (173.67$ vs -42.47$ worst variant, 8-day XAUUSD);
+        # Louis turned protection fully OFF live anyway to match a real
+        # +400$ day he'd had without it; THEN proposed 3 more real %-based
+        # schemes the same day, and "peak_trail" (proposal #3) beat
+        # EVERYTHING tested, dollar scheme included (311.41$, 68.9% win
+        # rate — see profile_backtest.py's scalping_variant="v3" for the
+        # exact tested version this mirrors). Set to "peak_trail" live.
+        scalping_protection_mode = params.get("scalping_protection_mode") or "dollar"
+        if is_scalping and scalping_protection_mode == "off":
+            continue
+
+        if is_scalping and scalping_protection_mode == "peak_trail":
+            # % of the REAL distance to take_profit (not $, not R): once a
+            # position has gone PEAK_TRAIL_FLOOR_PROGRESS (30%) of the way
+            # to its own real target, a small floor (same BREAK_EVEN_BUFFER_USD
+            # tampon as the $ scheme) locks in once; independently, once the
+            # real peak progress ever reached clears that same 30% mark, a
+            # real PEAK_TRAIL_RETRACE_FRACTION (20%) giveback FROM THAT PEAK
+            # closes the position outright — not a stop move, a real close
+            # now, at the current price. Both checked every ~1s cycle
+            # (finer-grained live than the M1-bar backtest that validated
+            # this), peak_progress_pct persisted on the Trade record so it
+            # survives across cycles/restarts.
+            tp_price = trade.get("take_profit")
+            if close_fn and tp_price:
+                tp_distance = abs(tp_price - entry_price)
+                current_price = pos["current_price"]
+                if tp_distance > 0:
+                    progress = ((current_price - entry_price) / tp_distance if direction == "BUY"
+                                else (entry_price - current_price) / tp_distance)
+                    prior_peak = trade.get("peak_progress_pct") or 0.0
+                    peak_progress = max(prior_peak, progress)
+                    eligible += 1
+
+                    if peak_progress > prior_peak:
+                        update_entity("Trade", trade["id"], {"peak_progress_pct": peak_progress})
+
+                    if peak_progress >= PEAK_TRAIL_FLOOR_PROGRESS and progress <= peak_progress * (1 - PEAK_TRAIL_RETRACE_FRACTION):
+                        result = close_fn(pos["ticket"])
+                        if result.get("ok"):
+                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_close", "peak_progress": round(peak_progress, 3)})
+                            protected += 1
+                        else:
+                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_close_failed", "error": result.get("error")})
+                        continue
+
+                    if "peak_trail_floor" not in events and progress >= PEAK_TRAIL_FLOOR_PROGRESS and pos.get("lot"):
+                        contract_size = resolve_contract_size(pos.get("symbol"))
+                        buffer_offset = BREAK_EVEN_BUFFER_USD / (pos["lot"] * contract_size)
+                        floor_level = (entry_price + buffer_offset) if direction == "BUY" else (entry_price - buffer_offset)
+                        result = modify_fn(pos["ticket"], stop_loss=round(floor_level, 5))
+                        if result.get("ok"):
+                            update_entity("Trade", trade["id"], {
+                                "trailing_stop": floor_level,
+                                "management_events": events + ["peak_trail_floor"],
+                            })
+                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_floor", "new_stop_loss": round(floor_level, 5)})
+                            protected += 1
+                        else:
+                            actions.append({"ticket": pos["ticket"], "symbol": pos["symbol"], "event": "peak_trail_floor_failed", "error": result.get("error")})
+                    else:
+                        protected += 1
             continue
 
         if is_scalping:

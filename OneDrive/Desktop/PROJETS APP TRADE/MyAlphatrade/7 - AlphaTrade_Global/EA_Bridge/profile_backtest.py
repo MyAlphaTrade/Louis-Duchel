@@ -220,8 +220,21 @@ def _finalize_trade(trades, open_position, exit_price, exit_date, exit_reason, c
 def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_bars=210,
                           use_momentum_catchup=False, max_concurrent_positions=1, scalping_tp_mult=None,
                           quick_profit_trail_r=None, scalping_be_trigger_usd=None,
-                          scalping_disable_protection=False, scalping_pct_ladder=False):
+                          scalping_disable_protection=False, scalping_pct_ladder=False,
+                          scalping_variant=None):
     """
+    scalping_variant: None (default) | "v1_10" | "v1_15" | "v2" | "v3" —
+      three more real proposals (2026-08-20, Louis, after the first %
+      ladder failed at -42.47$): "v1_10"/"v1_15" only ever lock 10%/15% of
+      the real distance to take_profit_1 once progress reaches 50% (single
+      shot, nothing before, never re-evaluated after). "v2" adds a second
+      tier on top of v1_15: at 75% progress, locks 50% instead (replaces
+      the 15% lock). "v3" is structurally different — a 1.5$ floor (the
+      CURRENT production BE buffer) activates once progress reaches 30%,
+      and independently, once the real peak progress reached is >= 30%, a
+      20% retracement FROM THAT PEAK closes the position outright (not a
+      stop move — a real close at the current price).
+
     scalping_pct_ladder: False (default) | True — real test (2026-08-20,
       Louis's own proposal), a completely different Scalping protection
       scheme measured in % of the real distance to take_profit_1 rather
@@ -403,7 +416,15 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
             # 1. Real stop-loss check FIRST — unchanged.
             hit_sl = (bar["low"] <= current_sl) if direction == "BUY" else (bar["high"] >= current_sl)
             if hit_sl:
-                if "pct_ladder_tier2" in events:
+                if "variant_lock2" in events:
+                    reason = "variant_lock2"
+                elif "variant_lock1" in events:
+                    reason = "variant_lock1"
+                elif "variant_lock" in events:
+                    reason = "variant_lock"
+                elif "variant_floor" in events:
+                    reason = "variant_floor"
+                elif "pct_ladder_tier2" in events:
                     reason = "pct_ladder_tier2"
                 elif "pct_ladder_tier1" in events:
                     reason = "pct_ladder_tier1"
@@ -473,7 +494,55 @@ def run_profile_backtest(symbol, profile_key, all_candles, capital=1000, warmup_
                 at_be_or_better = (current_sl >= entry_price) if direction == "BUY" else (current_sl <= entry_price)
                 sign = 1 if direction == "BUY" else -1
 
-                if profile_key == "scalping" and scalping_pct_ladder:
+                if profile_key == "scalping" and scalping_variant:
+                    # 3 nouvelles propositions (2026-08-20, Louis, apres
+                    # l'echec du premier palier %) — toutes mesurees en %
+                    # de la distance reelle vers take_profit_1, jamais en $
+                    # fixe. Sans take_profit_1 reel, rien a mesurer, le
+                    # stop reste inchange (meme garde que pct_ladder).
+                    #   v1_10 / v1_15 : verrouille 10% (ou 15%) de la
+                    #     distance UNE FOIS que 50% du chemin est atteint —
+                    #     rien avant, un seul palier, jamais desactive.
+                    #   v2 : comme v1_15, PLUS un second palier a 75% du
+                    #     chemin qui verrouille 50% (remplace le premier).
+                    #   v3 : a 30% du chemin, active le petit plancher BE
+                    #     actuel (1,5$/0,5$ tampon, "comme initialement")
+                    #     ; au-dela, suit le PIC de progression reellement
+                    #     atteint — un retracement de 20% de ce pic (une
+                    #     fois le pic lui-meme >= 30%) CLOTURE la position
+                    #     entierement, pas juste un deplacement de stop.
+                    tp_price = pos.get("take_profit_1")
+                    if tp_price:
+                        tp_distance = abs(tp_price - entry_price)
+                        if tp_distance > 0:
+                            progress = abs(favorable_price - entry_price) / tp_distance
+                            peak_progress = max(pos.get("peak_progress", 0.0), progress)
+                            pos["peak_progress"] = peak_progress
+
+                            if scalping_variant in ("v1_10", "v1_15"):
+                                lock_frac = 0.10 if scalping_variant == "v1_10" else 0.15
+                                if "variant_lock" not in events and progress >= 0.50:
+                                    pos["current_sl"] = entry_price + sign * (tp_distance * lock_frac)
+                                    events.add("variant_lock")
+                            elif scalping_variant == "v2":
+                                if "variant_lock2" not in events and progress >= 0.75:
+                                    pos["current_sl"] = entry_price + sign * (tp_distance * 0.50)
+                                    events.add("variant_lock2")
+                                elif ("variant_lock2" not in events and "variant_lock1" not in events
+                                      and progress >= 0.50):
+                                    pos["current_sl"] = entry_price + sign * (tp_distance * 0.15)
+                                    events.add("variant_lock1")
+                            elif scalping_variant == "v3":
+                                if "variant_floor" not in events and progress >= 0.30 and remaining_lot > 0:
+                                    buffer_offset = BREAK_EVEN_BUFFER_USD / (remaining_lot * contract_size)
+                                    pos["current_sl"] = entry_price + sign * buffer_offset
+                                    events.add("variant_floor")
+                                if peak_progress >= 0.30 and progress <= peak_progress * 0.80:
+                                    _finalize_trade(trades, pos, favorable_price, now, "variant_trail_close",
+                                                     remaining_lot, contract_size, capital)
+                                    daily_trade_count[today] = daily_trade_count.get(today, 0) + 1
+                                    closed = True
+                elif profile_key == "scalping" and scalping_pct_ladder:
                     # Palier en % de la distance vers le vrai take_profit_1
                     # (2026-08-20, proposition de Louis) — pas en $ comme le
                     # reste du fichier: a 30% du chemin vers le TP, verrouille
