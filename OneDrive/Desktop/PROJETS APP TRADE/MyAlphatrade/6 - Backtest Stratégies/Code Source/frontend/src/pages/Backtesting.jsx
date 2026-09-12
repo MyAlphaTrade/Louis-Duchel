@@ -102,7 +102,20 @@ export default function Backtesting() {
         total_profit: m.netProfit,
         max_drawdown: m.maxDrawdown,
         profit_factor: m.profitFactor,
-        sharpe_ratio: 0,
+        // Phase 1 (2026-09-12) -- Sharpe réellement calculé (null si non
+        // calculable, jamais le faux 0 codé en dur trouvé en Audit Phase B).
+        sharpe_ratio: m.sharpeRatio,
+        // Traçabilité réel/synthétique + dataset exact + conventions du
+        // moteur au moment du run -- corrige le bug critique trouvé en
+        // Audit Phase B (un résultat synthétique était indiscernable d'un
+        // résultat réel une fois sauvegardé). `dataset` reste générique
+        // (pas de fenêtre codée en dur) pour rester valable quand
+        // l'ingestion couvrira plusieurs années accumulées en continu.
+        data_source: results.dataSource,
+        dataset: results.dataset,
+        risk_model: results.riskModel,
+        intrabar_exit_policy: results.intrabarExitPolicy,
+        atr_smoothing: results.atrSmoothing,
         trades: results.trades.map((t) => ({
           type: t.direction,
           entry_price: t.entry_price,
