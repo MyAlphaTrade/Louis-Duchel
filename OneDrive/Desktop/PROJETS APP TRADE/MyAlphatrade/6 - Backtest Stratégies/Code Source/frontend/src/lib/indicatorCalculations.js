@@ -84,6 +84,12 @@ export function macd(values, fast, slow, signal) {
   return { macdLine, signalLine, histogram };
 }
 
+// Lissage EMA standard (k=2/(N+1)), PAS le lissage de Wilder (k=1/N) utilisé
+// nativement par MT5 et par le module Market Memory construit pour Global --
+// voir ATR_SMOOTHING_CONVENTION dans backtestEngine.js (Phase 1, 2026-09-12,
+// convention nommée explicitement en Audit Phase B, comportement inchangé).
+// Les valeurs d'ATR des deux systèmes ne sont donc PAS directement
+// comparables sans conversion tant qu'une harmonisation n'est pas décidée.
 export function atr(bars, period) {
   const tr = bars.map((b, i) => {
     if (i === 0) return b.high - b.low;
