@@ -10,6 +10,7 @@ sqlite3 (stdlib) au lieu de pg8000/Postgres, PyJWT + bcrypt au lieu de
 jose + sha256/pepper.
 """
 import os
+import sys
 import json
 import secrets
 import sqlite3
@@ -27,6 +28,9 @@ from dotenv import load_dotenv
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 
 load_dotenv()
@@ -37,12 +41,48 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("DB_PATH", os.path.join("data", "strategylab.db"))
-if not os.path.isabs(DB_PATH):
-    DB_PATH = os.path.join(BASE_DIR, DB_PATH)
+# En .exe PyInstaller, BASE_DIR pointe vers un dossier temporaire en lecture
+# seule et RECREE A CHAQUE LANCEMENT (_MEIxxxx) -- la DB doit vivre dans un
+# dossier utilisateur ecrivable et STABLE d'un lancement a l'autre.
+#
+# Bug reel confirme le 23/07/2026 (Louis : "toutes les stratégies ont encore
+# disparu" a chaque relance de l'app installee) : le DB_PATH="data/strategylab.db"
+# du .env de dev (backend/.env, non embarque dans le build mais retrouve par
+# load_dotenv() lors de sa remontee d'arborescence) passait au travers de
+# l'ancien `os.environ.get("DB_PATH", ...)` meme en frozen, et redevenait donc
+# relatif a BASE_DIR -- un dossier _MEIxxxx different et vide a chaque
+# demarrage. Resultat : l'app installee tournait en silence sur une base
+# ephemere, jamais sur celle de %LOCALAPPDATA%, sans jamais lever d'erreur.
+# En frozen, le chemin LOCALAPPDATA est donc desormais IMPOSE sans aucune
+# possibilite de override par l'environnement/.env -- seul le mode dev
+# (non frozen) reste configurable via DB_PATH.
+if getattr(sys, "frozen", False):
+    DB_PATH = os.path.join(os.environ.get("LOCALAPPDATA", BASE_DIR), "StrategieLabAT", "strategylab.db")
+else:
+    DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "strategylab.db"))
+    if not os.path.isabs(DB_PATH):
+        DB_PATH = os.path.join(BASE_DIR, DB_PATH)
+print(f"[main] DB_PATH resolu : {DB_PATH}")
+# Trace ecrite inconditionnellement (independante de la redirection stdout,
+# qui s'est deja averee peu fiable a diagnostiquer en prod) pour confirmer a
+# coup sur, fichier par fichier, quel DB_PATH une installation donnee utilise
+# reellement -- diagnostic du 23/07/2026.
+try:
+    _debug_dir = os.environ.get("LOCALAPPDATA", BASE_DIR)
+    with open(os.path.join(_debug_dir, "StrategieLabAT_debug.txt"), "a", encoding="utf-8") as _f:
+        _f.write(
+            f"{__import__('time').strftime('%Y-%m-%d %H:%M:%S')} "
+            f"DB_PATH={DB_PATH} frozen={getattr(sys, 'frozen', False)} "
+            f"BASE_DIR={BASE_DIR} LOCALAPPDATA_env={os.environ.get('LOCALAPPDATA')} "
+            f"exists={os.path.exists(DB_PATH)}\n"
+        )
+except Exception as _e:
+    pass
 
 CORS_ORIGINS = [
-    o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()
+    o.strip() for o in os.environ.get(
+        "CORS_ORIGINS", "http://localhost:5173,http://localhost:8010"
+    ).split(",") if o.strip()
 ]
 
 PORT = int(os.environ.get("PORT", 8010))
@@ -380,7 +420,10 @@ class ResetPasswordRequest(BaseModel):
 
 
 # ── Routes racine ────────────────────────────────────────────────────────────
-@app.get("/")
+# Deplace de "/" vers "/api/health" -- "/" est reserve au frontend statique
+# (voir le bloc de service SPA en fin de fichier), necessaire pour que l'app
+# desktop pywebview affiche l'app plutot que ce JSON en ouvrant sa fenetre.
+@app.get("/api/health")
 def root():
     return {"service": "AlphaTrade Strategy Lab API", "version": "0.1.0", "status": "ok"}
 
@@ -658,9 +701,18 @@ async def delete_entity(entity_type: str, entity_id: str, user=Depends(get_curre
 # Distinct du CRUD generique ci-dessus : un import d'historique MT5 represente
 # des dizaines de milliers de bougies -- les creer une par une (un appel HTTP
 # chacune) serait beaucoup trop lent. Cet endpoint accepte un lot complet en
-# une requete, et remplace l'historique existant pour ce (symbole, timeframe)
-# plutot que de l'accumuler -- un ré-import (ex. donnees plus recentes)
-# est donc idempotent au lieu de dupliquer les bougies deja presentes.
+# une requete.
+#
+# CORRIGE 2026-09-12 (Phase 1 Strategy Lab -- provenance/import non destructif,
+# voir Audit_Phase_B) : la version precedente SUPPRIMAIT tout l'historique
+# existant pour ce (symbole, timeframe) avant d'inserer le nouveau lot -- un
+# import couvrant seulement une partie de la periode effacait silencieusement
+# le reste. Desormais : FUSION par timestamp. Une bougie a un timestamp deja
+# present est mise a jour (et comptee comme collision si sa valeur differe
+# reellement, sinon comme inchangee) ; un timestamp absent est insere. Rien
+# n'est jamais supprime par cet endpoint. `_merge_market_data` est une
+# fonction pure (aucun acces DB) precisement pour rester testable sans
+# fixture SQLite -- voir test_merge_market_data.py.
 class Candle(BaseModel):
     timestamp: str
     open: float
@@ -668,12 +720,70 @@ class Candle(BaseModel):
     low: float
     close: float
     volume: Optional[float] = 0
+    # Colonne <SPREAD> du CSV MT5 -- deja presente dans chaque export mais
+    # jamais lue jusqu'ici (trouvee en Phase B). Stockee telle quelle pour les
+    # phases futures (modelisation Bid/Ask reelle) ; AUCUN calcul du moteur
+    # (spread synthetique de buildEngineContext) n'en depend encore.
+    spread: Optional[float] = None
 
 
 class MarketDataImportRequest(BaseModel):
     symbol: str
     timeframe: str
     candles: list[Candle]
+
+
+def _candle_data(symbol: str, timeframe: str, c: "Candle") -> dict:
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "timestamp": c.timestamp,
+        "open": c.open,
+        "high": c.high,
+        "low": c.low,
+        "close": c.close,
+        "volume": c.volume or 0,
+        "spread": c.spread,
+    }
+
+
+def _merge_market_data(existing_by_timestamp: dict, symbol: str, timeframe: str, candles: list):
+    """Fonction pure : decide quoi inserer/mettre a jour/laisser tel quel,
+    sans toucher a la DB -- testable directement (voir test_merge_market_data.py).
+
+    existing_by_timestamp: {timestamp: (entity_id, data_dict)} deja present
+    en base pour ce (symbol, timeframe).
+
+    Retourne (to_insert, to_update, collisions, unchanged) ou :
+    - to_insert: liste de dicts `data` a creer (timestamp absent)
+    - to_update: liste de (entity_id, data) a ecraser (timestamp present,
+      valeurs OHLC reellement differentes -- une collision reelle)
+    - collisions: nombre de timestamps ou l'ancienne et la nouvelle bougie
+      different reellement (sous-ensemble de to_update, expose separement
+      pour que l'appelant puisse le signaler explicitement, jamais en silence)
+    - unchanged: nombre de timestamps deja presents avec des valeurs identiques
+      (rien a faire, ni collision ni nouvelle donnee)
+    """
+    to_insert, to_update = [], []
+    collisions = 0
+    unchanged = 0
+    ohlc_fields = ("open", "high", "low", "close")
+
+    for c in candles:
+        new_data = _candle_data(symbol, timeframe, c)
+        existing = existing_by_timestamp.get(c.timestamp)
+        if existing is None:
+            to_insert.append(new_data)
+            continue
+        entity_id, old_data = existing
+        differs = any(old_data.get(f) != new_data.get(f) for f in ohlc_fields)
+        if differs:
+            collisions += 1
+            to_update.append((entity_id, new_data))
+        else:
+            unchanged += 1
+
+    return to_insert, to_update, collisions, unchanged
 
 
 @app.post("/market-data/import")
@@ -687,32 +797,45 @@ def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_us
         )
 
     now = now_iso()
-    rows = []
-    for c in req.candles:
-        data = {
-            "symbol": req.symbol,
-            "timeframe": req.timeframe,
-            "timestamp": c.timestamp,
-            "open": c.open,
-            "high": c.high,
-            "low": c.low,
-            "close": c.close,
-            "volume": c.volume or 0,
-        }
-        rows.append((str(uuid.uuid4()), user["id"], "MarketData", json.dumps(data), now, now))
 
     with db_cursor(commit=True) as (conn, cur):
         cur.execute(
-            "DELETE FROM entities WHERE user_id = ? AND entity_type = 'MarketData' "
+            "SELECT id, data FROM entities WHERE user_id = ? AND entity_type = 'MarketData' "
             "AND json_extract(data, '$.symbol') = ? AND json_extract(data, '$.timeframe') = ?",
             (user["id"], req.symbol, req.timeframe),
         )
-        cur.executemany(
-            "INSERT INTO entities (id, user_id, entity_type, data, created_date, updated_date) VALUES (?, ?, ?, ?, ?, ?)",
-            rows,
+        existing_by_timestamp = {}
+        for row in cur.fetchall():
+            d = json.loads(row["data"])
+            existing_by_timestamp[d["timestamp"]] = (row["id"], d)
+
+        to_insert, to_update, collisions, unchanged = _merge_market_data(
+            existing_by_timestamp, req.symbol, req.timeframe, req.candles
         )
 
-    return {"ok": True, "imported": len(rows), "symbol": req.symbol, "timeframe": req.timeframe}
+        if to_insert:
+            rows = [
+                (str(uuid.uuid4()), user["id"], "MarketData", json.dumps(data), now, now)
+                for data in to_insert
+            ]
+            cur.executemany(
+                "INSERT INTO entities (id, user_id, entity_type, data, created_date, updated_date) VALUES (?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+        for entity_id, data in to_update:
+            cur.execute(
+                "UPDATE entities SET data = ?, updated_date = ? WHERE id = ? AND user_id = ?",
+                (json.dumps(data), now, entity_id, user["id"]),
+            )
+
+    return {
+        "ok": True,
+        "symbol": req.symbol,
+        "timeframe": req.timeframe,
+        "inserted": len(to_insert),
+        "updated_collisions": collisions,
+        "unchanged": unchanged,
+    }
 
 
 @app.get("/market-data")
@@ -961,6 +1084,7 @@ class AlphaTradeSendSignalRequest(BaseModel):
     confidence: Optional[float] = None
     strategy_name: Optional[str] = ""
     notes: Optional[str] = ""
+    allow_reinforcement: bool = True
 
 
 def _alphatrade_error_message(status_code: Optional[int]) -> str:
@@ -1013,6 +1137,7 @@ def alphatrade_send_signal(req: AlphaTradeSendSignalRequest, user=Depends(get_cu
         "source": "strategy_lab",
         "strategy_name": req.strategy_name or "",
         "notes": req.notes or "",
+        "allow_reinforcement": req.allow_reinforcement,
     }
     try:
         resp = requests.post(
@@ -1032,7 +1157,49 @@ def alphatrade_send_signal(req: AlphaTradeSendSignalRequest, user=Depends(get_cu
     return resp.json()
 
 
+# ── Frontend statique (app desktop pywebview / build .exe) ─────────────────
+# En dev, le frontend tourne via `npm run dev` (Vite, port 5173) et ce bloc
+# ne sert a rien puisque FRONTEND_DIST n'existe pas encore. Une fois
+# `npm run build` execute (ou une fois embarque dans l'exe PyInstaller sous
+# _MEIPASS/frontend_dist), ce meme backend peut servir le frontend build --
+# c'est ce que fait desktop_app.py pour n'ouvrir qu'une seule fenetre, sans
+# navigateur.
+if getattr(sys, "frozen", False):
+    FRONTEND_DIST = os.path.join(getattr(sys, "_MEIPASS", BASE_DIR), "frontend_dist")
+else:
+    FRONTEND_DIST = os.path.normpath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
+
+if os.path.isdir(FRONTEND_DIST):
+    _assets_dir = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="frontend-assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_frontend_index():
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+
+    @app.get("/{root_file}", include_in_schema=False)
+    async def serve_frontend_root_file(root_file: str):
+        # Fichiers a la racine de dist/ (logo.png, favicon...) -- distincts
+        # des routes API, qui sont toutes definies plus haut dans ce fichier
+        # et matchent donc en premier (Starlette resout dans l'ordre
+        # d'enregistrement des routes).
+        candidate = os.path.join(FRONTEND_DIST, root_file)
+        if os.path.isfile(candidate):
+            return FileResponse(candidate)
+        raise StarletteHTTPException(404)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def spa_fallback(request, exc: StarletteHTTPException):
+        # Routes cote client de React Router (ex: /strategies, /backtesting)
+        # -- pas de fichier correspondant sur disque, on sert index.html et
+        # React Router prend le relais cote client.
+        if exc.status_code == 404 and request.method == "GET":
+            return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=not getattr(sys, "frozen", False))
