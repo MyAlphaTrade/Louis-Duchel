@@ -96,6 +96,16 @@ export function appendLiveBar(lookbackBars, tick) {
 // decision object — PaperTrading.jsx is responsible for actually
 // persisting the outcome via base44.entities.PaperTrade (this module never
 // touches the DB, keeping the decision logic tick-agnostic and testable).
+//
+// LIMITATION CONNUE, documentée volontairement sans correction en Phase 1
+// (trouvée en Audit Phase B) : `openTrade` ici est UN SEUL objet ou `null`,
+// jamais un tableau — contrairement à `runBacktest` (backtestEngine.js) qui
+// supporte plusieurs positions concurrentes via `openTrades[]` jusqu'à
+// `risk_management.max_positions`. Ce mode reste donc structurellement
+// plafonné à UNE position à la fois, quelle que soit la valeur de
+// `max_positions` dans la stratégie — l'unification est prévue pour une
+// phase ultérieure du Research Lab (voir architecture, §10/§15 "Multi-
+// positions"), pas ici.
 export function evaluateLiveStep({ openTrade, lookbackBars, tick, strategy, asset, config }) {
   if (!Array.isArray(lookbackBars)) {
     // Ne devrait jamais arriver si l'appelant a bien attendu loadLiveContext()
@@ -168,9 +178,14 @@ export function initReplayState(capital) {
 
 // Advances the replay by exactly one candle. Pure function — returns a new
 // state object, never mutates `state`. Mirrors runBacktest's per-bar loop
-// body exactly (same primitives, same order of operations) so a replay run
-// to completion reproduces the same trades/metrics as a classic backtest
-// over the same candles.
+// body — MÊMES primitives de coût/SL-TP/sizing, MÊME ordre d'opérations —
+// mais PAS le même support multi-positions : `openTrade` ici reste un
+// scalaire (une seule position à la fois), contrairement au tableau
+// `openTrades[]` de `runBacktest`. LIMITATION CONNUE, documentée
+// volontairement sans correction en Phase 1 (trouvée en Audit Phase B) --
+// un rejeu ne reproduit donc PAS exactement un backtest classique dès que
+// `risk_management.max_positions > 1`. Unification prévue pour une phase
+// ultérieure du Research Lab (voir architecture, §10/§15).
 export function stepReplay(state, session) {
   if (state.done) return state;
   const { bars, series, ctx, strategy } = session;
