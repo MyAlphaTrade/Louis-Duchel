@@ -18,6 +18,50 @@ export const TF_MINUTES = {
   M1: 1, M5: 5, M15: 15, M30: 30, H1: 60, H4: 240, D1: 1440,
 };
 
+// ── Conventions explicites, versionnées (Phase 1, 2026-09-12) ──────────────
+// Trouvées implicites dans le code en Audit Phase B -- nommées ici pour
+// qu'un StrategyVersion/BacktestResult futur puisse enregistrer EXACTEMENT
+// sous quelle convention il a été produit, sans jamais la changer en
+// silence. Voir Audit_Phase_B et architecture Research Lab (§13/14).
+
+// Priorité SL/TP intrabar : comportement INCHANGÉ (checkExitSignal
+// continue de tester SL avant TP dans tous les cas) -- seulement nommé et
+// exposé désormais. Choix délibérément conservé : sur un OHLC sans vraie
+// résolution intrabar, aucune convention n'est "prouvable" ; SL_FIRST est
+// la convention la plus prudente (ne surestime jamais un gain qui aurait
+// pu être un stop). Une éventuelle autre convention (TP_FIRST, ambiguïté
+// explicite) sera une décision à part, pas une correction silencieuse.
+export const INTRABAR_EXIT_POLICY = "SL_FIRST";
+
+// Lissage ATR : comportement INCHANGÉ (EMA standard, k=2/(N+1) -- voir
+// indicatorCalculations.js::atr). PAS le lissage de Wilder (k=1/N) utilisé
+// par MT5 nativement et par le module Market Memory construit pour Global
+// -- les deux systèmes ne sont donc pas encore directement comparables en
+// valeur d'ATR. Harmonisation éventuelle : décision explicite future, pas
+// silencieuse (voir Research Lab §13/14).
+export const ATR_SMOOTHING_CONVENTION = "EMA_STANDARD";
+
+// Sizing par risque % : convention choisie ici (voir buildEngineContext) --
+// le risque en $ ET le plafond de levier utilisent tous les deux le
+// CAPITAL INITIAL fixe de la session, jamais le solde courant. Corrige un
+// bug réel trouvé en Audit Phase B (les deux bases de capital étaient
+// mélangées : risque sur capital initial, plafond de levier sur solde
+// courant). Choisi plutôt que "capital courant" pour une raison précise :
+// le Monte Carlo bootstrap (bootstrapTradeSimulation) rejoue les MÊMES
+// profits $ de trades déjà clos dans un ordre différent -- un sizing qui
+// dépend du solde courant rendrait ce rejeu incohérent (la taille réelle
+// d'un trade aurait été différente selon sa place dans la séquence). Le
+// sizing sur capital fixe garde chaque trade comparable indépendamment de
+// l'ordre, condition nécessaire pour qu'un futur Research Lab compare des
+// stratégies sur des bases équitables.
+export const RISK_MODEL = "FIXED_FRACTIONAL_INITIAL_CAPITAL";
+
+// Nombre minimal de trades clôturés avant qu'un Sharpe ratio soit calculé --
+// en dessous, l'écart-type est statistiquement trop instable pour vouloir
+// dire quoi que ce soit (même seuil de prudence que MIN_TRADES_FOR_BOOTSTRAP
+// dans MonteCarloAnalysis.jsx). Sous ce seuil : `null`, jamais un faux 0.
+export const MIN_TRADES_FOR_SHARPE = 5;
+
 // Generate synthetic OHLC bars (random walk with realistic volatility).
 // Kept as an explicit fallback for assets/timeframes with no imported
 // historical data — never delete, `runBacktest` calls this when
@@ -167,6 +211,9 @@ export async function loadRealBars(symbol, timeframe) {
       low: c.low,
       close: c.close,
       volume: c.volume || 0,
+      // Passe-plat depuis MarketData (colonne <SPREAD> du CSV MT5, Phase 1) --
+      // aucun calcul du moteur n'en dépend encore (voir buildEngineContext).
+      spread: c.spread ?? null,
       timestamp: new Date(c.timestamp),
       index: idx,
     }));
@@ -226,6 +273,14 @@ export function buildEngineContext(strategy, asset, config, capital) {
     riskAmount,
     maxPositions: risk.max_positions || 1,
     tfMin,
+    // Capital initial de la session, conservé explicitement sur ctx (Phase 1)
+    // -- sert de base UNIQUE au sizing (riskAmount ci-dessus ET le plafond de
+    // levier dans computeEntryOrder), voir RISK_MODEL. Jamais le solde
+    // courant, qui change à chaque trade clos.
+    capital,
+    riskModel: RISK_MODEL,
+    intrabarExitPolicy: INTRABAR_EXIT_POLICY,
+    atrSmoothing: ATR_SMOOTHING_CONVENTION,
   };
 }
 
@@ -241,8 +296,16 @@ export function getEntrySignal(strategy, series, bars, i) {
 // Builds a fresh open-position object from an entry signal — applies
 // spread/slippage to the entry price, computes SL/TP (pips/percent/ATR) and
 // position size (risk-based, capped by leveraged buying power).
+// `balance` (5e argument) est conservé pour compatibilité de signature avec
+// les appelants existants (runBacktest/stepReplay passent le solde courant),
+// mais N'EST PLUS UTILISÉ pour le sizing depuis la Phase 1 -- voir RISK_MODEL
+// ci-dessus. AVANT : le plafond de levier utilisait ce solde courant pendant
+// que riskAmount (calculé dans buildEngineContext) utilisait le capital
+// initial figé -- deux bases de capital différentes mélangées dans la même
+// formule de sizing (bug réel trouvé en Audit Phase B). APRÈS : les deux
+// utilisent `ctx.capital`, la même base, tout le temps.
 export function computeEntryOrder(direction, bar, i, series, ctx, balance) {
-  const { pipSize, spreadCost, slippageCost, slConfig, tpConfig, riskAmount, configLotSize, leverage } = ctx;
+  const { pipSize, spreadCost, slippageCost, slConfig, tpConfig, riskAmount, configLotSize, leverage, capital } = ctx;
   const rawEntry = bar.close;
 
   // Apply spread + slippage on entry (unfavorable direction)
@@ -276,7 +339,7 @@ export function computeEntryOrder(direction, bar, i, series, ctx, balance) {
     ? riskAmount / slValue
     : configLotSize;
 
-  const maxPositionValue = (balance * leverage) / entryPrice;
+  const maxPositionValue = (capital * leverage) / entryPrice;
   lotSize = Math.min(lotSize, maxPositionValue);
   lotSize = Math.max(0.01, lotSize);
 
@@ -294,6 +357,14 @@ export function computeEntryOrder(direction, bar, i, series, ctx, balance) {
 // Checks SL/TP, time-based exit and signal-based (opposite entry) exit for
 // an already-open trade at bar i. Returns { closePrice, closeReason } or
 // null if the trade should stay open.
+//
+// Priorité intrabar = INTRABAR_EXIT_POLICY ("SL_FIRST", voir plus haut) --
+// nommée explicitement en Phase 1 (2026-09-12), comportement INCHANGÉ : si
+// le SL et le TP sont tous les deux techniquement atteignables sur la même
+// bougie (bar.low et bar.high touchent respectivement SL et TP d'un même
+// trade), le SL est toujours vérifié et déclenché en premier, quelle que
+// soit la séquence réelle intrabougie (que l'OHLC ne permet pas de
+// connaître). Voir Audit Phase B pour la discussion complète.
 export function checkExitSignal(openTrade, bar, i, strategy, series, bars, ctx) {
   const { slConfig, tpConfig, exit } = ctx;
   let closePrice = null;
@@ -545,6 +616,24 @@ export async function runBacktest(strategy, asset, config) {
     bars: bars.length,
     dataSource,
     ...(warning ? { warning } : {}),
+    // Traçabilité (Phase 1, 2026-09-12) -- corrige un bug réel trouvé en
+    // Audit Phase B : `dataSource` était déjà calculé et affiché à l'écran
+    // mais jamais inclus dans le BacktestResult sauvegardé, donc un run
+    // synthétique devenait indiscernable d'un run réel une fois en base.
+    // `dataset` décrit ici l'historique RÉELLEMENT utilisé (jamais une
+    // fenêtre supposée) -- volontairement générique (pas de limite à 3
+    // mois ou à une période fixe) pour rester valable quand l'ingestion
+    // couvrira plus tard plusieurs années accumulées en continu.
+    dataset: {
+      symbol: asset.symbol,
+      timeframe,
+      barsUsed: bars.length,
+      rangeStart: bars[0]?.timestamp ?? null,
+      rangeEnd: bars[bars.length - 1]?.timestamp ?? null,
+    },
+    riskModel: ctx.riskModel,
+    intrabarExitPolicy: ctx.intrabarExitPolicy,
+    atrSmoothing: ctx.atrSmoothing,
   };
 }
 
