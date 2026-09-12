@@ -458,7 +458,14 @@ export async function runBacktest(strategy, asset, config) {
   const ctx = buildEngineContext(strategy, asset, config, capital);
 
   const trades = [];
-  let openTrade = null;
+  // Plusieurs positions concurrentes jusqu'a ctx.maxPositions (risk_management.
+  // max_positions) -- avant, une seule variable openTrade limitait le moteur a
+  // 1 position ouverte a la fois quel que soit ce parametre (expose et
+  // modifiable dans l'UI mais jamais reellement honore), ce qui plafonnait
+  // artificiellement le nombre de trades/jour meme quand la strategie
+  // generait davantage de signaux valides. Voir RiskManagement.jsx pour le
+  // reglage cote UI.
+  let openTrades = [];
   let balance = capital;     // realized P&L only
   let equity = capital;       // balance + unrealized P&L
   const equityCurve = [];
@@ -468,34 +475,39 @@ export async function runBacktest(strategy, asset, config) {
   for (let i = 1; i < bars.length; i++) {
     const bar = bars[i];
 
-    // ── Manage open trade: check SL, TP, time exit, signal exit ──
-    if (openTrade) {
-      const exitSignal = checkExitSignal(openTrade, bar, i, strategy, series, bars, ctx);
-      if (exitSignal) {
-        const closedTrade = closeOpenTrade(openTrade, exitSignal.closePrice, exitSignal.closeReason, bar, i, ctx);
+    // ── Manage open trades: check SL, TP, time exit, signal exit ──
+    if (openTrades.length > 0) {
+      const stillOpen = [];
+      for (const openTrade of openTrades) {
+        const exitSignal = checkExitSignal(openTrade, bar, i, strategy, series, bars, ctx);
+        if (exitSignal) {
+          const closedTrade = closeOpenTrade(openTrade, exitSignal.closePrice, exitSignal.closeReason, bar, i, ctx);
 
-        balance += closedTrade.profit;
-        equity = balance;
-        maxEquity = Math.max(maxEquity, equity);
-        maxDrawdown = Math.max(maxDrawdown, (maxEquity - equity) / maxEquity * 100);
+          balance += closedTrade.profit;
+          equity = balance;
+          maxEquity = Math.max(maxEquity, equity);
+          maxDrawdown = Math.max(maxDrawdown, (maxEquity - equity) / maxEquity * 100);
 
-        trades.push({ ...closedTrade, equity_after: equity });
-        openTrade = null;
-      }
-    }
-
-    // ── Check entry signals ──
-    if (!openTrade || trades.length < ctx.maxPositions) {
-      if (!openTrade) {
-        const direction = getEntrySignal(strategy, series, bars, i);
-        if (direction) {
-          openTrade = computeEntryOrder(direction, bar, i, series, ctx, balance);
+          trades.push({ ...closedTrade, equity_after: equity });
+        } else {
+          stillOpen.push(openTrade);
         }
       }
+      openTrades = stillOpen;
     }
 
-    // Compute equity (balance + unrealized P&L of open trade)
-    const unrealizedPnl = openTrade ? computeUnrealizedPnl(openTrade, bar) : 0;
+    // ── Check entry signals ── un nouveau slot reste disponible tant que
+    // maxPositions n'est pas atteint, meme si d'autres positions sont deja
+    // ouvertes.
+    if (openTrades.length < ctx.maxPositions) {
+      const direction = getEntrySignal(strategy, series, bars, i);
+      if (direction) {
+        openTrades.push(computeEntryOrder(direction, bar, i, series, ctx, balance));
+      }
+    }
+
+    // Compute equity (balance + unrealized P&L of all open trades)
+    const unrealizedPnl = openTrades.reduce((sum, t) => sum + computeUnrealizedPnl(t, bar), 0);
 
     equity = balance + unrealizedPnl;
     maxEquity = Math.max(maxEquity, equity);
@@ -510,15 +522,17 @@ export async function runBacktest(strategy, asset, config) {
     });
   }
 
-  // Close any remaining open trade at last bar
-  if (openTrade) {
+  // Close any remaining open trades at last bar
+  if (openTrades.length > 0) {
     const lastBar = bars[bars.length - 1];
-    const closedTrade = closeOpenTrade(openTrade, lastBar.close, "EOD", lastBar, bars.length - 1, ctx);
+    for (const openTrade of openTrades) {
+      const closedTrade = closeOpenTrade(openTrade, lastBar.close, "EOD", lastBar, bars.length - 1, ctx);
 
-    balance += closedTrade.profit;
-    equity = balance;
+      balance += closedTrade.profit;
+      equity = balance;
 
-    trades.push({ ...closedTrade, equity_after: equity });
+      trades.push({ ...closedTrade, equity_after: equity });
+    }
   }
 
   // ── Calculate performance metrics ──
