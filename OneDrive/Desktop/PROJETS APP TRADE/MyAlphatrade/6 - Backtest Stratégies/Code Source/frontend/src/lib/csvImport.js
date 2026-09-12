@@ -5,6 +5,12 @@
 // 2026.06.01	00:00:00	4539.55	4546.06	4537.50	4540.85	2857	0	15
 //
 // <TICKVOL> est utilisé comme volume (pas <VOL>, souvent à 0 chez ce broker).
+//
+// CORRIGÉ 2026-09-12 (Phase 1 Strategy Lab) : <SPREAD> (9e colonne) était
+// présent dans chaque export mais jamais lu — trouvé en Audit Phase B.
+// Conservé maintenant dans chaque bougie ; absent/invalide → null, jamais
+// une erreur bloquante (contrairement aux colonnes OHLC, qui restent
+// obligatoires). Aucun calcul du moteur n'en dépend encore.
 
 const DATE_RE = /^\d{4}\.\d{2}\.\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}:\d{2}$/;
@@ -43,7 +49,7 @@ export function parseMt5Csv(text) {
       );
     }
 
-    const [date, time, open, high, low, close, tickvol] = cols;
+    const [date, time, open, high, low, close, tickvol, , spread] = cols;
 
     if (!DATE_RE.test(date)) {
       throw new Error(`Ligne ${lineNumber} : format de date invalide "${date}" (attendu AAAA.MM.JJ).`);
@@ -63,6 +69,8 @@ export function parseMt5Csv(text) {
     const [y, m, d] = date.split(".");
     const isoTimestamp = `${y}-${m}-${d}T${time}Z`;
 
+    const parsedSpread = parseFloat(spread);
+
     candles.push({
       timestamp: isoTimestamp,
       open: o,
@@ -70,6 +78,7 @@ export function parseMt5Csv(text) {
       low: l,
       close: c,
       volume: parseFloat(tickvol) || 0,
+      spread: Number.isNaN(parsedSpread) ? null : parsedSpread,
     });
   }
 
