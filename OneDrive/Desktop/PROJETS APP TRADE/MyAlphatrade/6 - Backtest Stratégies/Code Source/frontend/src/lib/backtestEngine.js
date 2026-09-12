@@ -447,6 +447,45 @@ export function computeUnrealizedPnl(openTrade, bar) {
     : (openTrade.entry_price - bar.close) * openTrade.volume;
 }
 
+// Sharpe ratio réel (Phase 1, 2026-09-12) -- remplace le `sharpe_ratio: 0`
+// codé en dur trouvé en Audit Phase B. Convention choisie et documentée
+// explicitement plutôt que devinée :
+// - Série de rendements = un rendement PAR TRADE clos (profit / capital
+//   initial fixe -- même base que RISK_MODEL ci-dessus, jamais le solde
+//   courant), PAS un rééchantillonnage de la courbe d'equity bougie par
+//   bougie. Raison : le nombre de bougies entre deux trades varie énormément
+//   selon la stratégie/timeframe, alors que "un point par trade" reste
+//   comparable quel que soit le rythme de trading.
+// - PAS annualisé : un Sharpe "par trade", pas "par an". Annualiser
+//   suppose une fréquence de trading régulière que rien ne garantit ici --
+//   décision explicitement reportée (voir Research Lab §13/14), pas
+//   devinée pour paraître plus complet.
+// - Sous MIN_TRADES_FOR_SHARPE trades clos, ou si l'écart-type des
+//   rendements est nul (tous les trades identiques), retourne `null` --
+//   jamais un faux 0 qui laisserait croire à une vraie mesure statistique.
+export function computeSharpeRatio(trades, capital) {
+  const closed = (trades || []).filter((t) => typeof t.profit === "number");
+  if (closed.length < MIN_TRADES_FOR_SHARPE || !capital) return null;
+
+  const returns = closed.map((t) => t.profit / capital);
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+  const stdDev = Math.sqrt(variance);
+
+  // Bug réel trouvé par le test de non-régression (Phase 1) : des trades
+  // aux profits IDENTIQUES devraient donner un écart-type EXACTEMENT nul,
+  // mais la sommation en virgule flottante de `returns` (ex. dix fois
+  // 0.005) accumule une erreur d'arrondi microscopique -- `stdDev` finit
+  // à ~1e-19 au lieu de 0, et `mean / stdDev` explosait alors vers un
+  // Sharpe de plusieurs millions au lieu du `null` attendu. Un epsilon
+  // absolu (les rendements ici sont des fractions du capital, donc de
+  // taille ~1) filtre ce bruit sans risquer de rejeter un vrai écart-type
+  // faible mais réel.
+  const NEGLIGIBLE_STD_DEV = 1e-9;
+  if (!Number.isFinite(stdDev) || stdDev < NEGLIGIBLE_STD_DEV) return null;
+  return mean / stdDev;
+}
+
 // Same aggregate performance metrics `runBacktest` returns, factored out so
 // other consumers driving the same per-bar primitives over time (e.g. the
 // historical replay in paperTradingEngine.js) end up with identical stats
@@ -472,6 +511,7 @@ export function computeMetrics(trades, finalEquity, capital, periodDays, maxDraw
   const avgDurationMin = totalTrades > 0
     ? trades.reduce((s, t) => s + (t.duration_minutes || 0), 0) / totalTrades
     : 0;
+  const sharpeRatio = computeSharpeRatio(trades, capital);
 
   return {
     totalTrades,
@@ -492,6 +532,8 @@ export function computeMetrics(trades, finalEquity, capital, periodDays, maxDraw
     returnPct: Math.round(((finalEquity - capital) / capital * 100) * 100) / 100,
     tradesPerDay: Math.round(tradesPerDay * 100) / 100,
     avgDurationMin: Math.round(avgDurationMin),
+    // null si non calculable (Phase 1) -- jamais un faux 0, voir computeSharpeRatio.
+    sharpeRatio: sharpeRatio === null ? null : Math.round(sharpeRatio * 10000) / 10000,
   };
 }
 
