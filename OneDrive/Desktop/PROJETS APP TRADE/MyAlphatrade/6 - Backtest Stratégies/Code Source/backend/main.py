@@ -188,7 +188,46 @@ ENTITY_TYPES = {
     "PaperTrade",
     "Signal",
     "MarketData",
+    # Research Lab Phase 3 (2026-09-13) -- deux entites generiques
+    # supplementaires, memes CRUD/WebSocket que les 6 ci-dessus (aucune
+    # route ni modele Pydantic dedie : le contrat JSON ci-dessous documente
+    # les champs attendus par convention, comme pour TradingAsset).
+    #
+    # SyncState : point de reprise exact d'une synchronisation d'historique
+    # par (symbol, timeframe, source) -- voir Phase 2, decision 3.
+    #   { symbol, timeframe, source,
+    #     last_synced_timestamp, last_sync_status, last_attempt_at,
+    #     consecutive_failures, backfill_target_start, backfill_status }
+    # Non fait ici : logique de creation/mise a jour automatique (recherche
+    # par cle naturelle) -- reservee au vrai backfill (Phase 3, etape 5).
+    "SyncState",
+    # DatasetVersion : reference versionnee (et parfois figee de maniere
+    # permanente) d'une fenetre de recherche sur MarketData -- voir Phase 2,
+    # decision 8. Generalise le champ `dataset` deja expose par
+    # runBacktest() (Phase 1, backtestEngine.js).
+    #   { symbol, timeframe, window, as_of_timestamp, data_version, frozen }
+    # frozen=true rend l'entite IMMUABLE (voir _check_entity_mutable
+    # ci-dessous) : jamais de "correction silencieuse" d'un dataset deja
+    # valide (ex. le pilote BTCUSD/XAUUSD 3 mois, Phase 3 etape 3).
+    "DatasetVersion",
 }
+
+# Types d'entite pour lesquels `data.frozen == true` rend l'enregistrement
+# IMMUABLE (ni modification ni suppression), pas seulement documente comme
+# tel. Un DatasetVersion fige doit le rester pour toujours -- si une
+# correction est vraiment necessaire, elle cree une NOUVELLE version, elle
+# ne rouvre jamais l'ancienne (Phase 2, decision 8 ; meme discipline que
+# "jamais une correction silencieuse" appliquee en Phase 1).
+IMMUTABLE_WHEN_FROZEN = {"DatasetVersion"}
+
+
+def _check_entity_mutable(entity_type: str, current_data: dict) -> None:
+    if entity_type in IMMUTABLE_WHEN_FROZEN and current_data.get("frozen"):
+        raise HTTPException(
+            409,
+            f"{entity_type} gele (frozen=true) : modification/suppression refusee. "
+            "Creez une nouvelle version au lieu de rouvrir celle-ci.",
+        )
 
 # Colonnes reelles autorisees pour le tri (le prefixe "-" = DESC). On ne
 # trie jamais sur une cle arbitraire du JSON `data` pour eviter toute
@@ -662,6 +701,7 @@ async def update_entity(
             raise HTTPException(404, "Enregistrement introuvable")
 
         current = json.loads(row["data"])
+        _check_entity_mutable(entity_type, current)
         updates = {k: v for k, v in payload.items() if k not in ("id", "created_date", "updated_date")}
         current.update(updates)
         timestamp = now_iso()
@@ -684,11 +724,13 @@ async def delete_entity(entity_type: str, entity_id: str, user=Depends(get_curre
     _validate_entity_type(entity_type)
     with db_cursor(commit=True) as (conn, cur):
         cur.execute(
-            "SELECT id FROM entities WHERE id = ? AND user_id = ? AND entity_type = ?",
+            "SELECT data FROM entities WHERE id = ? AND user_id = ? AND entity_type = ?",
             (entity_id, user["id"], entity_type),
         )
-        if not cur.fetchone():
+        row = cur.fetchone()
+        if not row:
             raise HTTPException(404, "Enregistrement introuvable")
+        _check_entity_mutable(entity_type, json.loads(row["data"]))
         cur.execute(
             "DELETE FROM entities WHERE id = ? AND user_id = ? AND entity_type = ?",
             (entity_id, user["id"], entity_type),
