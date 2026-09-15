@@ -787,11 +787,46 @@ class MarketDataImportRequest(BaseModel):
     candles: list[Candle]
 
 
+def _canonical_timestamp(raw: str) -> str:
+    """Normalise un timestamp ISO 8601 vers UNE representation UTC
+    canonique -- utilisee comme cle de fusion/unicite dans
+    _merge_market_data.
+
+    CORRIGE 2026-09-15 (Phase 3, etape 5, bug reel trouve pendant un test
+    de backfill) : un meme instant reel pouvait etre represente par deux
+    chaines differentes -- "...Z" (import CSV historique) et "...+00:00"
+    (nouvel import MT5, Candle.timestamp construit via
+    datetime.isoformat()) -- toutes deux valides en ISO 8601, mais jamais
+    reconnues comme identiques par la comparaison de chaine EXACTE que
+    faisait _merge_market_data. Resultat mesure : 3400 doublons reels
+    (memes valeurs OHLC, deux lignes en base) lors d'un backfill
+    chevauchant le dataset pilote deja importe en CSV. Corrige ICI, dans
+    la couche commune de fusion -- pas seulement dans le chemin d'import
+    MT5 -- pour que TOUT chemin d'import present ou futur (CSV, MT5,
+    autre source) partage la meme notion d'unicite temporelle.
+
+    La cle de fusion doit representer l'INSTANT UTC reel, jamais la
+    representation textuelle -- accepte donc tout timestamp ISO 8601 avec
+    ou sans offset (Z, +HH:MM, -HH:MM) et le convertit vers UTC. Un
+    timestamp naif (sans offset) est suppose deja en UTC -- comportement
+    historique inchange, jamais devine differemment. Leve ValueError si le
+    format est vraiment invalide (jamais absorbe silencieusement).
+
+    Les bougies (M15 et plus larges) n'ont jamais de fraction de seconde
+    significative -- la precision seconde suffit et reste la convention
+    deja utilisee par l'import CSV existant (suffixe "Z", secondes
+    entieres).
+    """
+    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _candle_data(symbol: str, timeframe: str, c: "Candle") -> dict:
     return {
         "symbol": symbol,
         "timeframe": timeframe,
-        "timestamp": c.timestamp,
+        "timestamp": _canonical_timestamp(c.timestamp),
         "open": c.open,
         "high": c.high,
         "low": c.low,
@@ -806,7 +841,11 @@ def _merge_market_data(existing_by_timestamp: dict, symbol: str, timeframe: str,
     sans toucher a la DB -- testable directement (voir test_merge_market_data.py).
 
     existing_by_timestamp: {timestamp: (entity_id, data_dict)} deja present
-    en base pour ce (symbol, timeframe).
+    en base pour ce (symbol, timeframe) -- les cles peuvent etre dans
+    N'IMPORTE QUEL format ISO 8601 historique (donnees deja stockees avant
+    ce correctif) ; reindexees ci-dessous par instant UTC canonique pour
+    la recherche, SANS jamais reecrire les lignes existantes elles-memes
+    (voir _canonical_timestamp).
 
     Retourne (to_insert, to_update, collisions, unchanged) ou :
     - to_insert: liste de dicts `data` a creer (timestamp absent)
@@ -823,9 +862,15 @@ def _merge_market_data(existing_by_timestamp: dict, symbol: str, timeframe: str,
     unchanged = 0
     ohlc_fields = ("open", "high", "low", "close")
 
+    # Reindexe par instant UTC canonique -- pas par la chaine brute
+    # stockee, qui peut varier selon l'import d'origine (CSV vs MT5).
+    existing_by_canonical = {
+        _canonical_timestamp(ts): value for ts, value in existing_by_timestamp.items()
+    }
+
     for c in candles:
-        new_data = _candle_data(symbol, timeframe, c)
-        existing = existing_by_timestamp.get(c.timestamp)
+        new_data = _candle_data(symbol, timeframe, c)  # new_data["timestamp"] deja canonique
+        existing = existing_by_canonical.get(new_data["timestamp"])
         if existing is None:
             to_insert.append(new_data)
             continue
