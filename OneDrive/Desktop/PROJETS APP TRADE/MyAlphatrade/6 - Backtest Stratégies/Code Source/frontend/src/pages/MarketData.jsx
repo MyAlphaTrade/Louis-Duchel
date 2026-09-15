@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileText,
+  Zap,
 } from "lucide-react";
 
 function formatDate(iso) {
@@ -40,6 +41,11 @@ export default function MarketData() {
   const [parsedCount, setParsedCount] = useState(0);
   const [summary, setSummary] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  // Import automatique MT5 (2026-09-15) -- etat separe de l'import CSV
+  // ci-dessus : deux chemins d'import independants, l'un ne doit pas
+  // ecraser le statut affiche de l'autre.
+  const [mt5Status, setMt5Status] = useState("idle"); // idle | importing | success | error
+  const [mt5Message, setMt5Message] = useState("");
 
   // Default the timeframe selector to the selected asset's default TF.
   useEffect(() => {
@@ -101,7 +107,31 @@ export default function MarketData() {
     }
   };
 
+  const handleImportFromMt5 = async () => {
+    if (!selectedAsset) return;
+    setMt5Status("importing");
+    setMt5Message(`Recherche de ${selectedAsset.symbol} (${timeframe}) sur le terminal MT5…`);
+
+    try {
+      const result = await base44.marketData.importFromMt5(selectedAsset.symbol, timeframe);
+      setMt5Status("success");
+      setMt5Message(
+        `${result?.inserted ?? 0} bougie(s) ajoutée(s), ${result?.unchanged ?? 0} déjà à jour` +
+          (result?.updated_collisions ? `, ${result.updated_collisions} corrigée(s)` : "") +
+          ` pour ${selectedAsset.symbol} (${timeframe}).`
+      );
+      loadSummary();
+    } catch (err) {
+      setMt5Status("error");
+      setMt5Message(
+        err?.message ||
+          "Échec de l'import automatique. Vérifiez que MetaTrader 5 est ouvert sur cette machine."
+      );
+    }
+  };
+
   const isBusy = importStatus === "reading" || importStatus === "importing";
+  const isMt5Busy = mt5Status === "importing";
 
   return (
     <div className="p-6 lg:p-10 max-w-6xl">
@@ -266,6 +296,48 @@ export default function MarketData() {
               {parsedCount > 0 && importStatus === "importing" && (
                 <p className="text-[11px] text-slate-500">{parsedCount} bougie(s) parsée(s), envoi au serveur…</p>
               )}
+
+              {/* Import automatique MT5 (2026-09-15) -- chemin supplementaire,
+                  pas un remplacement du CSV ci-dessus : demande explicite de
+                  Louis pour ne plus dependre uniquement de l'export manuel.
+                  Necessite un terminal MT5 ouvert sur cette meme machine
+                  (comme le mode Live du Paper Trading). */}
+              <div className="pt-3 border-t border-[#1a2332] space-y-2">
+                <p className="text-[11px] text-slate-500">
+                  Ou automatiquement, sans fichier — nécessite MetaTrader 5 ouvert sur cette machine.
+                </p>
+                <button
+                  onClick={handleImportFromMt5}
+                  disabled={isBusy || isMt5Busy}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#0a0e17] border border-amber-500/30 text-amber-400 font-bold text-sm hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isMt5Busy ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {mt5Message}
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      Importer depuis MT5 pour {selectedAsset.symbol}
+                    </>
+                  )}
+                </button>
+
+                {mt5Status === "success" && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-emerald-300">{mt5Message}</p>
+                  </div>
+                )}
+
+                {mt5Status === "error" && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-rose-300 break-words">{mt5Message}</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

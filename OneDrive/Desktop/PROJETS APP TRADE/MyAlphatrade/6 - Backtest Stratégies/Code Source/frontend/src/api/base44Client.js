@@ -271,6 +271,24 @@ const marketData = {
       body: JSON.stringify({ symbol, timeframe, candles }),
     });
   },
+  // Import automatique depuis le terminal MT5 local (2026-09-15) --
+  // alternative a l'import CSV manuel ci-dessus, PAS un remplacement (garde
+  // pour qui n'a pas de terminal MT5 accessible depuis cette machine).
+  // startDate/endDate optionnels (ISO 8601) : absents = tout l'historique
+  // disponible chez le courtier. Peut echouer (503) si MT5 n'est pas ouvert,
+  // ou 404 si le symbole/la periode ne renvoie aucune donnee -- memes codes
+  // que getLive(), a gerer explicitement par l'appelant.
+  async importFromMt5(symbol, timeframe, startDate, endDate) {
+    return apiFetch('/market-data/import-mt5', {
+      method: 'POST',
+      body: JSON.stringify({
+        symbol,
+        timeframe,
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      }),
+    });
+  },
   async summary() {
     return apiFetch('/market-data/summary');
   },

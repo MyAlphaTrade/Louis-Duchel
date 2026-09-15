@@ -116,6 +116,18 @@ except Exception as exc:  # pragma: no cover - depend de l'OS/l'installation
 else:
     MT5_IMPORT_ERROR = ""
 
+# Import automatique d'historique depuis MT5 (2026-09-15, suite Research Lab
+# Phase 3 -- demande explicite de Louis : ne plus dependre uniquement de
+# l'export/import CSV manuel). Le paquet MetaTrader5 expose l'historique
+# complet via copy_rates_range() -- memes contraintes que le pont prix live
+# ci-dessus (terminal MT5 installe ET ouvert sur cette meme machine). Les
+# constantes TIMEFRAME_* n'existent que si l'import a reussi.
+MT5_TIMEFRAME_MAP = {
+    "M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
+    "M30": mt5.TIMEFRAME_M30, "H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4,
+    "D1": mt5.TIMEFRAME_D1,
+} if mt5 is not None else {}
+
 # Chemins d'installation courants essayes si mt5.initialize() sans argument
 # echoue (terminal ferme au demarrage silencieux, ou installe hors PATH).
 MT5_PATH_CANDIDATES = [
@@ -828,14 +840,21 @@ def _merge_market_data(existing_by_timestamp: dict, symbol: str, timeframe: str,
     return to_insert, to_update, collisions, unchanged
 
 
-@app.post("/market-data/import")
-def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_user)):
-    if not req.candles:
+def _import_candles(symbol: str, timeframe: str, candles: list, user: dict) -> dict:
+    """Coeur partage de tout import de MarketData (fusion non destructive,
+    Phase 1) -- extrait de import_market_data() le 2026-09-15 pour que le
+    nouvel import automatique MT5 (import_market_data_from_mt5, ci-dessous)
+    passe par EXACTEMENT le meme chemin teste (test_merge_market_data.py)
+    que l'import CSV manuel, plutot que de dupliquer la logique de fusion/
+    ecriture -- deux implementations paralleles auraient pu diverger en
+    silence, exactement le genre de risque que cette phase evite partout
+    ailleurs."""
+    if not candles:
         raise HTTPException(400, "Aucune bougie a importer")
-    if len(req.candles) > MAX_IMPORT_CANDLES:
+    if len(candles) > MAX_IMPORT_CANDLES:
         raise HTTPException(
             400,
-            f"Trop de bougies en un seul import ({len(req.candles)} > {MAX_IMPORT_CANDLES}). Decoupez le fichier.",
+            f"Trop de bougies en un seul import ({len(candles)} > {MAX_IMPORT_CANDLES}). Decoupez la periode.",
         )
 
     now = now_iso()
@@ -844,7 +863,7 @@ def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_us
         cur.execute(
             "SELECT id, data FROM entities WHERE user_id = ? AND entity_type = 'MarketData' "
             "AND json_extract(data, '$.symbol') = ? AND json_extract(data, '$.timeframe') = ?",
-            (user["id"], req.symbol, req.timeframe),
+            (user["id"], symbol, timeframe),
         )
         existing_by_timestamp = {}
         for row in cur.fetchall():
@@ -852,7 +871,7 @@ def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_us
             existing_by_timestamp[d["timestamp"]] = (row["id"], d)
 
         to_insert, to_update, collisions, unchanged = _merge_market_data(
-            existing_by_timestamp, req.symbol, req.timeframe, req.candles
+            existing_by_timestamp, symbol, timeframe, candles
         )
 
         if to_insert:
@@ -872,12 +891,17 @@ def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_us
 
     return {
         "ok": True,
-        "symbol": req.symbol,
-        "timeframe": req.timeframe,
+        "symbol": symbol,
+        "timeframe": timeframe,
         "inserted": len(to_insert),
         "updated_collisions": collisions,
         "unchanged": unchanged,
     }
+
+
+@app.post("/market-data/import")
+def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_user)):
+    return _import_candles(req.symbol, req.timeframe, req.candles, user)
 
 
 @app.get("/market-data")
@@ -991,6 +1015,111 @@ def live_market_data(symbol: str = Query(...), user=Depends(get_current_user)):
                 mt5.shutdown()
             except Exception:
                 pass
+
+
+# ── Import automatique d'historique MT5 (2026-09-15) ────────────────────────
+# Demande explicite de Louis : ne plus dependre uniquement de l'export/import
+# CSV manuel pour alimenter Market Data. L'import CSV manuel (/market-data
+# /import) N'EST PAS retire -- garde tel quel pour qui prefere l'importer a
+# la main (ou n'a pas de terminal MT5 accessible depuis cette machine) ; ceci
+# est un CHEMIN SUPPLEMENTAIRE, pas un remplacement.
+#
+# Meme contrainte que le pont prix live ci-dessus : necessite un terminal MT5
+# installe ET ouvert sur cette meme machine (le paquet MetaTrader5 parle a un
+# terminal local via IPC, jamais a un serveur distant) -- c'est pour ca que
+# Strategy Lab est un outil de bureau (voir desktop_app.py), pas un service
+# cloud, exactement comme /market-data/live.
+#
+# Sert directement l'etape 5 de la Phase 3 (Research_Lab_Architecture_
+# Dataset_Continu_Phase2_2026-09-12.html) : le backfill peut desormais se
+# faire par cet endpoint plutot qu'un export CSV manuel. Le calcul de
+# `SyncState` (point de reprise, statut de backfill) a partir de ces imports
+# reste volontairement HORS PERIMETRE ici -- cet endpoint fait un import
+# ponctuel, pas encore la reprise automatique/planifiee.
+class Mt5ImportRequest(BaseModel):
+    symbol: str
+    timeframe: str
+    # ISO 8601. Absents = tente de recuperer tout l'historique disponible
+    # chez le courtier pour ce symbole (MT5 renvoie simplement ce qu'il a --
+    # jamais invente au-dela de ce que le courtier conserve reellement).
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@app.post("/market-data/import-mt5")
+def import_market_data_from_mt5(req: Mt5ImportRequest, user=Depends(get_current_user)):
+    if mt5 is None:
+        raise HTTPException(
+            503,
+            "Le module MetaTrader5 n'est pas disponible sur ce serveur "
+            f"({MT5_IMPORT_ERROR or 'package non installe'}). L'import "
+            "automatique necessite le paquet Python MetaTrader5, disponible "
+            "uniquement sous Windows.",
+        )
+    if req.timeframe not in MT5_TIMEFRAME_MAP:
+        raise HTTPException(
+            400,
+            f"Timeframe non supporte pour l'import MT5 : {req.timeframe}. "
+            f"Attendu un de {sorted(MT5_TIMEFRAME_MAP)}.",
+        )
+
+    try:
+        if not _initialize_mt5():
+            raise HTTPException(
+                503,
+                "Terminal MetaTrader 5 introuvable ou ferme. Ouvrez MT5 sur "
+                "cette machine pour importer automatiquement.",
+            )
+
+        mt5.symbol_select(req.symbol, True)
+        date_from = (
+            datetime.fromisoformat(req.start_date) if req.start_date
+            # Anterieur a tout historique broker realiste plutot qu'une
+            # fenetre arbitraire -- copy_rates_range renvoie de toute facon
+            # seulement ce qui existe reellement, jamais plus.
+            else datetime(2000, 1, 1, tzinfo=timezone.utc)
+        )
+        date_to = (
+            datetime.fromisoformat(req.end_date) if req.end_date
+            else datetime.now(timezone.utc)
+        )
+
+        rates = mt5.copy_rates_range(req.symbol, MT5_TIMEFRAME_MAP[req.timeframe], date_from, date_to)
+        if rates is None or len(rates) == 0:
+            raise HTTPException(
+                404,
+                f"Aucune donnee MT5 retournee pour {req.symbol}/{req.timeframe} sur cette "
+                "periode. Verifiez le nom exact du symbole dans le Market Watch MT5 "
+                "(Ctrl+U) et que l'historique demande est bien disponible chez ce courtier.",
+            )
+
+        field_names = rates.dtype.names or ()
+        candles = [
+            Candle(
+                timestamp=datetime.fromtimestamp(int(r["time"]), tz=timezone.utc).isoformat(),
+                open=float(r["open"]),
+                high=float(r["high"]),
+                low=float(r["low"]),
+                close=float(r["close"]),
+                volume=float(r["tick_volume"]),
+                spread=float(r["spread"]) if "spread" in field_names else None,
+            )
+            for r in rates
+        ]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, f"Erreur de communication avec MetaTrader 5 : {exc}")
+    finally:
+        if mt5 is not None:
+            try:
+                mt5.shutdown()
+            except Exception:
+                pass
+
+    # A partir d'ici : exactement le meme chemin teste que l'import CSV
+    # manuel (fusion non destructive Phase 1) -- voir _import_candles.
+    return _import_candles(req.symbol, req.timeframe, candles, user)
 
 
 # ── AI proxy (AI Strategy Designer, Module 6) ───────────────────────────────
