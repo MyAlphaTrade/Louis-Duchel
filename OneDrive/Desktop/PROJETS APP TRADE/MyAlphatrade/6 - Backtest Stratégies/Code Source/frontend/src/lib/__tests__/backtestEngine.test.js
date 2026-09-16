@@ -133,6 +133,15 @@ describe("spread / slippage / commission", () => {
     expect(order.entry_price).toBeCloseTo(4000 - 0.1 / 2 - 0.02, 6);
   });
 
+  it("entry_zone (brique 3/6) : présent mais dégénéré tant qu'ARMING n'existe pas", () => {
+    const bar = { close: 4000, timestamp: new Date() };
+    const order = computeEntryOrder("BUY", bar, 0, series, ctx, 10000);
+    // Le comportement reel reste un point -- min===max===entry_price -- pas
+    // de largeur inventee sans regle de tolerance decidee (voir commentaire
+    // dans backtestEngine.js).
+    expect(order.entry_zone).toEqual({ min: order.entry_price, max: order.entry_price });
+  });
+
   it("la commission est déduite deux fois (entrée + sortie) à la clôture", () => {
     const bar = { close: 4000, timestamp: new Date() };
     const openTrade = computeEntryOrder("BUY", bar, 0, series, ctx, 10000);

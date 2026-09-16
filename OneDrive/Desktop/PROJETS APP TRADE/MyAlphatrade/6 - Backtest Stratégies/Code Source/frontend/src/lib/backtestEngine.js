@@ -392,6 +392,20 @@ export function computeEntryOrder(direction, bar, i, series, ctx, balance) {
   return {
     direction,
     entry_price: entryPrice,
+    // entry_zone (2026-09-15, brique 3/6 du pipeline Strategy Lab <-> Global)
+    // -- DEGENERE (min === max === entry_price) et VOLONTAIREMENT ainsi :
+    // le comportement reel reste un point, exactement comme avant. Ajouter
+    // une largeur non nulle ici supposerait une regle de tolerance (base sur
+    // quoi ? l'ATR ? le spread ? un pourcentage ?) qui n'est PAS encore
+    // decidee -- l'inventer maintenant serait exactement la "correction
+    // silencieuse" proscrite depuis la Phase 1. Une vraie zone (min != max)
+    // n'aura de sens qu'une fois le moteur ARMING/ARMED (brique 4) capable
+    // de dire jusqu'ou le prix peut s'eloigner de l'entree ideale tout en
+    // representant encore le meme setup -- ce champ existe des maintenant
+    // pour que le schema EXECUTION_REQUEST (Contrat_Execution_StrategyLab_
+    // Global_2026-09-15.html) ait un `entry_zone` a consommer sans attendre
+    // cette brique suivante.
+    entry_zone: { min: entryPrice, max: entryPrice },
     stop_loss: stopLoss,
     take_profit: takeProfit,
     volume: lotSize,
