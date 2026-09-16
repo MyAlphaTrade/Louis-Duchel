@@ -241,6 +241,49 @@ def _check_entity_mutable(entity_type: str, current_data: dict) -> None:
             "Creez une nouvelle version au lieu de rouvrir celle-ci.",
         )
 
+
+# ── Strategy : versioning + immutabilite des regles une fois active ────────
+# Recherche Lab, "brique 1/6" de la construction du pipeline Strategy Lab <->
+# Global (2026-09-15, suite au contrat d'execution + audit croise --
+# Contrat_Execution_StrategyLab_Global_2026-09-15.html, decision 4 :
+# "la strategie ne change jamais apres APPROVED ; seule son application au
+# marche actuel change").
+#
+# CORRIGE 2026-09-15 : l'audit a trouve que Strategy.update() reecrivait
+# l'enregistrement en place MEME quand status="active", sans aucune garde --
+# contrairement a DatasetVersion.frozen, deja immuable et teste. Rien
+# n'empechait de modifier silencieusement les regles d'une strategie deja
+# deployee.
+#
+# Volontairement PLUS SOUPLE que IMMUTABLE_WHEN_FROZEN ci-dessus : geler
+# TOUT l'enregistrement casserait des usages reels deja en production
+# (marquer une strategie active comme favorite, changer sa categorie
+# d'affichage -- Strategies.jsx:251-265). Seuls les champs qui DEFINISSENT
+# la strategie (regles de trading, actifs, timeframes) sont proteges ; les
+# champs cosmetiques/organisationnels et `status` lui-meme restent toujours
+# modifiables (necessaire ne serait-ce que pour passer active -> archived).
+STRATEGY_RULE_FIELDS = {
+    "name", "version", "parent_version_id",
+    "asset_scope", "asset_symbols", "asset_category",
+    "primary_timeframe", "secondary_timeframes",
+    "market_profile", "entry_conditions", "exit_conditions", "risk_management",
+}
+
+
+def _check_strategy_rule_fields_mutable(current_data: dict, updates: dict) -> None:
+    if current_data.get("status") != "active":
+        return
+    touched = STRATEGY_RULE_FIELDS & updates.keys()
+    if touched:
+        raise HTTPException(
+            409,
+            "Strategy active : les regles de trading ne peuvent plus etre "
+            f"modifiees en place ({', '.join(sorted(touched))}). Creez une "
+            "nouvelle Strategy avec `parent_version_id` pointant vers celle-ci "
+            "et un `version` incremente, plutot que de la reecrire.",
+        )
+
+
 # Colonnes reelles autorisees pour le tri (le prefixe "-" = DESC). On ne
 # trie jamais sur une cle arbitraire du JSON `data` pour eviter toute
 # injection dans l'ORDER BY.
@@ -715,6 +758,8 @@ async def update_entity(
         current = json.loads(row["data"])
         _check_entity_mutable(entity_type, current)
         updates = {k: v for k, v in payload.items() if k not in ("id", "created_date", "updated_date")}
+        if entity_type == "Strategy":
+            _check_strategy_rule_fields_mutable(current, updates)
         current.update(updates)
         timestamp = now_iso()
 
@@ -742,7 +787,14 @@ async def delete_entity(entity_type: str, entity_id: str, user=Depends(get_curre
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Enregistrement introuvable")
-        _check_entity_mutable(entity_type, json.loads(row["data"]))
+        current = json.loads(row["data"])
+        _check_entity_mutable(entity_type, current)
+        if entity_type == "Strategy" and current.get("status") == "active":
+            raise HTTPException(
+                409,
+                "Strategy active : suppression refusee. Archivez-la d'abord "
+                "(status=archived) si elle ne doit plus etre utilisee.",
+            )
         cur.execute(
             "DELETE FROM entities WHERE id = ? AND user_id = ? AND entity_type = ?",
             (entity_id, user["id"], entity_type),

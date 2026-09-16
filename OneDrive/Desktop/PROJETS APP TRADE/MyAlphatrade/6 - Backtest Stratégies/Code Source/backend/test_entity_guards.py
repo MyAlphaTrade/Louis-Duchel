@@ -10,7 +10,13 @@ de main.py, dans le meme style que le reste du projet.
 """
 import unittest
 
-from main import ENTITY_TYPES, IMMUTABLE_WHEN_FROZEN, _check_entity_mutable
+from main import (
+    ENTITY_TYPES,
+    IMMUTABLE_WHEN_FROZEN,
+    STRATEGY_RULE_FIELDS,
+    _check_entity_mutable,
+    _check_strategy_rule_fields_mutable,
+)
 from fastapi import HTTPException
 
 
@@ -55,6 +61,61 @@ class TestFrozenDatasetVersionIsImmutable(unittest.TestCase):
         # `frozen` n'a de sens que pour DatasetVersion -- un autre type
         # d'entite qui porterait ce champ par coincidence n'est pas bloque.
         _check_entity_mutable("Strategy", {"frozen": True})  # ne doit pas lever
+
+
+class TestActiveStrategyRuleFieldsAreImmutable(unittest.TestCase):
+    """Recherche Lab, brique 1/6 (2026-09-15) -- voir Contrat_Execution_
+    StrategyLab_Global_2026-09-15.html, decision 4. Corrige le bug reel
+    trouve en audit : Strategy.update() reecrivait les regles en place
+    meme quand status='active', sans aucune garde."""
+
+    def _active_strategy(self, **overrides):
+        base = {
+            "name": "Gold Intraday Reversal", "version": "1.0", "status": "active",
+            "asset_symbols": ["XAUUSD"], "primary_timeframe": "M15",
+            "entry_conditions": {"buy": [], "sell": []},
+            "exit_conditions": {"stop_loss": {"type": "pips", "value": 15}},
+            "risk_management": {"type": "percent", "risk_value": 1},
+        }
+        base.update(overrides)
+        return base
+
+    def test_rule_field_update_on_active_strategy_is_rejected(self):
+        current = self._active_strategy()
+        with self.assertRaises(HTTPException) as ctx:
+            _check_strategy_rule_fields_mutable(current, {"entry_conditions": {"buy": [{"indicator": "rsi"}], "sell": []}})
+        self.assertEqual(ctx.exception.status_code, 409)
+
+    def test_each_rule_field_individually_is_rejected_on_active_strategy(self):
+        current = self._active_strategy()
+        for field in STRATEGY_RULE_FIELDS:
+            with self.assertRaises(HTTPException, msg=f"{field} aurait du etre protege"):
+                _check_strategy_rule_fields_mutable(current, {field: "peu importe la valeur"})
+
+    def test_cosmetic_fields_remain_mutable_on_active_strategy(self):
+        current = self._active_strategy()
+        # Usages reels existants (Strategies.jsx) qui ne doivent pas casser.
+        _check_strategy_rule_fields_mutable(current, {"strategy_category": "swing"})
+        _check_strategy_rule_fields_mutable(current, {"favorite": True})
+        _check_strategy_rule_fields_mutable(current, {"description": "notes mises a jour"})
+
+    def test_status_transition_away_from_active_is_allowed(self):
+        current = self._active_strategy()
+        _check_strategy_rule_fields_mutable(current, {"status": "archived"})  # ne doit pas lever
+
+    def test_cannot_smuggle_a_rule_change_alongside_a_status_change(self):
+        current = self._active_strategy()
+        with self.assertRaises(HTTPException):
+            _check_strategy_rule_fields_mutable(current, {"status": "draft", "risk_management": {"risk_value": 5}})
+
+    def test_draft_or_tested_strategy_remains_fully_mutable(self):
+        for status in ("draft", "tested", "archived"):
+            current = self._active_strategy(status=status)
+            _check_strategy_rule_fields_mutable(current, {"entry_conditions": {"buy": [], "sell": []}})  # ne doit pas lever
+
+    def test_strategy_without_status_field_defaults_to_mutable(self):
+        current = {"name": "brouillon sans statut explicite"}
+        _check_strategy_rule_fields_mutable(current, {"entry_conditions": {}})  # ne doit pas lever
 
 
 if __name__ == "__main__":
