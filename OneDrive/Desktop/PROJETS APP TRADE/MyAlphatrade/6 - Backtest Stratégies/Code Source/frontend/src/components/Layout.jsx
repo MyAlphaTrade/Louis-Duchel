@@ -1,18 +1,19 @@
-import React, { useState } from "react";
+import React from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 import {
   Database,
   FlaskConical,
   BarChart3,
   PlayCircle,
   Send,
-  Menu,
-  X,
   LogOut,
   ChevronRight,
   Settings,
   BrainCircuit,
+  Microscope,
+  Layers,
 } from "lucide-react";
 import AssetSelector from "@/components/AssetSelector";
 
@@ -23,11 +24,23 @@ const navItems = [
   { path: "/paper-trading", label: "Paper Trading", icon: PlayCircle, module: 4 },
   { path: "/signals", label: "Export Signaux", icon: Send, module: 5 },
   { path: "/ai-designer", label: "AI Strategy Designer", icon: BrainCircuit, module: 6 },
+  { path: "/research", label: "Recherche", icon: Microscope, module: 7 },
+  { path: "/strategies-discovered", label: "Stratégies découvertes", icon: Layers, module: 8 },
 ];
 
+// Barre laterale TOUJOURS statique, sans mode mobile/tiroir -- Strategy Lab
+// n'est deployee que via la fenetre pywebview de l'app desktop (jamais un
+// vrai navigateur mobile), et son min_size (1024x700) est en pixels
+// PHYSIQUES : sous mise a l'echelle Windows (125%/150%, courante sur ecran
+// haute densite), la largeur CSS reelle tombe sous le seuil `lg` (1024px)
+// meme fenetre "grande ouverte", ce qui faisait apparaitre en meme temps la
+// barre du haut reduite ET le tiroir complet superposes (Louis, 24/07/2026 :
+// "boutons supprimes hors des cartes" -- en realite deux sidebars empilees).
+// Une seule sidebar statique elimine la classe de bug entierement, plutot
+// que de deplacer le seuil de rupture.
 export default function Layout() {
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
 
   const handleLogout = () => {
     base44.auth.logout("/login");
@@ -35,22 +48,10 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#0a0e17] text-white overflow-hidden">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
       {/* Sidebar */}
-      <aside
-        className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-[#0d1220] border-r border-[#1a2332] flex flex-col transform transition-transform duration-300 ease-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
+      <aside className="static inset-y-0 left-0 w-72 bg-[#0d1220] border-r border-[#1a2332] flex flex-col flex-shrink-0">
         {/* Logo */}
-        <div className="p-6 border-b border-[#1a2332]">
+        <div className="p-6 pt-8 pl-8 border-b border-[#1a2332]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center overflow-hidden">
               <img src="/logo-white.png" alt="AlphaTrade" className="w-full h-full object-cover" />
@@ -82,7 +83,6 @@ export default function Layout() {
               <Link
                 key={item.path}
                 to={item.path}
-                onClick={() => setSidebarOpen(false)}
                 className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
@@ -115,7 +115,6 @@ export default function Layout() {
           </p>
           <Link
             to="/assets"
-            onClick={() => setSidebarOpen(false)}
             className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
               location.pathname === "/assets"
                 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
@@ -127,7 +126,6 @@ export default function Layout() {
           </Link>
           <Link
             to="/settings"
-            onClick={() => setSidebarOpen(false)}
             className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
               location.pathname === "/settings"
                 ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
@@ -141,6 +139,11 @@ export default function Layout() {
 
         {/* Footer */}
         <div className="p-4 border-t border-[#1a2332]">
+          {user?.email && (
+            <p className="px-4 pb-2 text-[10px] text-slate-600 truncate" title={user.email}>
+              Connecté : {user.email}
+            </p>
+          )}
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-colors"
@@ -153,23 +156,6 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar mobile */}
-        <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-[#0d1220] border-b border-[#1a2332]">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-white/5 text-slate-400"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center overflow-hidden">
-              <img src="/logo-white.png" alt="AlphaTrade" className="w-full h-full object-cover" />
-            </div>
-            <span className="font-bold text-sm">AlphaTrade</span>
-          </div>
-          <div className="w-9" />
-        </header>
-
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
           <Outlet />

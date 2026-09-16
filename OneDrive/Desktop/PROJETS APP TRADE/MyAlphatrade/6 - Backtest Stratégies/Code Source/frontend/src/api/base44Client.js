@@ -329,6 +329,15 @@ function setAlphaTradeToken(token) {
   }
 }
 
+// Module 7 / Recherche -- analyse des gaps d'ouverture (Research Lab,
+// 2026-09-16/17). Endpoint dedie plutot que le CRUD generique : calcule a la
+// volee a partir des bougies MarketData deja importees, ne stocke rien.
+const research = {
+  async gapAnalysis(symbol) {
+    return apiFetch(`/research/gap-analysis?${new URLSearchParams({ symbol }).toString()}`);
+  },
+};
+
 const alphatrade = {
   isConnected: () => !!getAlphaTradeToken(),
   disconnect: () => setAlphaTradeToken(null),
@@ -368,6 +377,7 @@ export const base44 = {
     hasToken: () => !!getToken(),
   },
   marketData,
+  research,
   alphatrade,
   entities: {
     TradingAsset: makeEntityClient('TradingAsset'),

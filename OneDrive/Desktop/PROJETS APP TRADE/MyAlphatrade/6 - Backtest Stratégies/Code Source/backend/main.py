@@ -15,11 +15,13 @@ import json
 import secrets
 import sqlite3
 import uuid
+import bisect
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import gap_analysis
 import bcrypt
 import jwt
 import requests
@@ -1001,17 +1003,13 @@ def import_market_data(req: MarketDataImportRequest, user=Depends(get_current_us
     return _import_candles(req.symbol, req.timeframe, req.candles, user)
 
 
-@app.get("/market-data")
-def list_market_data(
-    symbol: str,
-    timeframe: str,
-    limit: int = Query(default=MAX_LIMIT, ge=1, le=MAX_LIMIT),
-    user=Depends(get_current_user),
-):
+def _load_market_data(symbol: str, timeframe: str, user: dict, limit: int = MAX_LIMIT) -> list:
     """Lecture des bougies triees par leur vrai timestamp (colonne JSON), pas
     par created_date -- toutes les bougies d'un meme import partagent la meme
     created_date (insertion en un seul lot), donc trier sur created_date ne
-    garantirait pas l'ordre chronologique. Utilise par le moteur de backtest."""
+    garantirait pas l'ordre chronologique. Partagee par l'endpoint REST
+    /market-data et par les modules internes (ex. Research Lab / gap
+    analysis) qui ont besoin des memes bougies sans repasser par HTTP."""
     with db_cursor() as (conn, cur):
         cur.execute(
             "SELECT data FROM entities WHERE user_id = ? AND entity_type = 'MarketData' "
@@ -1021,6 +1019,17 @@ def list_market_data(
         )
         rows = cur.fetchall()
     return [json.loads(r["data"]) for r in rows]
+
+
+@app.get("/market-data")
+def list_market_data(
+    symbol: str,
+    timeframe: str,
+    limit: int = Query(default=MAX_LIMIT, ge=1, le=MAX_LIMIT),
+    user=Depends(get_current_user),
+):
+    """Utilise par le moteur de backtest."""
+    return _load_market_data(symbol, timeframe, user, limit)
 
 
 @app.get("/market-data/summary")
@@ -1040,6 +1049,59 @@ def market_data_summary(user=Depends(get_current_user)):
         )
         rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Module 7 / Recherche -- analyse des gaps d'ouverture ───────────────────
+# Expose gap_analysis.py (construit et teste le 16/09/2026) comme une vraie
+# capacite de l'app plutot qu'un script lance a la main -- Louis : "Stratégie
+# Lab devrait aussi être capable d'analyser ça pour tous les actifs".
+GAP_FILL_HORIZON_BARS = 2000  # ~3 semaines en M15, meme valeur que le defaut de gap_analysis.find_fill_time
+
+
+def _gaps_with_fill_times(gaps: list, m15_bars: list) -> list:
+    """Associe a chaque gap son temps de comblement, en ne scannant que la
+    fenetre M15 utile (bissection sur les timestamps canoniques, deja tries
+    -- comparaison de chaines ISO 'AAAA-MM-JJThh:mm:ssZ', valide car elles
+    trient dans le meme ordre que les instants qu'elles representent)."""
+    sorted_ts = [b["timestamp"] for b in m15_bars]
+    enriched = []
+    for gap in gaps:
+        start_idx = bisect.bisect_left(sorted_ts, gap["timestamp"])
+        window = m15_bars[start_idx:start_idx + GAP_FILL_HORIZON_BARS]
+        fill = gap_analysis.find_fill_time(gap, window, horizon_bars=GAP_FILL_HORIZON_BARS)
+        enriched.append({**gap, **fill})
+    return enriched
+
+
+@app.get("/research/gap-analysis")
+def research_gap_analysis(symbol: str, user=Depends(get_current_user)):
+    """Gap D1 (tout actif deja backfille) + gap de session cash reelle
+    (seulement les actifs listes explicitement dans
+    gap_analysis.CASH_SESSION_HOURS_ET -- jamais une heure de session
+    devinee). Necessite les bougies D1 et M15 deja importees pour `symbol`."""
+    d1_bars = _load_market_data(symbol, "D1", user)
+    m15_bars = _load_market_data(symbol, "M15", user)
+    if len(d1_bars) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Pas assez de bougies D1 pour {symbol} (trouve {len(d1_bars)}) -- importez l'historique D1 depuis Donnees de marche.",
+        )
+
+    d1_gaps = _gaps_with_fill_times(gap_analysis.compute_d1_gaps(d1_bars), m15_bars)
+    result = {
+        "symbol": symbol,
+        "d1_bar_count": len(d1_bars),
+        "m15_bar_count": len(m15_bars),
+        "d1": {"gaps": d1_gaps, "stats": gap_analysis.aggregate_gap_stats(d1_gaps)} if d1_gaps else None,
+        "cash_session": None,
+    }
+    if symbol in gap_analysis.CASH_SESSION_HOURS_ET:
+        if len(m15_bars) < 2:
+            result["cash_session"] = {"error": "Pas assez de bougies M15 pour calculer le gap de session cash."}
+        else:
+            cash_gaps = _gaps_with_fill_times(gap_analysis.compute_cash_session_gaps(symbol, m15_bars), m15_bars)
+            result["cash_session"] = {"gaps": cash_gaps, "stats": gap_analysis.aggregate_gap_stats(cash_gaps)} if cash_gaps else None
+    return result
 
 
 # ── Pont prix live MT5 (Module 4 / Paper Trading, mode Live) ───────────────

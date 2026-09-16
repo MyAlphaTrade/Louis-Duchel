@@ -19,11 +19,37 @@ function defaultDates() {
   };
 }
 
+// Persiste config/resultats dans sessionStorage -- Backtesting est une page
+// de route React Router comme les autres : changer d'onglet la demonte
+// entierement (perte du useState local), ce qui effacait un backtest tout
+// juste lance en revenant dessus. sessionStorage survit a la navigation
+// entre pages (mais pas a la fermeture de l'appli, comportement voulu).
+const SESSION_KEY = "backtesting_session_v1";
+
+function loadPersistedState() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistState(config, results, saved) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ config, results, saved }));
+  } catch {
+    // Quota depasse (backtest tres volumineux) -- on degrade silencieusement,
+    // la config reste au moins en memoire pour la session en cours.
+  }
+}
+
 export default function Backtesting() {
   const { assets } = useAsset();
   const { toast } = useToast();
+  const persisted = loadPersistedState();
   const [strategies, setStrategies] = useState([]);
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState(persisted?.config || {
     strategyId: "",
     assetSymbol: "",
     timeframe: "M15",
@@ -37,9 +63,13 @@ export default function Backtesting() {
     slippage: 0,
     leverage: 100,
   });
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState(persisted?.results || null);
   const [running, setRunning] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(persisted?.saved || false);
+
+  useEffect(() => {
+    persistState(config, results, saved);
+  }, [config, results, saved]);
 
   useEffect(() => {
     base44.entities.Strategy.list("-created_date", 500)
@@ -87,14 +117,38 @@ export default function Backtesting() {
     }
   };
 
+  const handleSelectSaved = (saved) => {
+    const strategy = strategies.find((s) => s.id === saved.strategy_id);
+    if (!strategy) {
+      toast({
+        title: "Stratégie introuvable",
+        description: "La stratégie liée à ce backtest a été supprimée.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const assetSymbol = strategy.asset_symbols?.[0] || config.assetSymbol;
+    const runConfig = {
+      ...config,
+      strategyId: strategy.id,
+      assetSymbol,
+      startDate: saved.start_date,
+      endDate: saved.end_date,
+    };
+    setConfig(runConfig);
+    handleRun(runConfig, strategy);
+  };
+
   const handleSave = async () => {
     if (!results) return;
     try {
       const m = results.metrics;
       await base44.entities.BacktestResult.create({
         strategy_id: config.strategyId,
+        asset_symbol: config.assetSymbol,
         start_date: config.startDate,
         end_date: config.endDate,
+        initial_capital: config.initialCapital,
         total_trades: m.totalTrades,
         winning_trades: m.winningTrades,
         losing_trades: m.losingTrades,
@@ -116,11 +170,22 @@ export default function Backtesting() {
         risk_model: results.riskModel,
         intrabar_exit_policy: results.intrabarExitPolicy,
         atr_smoothing: results.atrSmoothing,
+        // Champs complets (2026-09-17) -- la version precedente ne gardait
+        // que type/prix/profit/dates : rechargee dans TradeJournal (ecran
+        // Stratégies découvertes), direction/close_reason/volume/SL/TP/
+        // equity_after manquaient tous (TradeJournal lit `direction`, pas
+        // `type`, entre autres). Jamais remarque avant car rien ne
+        // rechargeait un resultat sauvegarde dans TradeJournal jusqu'ici.
         trades: results.trades.map((t) => ({
-          type: t.direction,
+          direction: t.direction,
           entry_price: t.entry_price,
           exit_price: t.exit_price,
+          volume: t.volume,
+          stop_loss: t.stop_loss,
+          take_profit: t.take_profit,
+          close_reason: t.close_reason,
           profit: t.profit,
+          equity_after: t.equity_after,
           entry_time: t.entry_time?.toISOString?.() || t.entry_time,
           exit_time: t.exit_time?.toISOString?.() || t.exit_time,
         })),
@@ -141,7 +206,7 @@ export default function Backtesting() {
   };
 
   return (
-    <div className="p-6 lg:p-10 max-w-7xl">
+    <div className="p-6 lg:p-10">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-1">
@@ -225,14 +290,22 @@ export default function Backtesting() {
 
       {/* Empty state */}
       {!results && !running && (
-        <div className="mt-6 space-y-4">
-          <div className="text-center py-16 rounded-2xl bg-[#0d1220] border border-dashed border-[#1a2332]">
-            <BarChart3 className="w-8 h-8 text-slate-700 mx-auto mb-3" />
-            <p className="text-sm text-slate-500">
-              Configurez votre backtest ci-dessus et lancez la simulation.
-            </p>
-          </div>
-          <SavedBacktests strategies={strategies} />
+        <div className="mt-6 text-center py-16 rounded-2xl bg-[#0d1220] border border-dashed border-[#1a2332]">
+          <BarChart3 className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+          <p className="text-sm text-slate-500">
+            Configurez votre backtest ci-dessus et lancez la simulation.
+          </p>
+        </div>
+      )}
+
+      {/* Historique des backtests sauvegardés -- toujours visible (pas
+          seulement quand aucun resultat n'est affiche) pour pouvoir en
+          supprimer un a tout moment, meme apres avoir lance un nouveau test
+          (Louis, 24/07/2026 : avant cette liste disparaissait completement
+          des qu'un resultat etait a l'ecran, la rendant inaccessible). */}
+      {!running && (
+        <div className="mt-6">
+          <SavedBacktests strategies={strategies} onSelect={handleSelectSaved} />
         </div>
       )}
     </div>

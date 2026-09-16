@@ -6,7 +6,7 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
 
-function StatCard({ icon: Icon, label, value, sublabel, color, tooltip }) {
+export function StatCard({ icon: Icon, label, value, sublabel, color, tooltip }) {
   return (
     <div className="p-4 rounded-2xl bg-[#0d1220] border border-[#1a2332] hover:border-[#2a3548] transition-colors">
       <div className="flex items-center justify-between mb-2">
@@ -40,18 +40,19 @@ function StatCard({ icon: Icon, label, value, sublabel, color, tooltip }) {
   );
 }
 
+export const STAT_CARD_COLORS = {
+  profit: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  loss: { bg: "bg-rose-500/10", text: "text-rose-400" },
+  neutral: { bg: "bg-slate-500/10", text: "text-slate-300" },
+  amber: { bg: "bg-amber-500/10", text: "text-amber-400" },
+  blue: { bg: "bg-blue-500/10", text: "text-blue-400" },
+  violet: { bg: "bg-violet-500/10", text: "text-violet-400" },
+};
+
 export default function SummaryStats({ metrics }) {
   const m = metrics;
   const isProfit = m.netProfit >= 0;
-
-  const colors = {
-    profit: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
-    loss: { bg: "bg-rose-500/10", text: "text-rose-400" },
-    neutral: { bg: "bg-slate-500/10", text: "text-slate-300" },
-    amber: { bg: "bg-amber-500/10", text: "text-amber-400" },
-    blue: { bg: "bg-blue-500/10", text: "text-blue-400" },
-    violet: { bg: "bg-violet-500/10", text: "text-violet-400" },
-  };
+  const colors = STAT_CARD_COLORS;
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

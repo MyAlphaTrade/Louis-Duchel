@@ -24,9 +24,13 @@ import PaperTrading from '@/pages/PaperTrading';
 import Signals from '@/pages/Signals';
 import AssetManagement from '@/pages/AssetManagement';
 import AIDesigner from '@/pages/AIDesigner';
+import Research from '@/pages/Research';
+import StrategiesDiscovered from '@/pages/StrategiesDiscovered';
 import Settings from '@/pages/Settings';
 import { AISettingsProvider } from '@/lib/AISettingsContext';
 import { AlphaTradeConnectionProvider } from '@/lib/AlphaTradeConnectionContext';
+import { SignalExportProvider } from '@/lib/SignalExportContext';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -63,6 +67,8 @@ const AuthenticatedApp = () => {
           <Route path="/paper-trading" element={<PaperTrading />} />
           <Route path="/signals" element={<Signals />} />
           <Route path="/ai-designer" element={<AIDesigner />} />
+          <Route path="/research" element={<Research />} />
+          <Route path="/strategies-discovered" element={<StrategiesDiscovered />} />
           <Route path="/assets" element={<AssetManagement />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
@@ -75,21 +81,25 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <ScrollToTop />
-          <AssetProvider>
-            <AISettingsProvider>
-              <AlphaTradeConnectionProvider>
-                <AuthenticatedApp />
-              </AlphaTradeConnectionProvider>
-            </AISettingsProvider>
-          </AssetProvider>
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <ScrollToTop />
+            <AssetProvider>
+              <AISettingsProvider>
+                <AlphaTradeConnectionProvider>
+                  <SignalExportProvider>
+                    <AuthenticatedApp />
+                  </SignalExportProvider>
+                </AlphaTradeConnectionProvider>
+              </AISettingsProvider>
+            </AssetProvider>
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
