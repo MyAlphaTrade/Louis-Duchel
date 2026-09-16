@@ -59,6 +59,44 @@ describe("conventions explicites (Phase 1)", () => {
   });
 });
 
+describe("verrouillage actif <-> stratégie (brique 2/6, 2026-09-15)", () => {
+  it("scope 'specific' : refuse un actif hors de asset_symbols", () => {
+    const strategy = baseStrategy({ asset_scope: "specific", asset_symbols: ["XAUUSD"] });
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD" }, {}, 10000)).toThrow(/XAUUSD/);
+  });
+
+  it("scope 'specific' : autorise un actif présent dans asset_symbols", () => {
+    const strategy = baseStrategy({ asset_scope: "specific", asset_symbols: ["XAUUSD", "BTCUSD"] });
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD" }, {}, 10000)).not.toThrow();
+  });
+
+  it("scope 'specific' avec asset_symbols vide (config incomplète) reste permissif", () => {
+    const strategy = baseStrategy({ asset_scope: "specific", asset_symbols: [] });
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD" }, {}, 10000)).not.toThrow();
+  });
+
+  it("scope 'category' : refuse une catégorie différente", () => {
+    const strategy = baseStrategy({ asset_scope: "category", asset_category: "Métaux" });
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD", category: "Crypto" }, {}, 10000)).toThrow(/Métaux/);
+  });
+
+  it("scope 'category' : autorise la même catégorie", () => {
+    const strategy = baseStrategy({ asset_scope: "category", asset_category: "Métaux" });
+    expect(() => buildEngineContext(strategy, { symbol: "XAGUSD", category: "Métaux" }, {}, 10000)).not.toThrow();
+  });
+
+  it("scope 'all' : aucune restriction, quel que soit l'actif", () => {
+    const strategy = baseStrategy({ asset_scope: "all" });
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD" }, {}, 10000)).not.toThrow();
+  });
+
+  it("aucun asset_scope déclaré (stratégie créée avant ce champ) reste permissif", () => {
+    const strategy = baseStrategy();
+    delete strategy.asset_scope;
+    expect(() => buildEngineContext(strategy, { symbol: "BTCUSD" }, {}, 10000)).not.toThrow();
+  });
+});
+
 describe("sizing -- capital initial, jamais le solde courant", () => {
   it("le plafond de levier ignore le paramètre balance et utilise ctx.capital", () => {
     const strategy = baseStrategy({ risk_management: { type: "percent", risk_value: 1, max_positions: 1 } });

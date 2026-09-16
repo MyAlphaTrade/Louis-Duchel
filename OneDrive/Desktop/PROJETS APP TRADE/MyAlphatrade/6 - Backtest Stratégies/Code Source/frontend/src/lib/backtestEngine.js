@@ -234,7 +234,53 @@ export async function loadRealBars(symbol, timeframe) {
 // (constant for the whole run — mirrors runBacktest's pre-loop setup
 // exactly). `capital` is the reference balance used for percent-of-capital
 // risk sizing (the *initial* capital, not the live/running balance).
+// Verrouillage actif <-> stratégie (2026-09-15, brique 2/6 du pipeline
+// Strategy Lab <-> Global -- voir Contrat_Execution_StrategyLab_Global_
+// 2026-09-15.html, décision 3 : « Global ne doit jamais décider de lui-même
+// que la stratégie XAUUSD peut être appliquée au BTC. »). Corrige un bug
+// réel trouvé en audit : `asset_scope`/`asset_symbols`/`asset_category`
+// existaient déjà sur Strategy mais n'étaient vérifiés nulle part avant
+// exécution -- l'appelant choisissait librement quel `asset` passer,
+// indépendamment de ce que déclarait la stratégie.
+//
+// Choix delibere : `asset_scope` absent OU "all" => aucune restriction
+// (cohérent avec strategyLibrary.js, ou "all" est deja la valeur utilisee
+// pour une strategie sans actif dedie -- ne pas casser les strategies
+// existantes creees avant ce champ). "specific" avec `asset_symbols` VIDE
+// (config incomplete plutot qu'une vraie restriction) reste egalement
+// permissif -- seule une INCOMPATIBILITE explicitement declaree bloque.
+function assertAssetAllowed(strategy, asset) {
+  const scope = strategy.asset_scope;
+  if (!scope || scope === "all") return;
+
+  if (scope === "specific") {
+    const allowed = strategy.asset_symbols || [];
+    if (allowed.length > 0 && !allowed.includes(asset.symbol)) {
+      throw new Error(
+        `Stratégie « ${strategy.name || strategy.id} » restreinte à ${allowed.join(", ")} — ` +
+          `ne peut pas être exécutée sur ${asset.symbol}.`
+      );
+    }
+    return;
+  }
+
+  if (scope === "category") {
+    if (strategy.asset_category && asset.category && strategy.asset_category !== asset.category) {
+      throw new Error(
+        `Stratégie « ${strategy.name || strategy.id} » restreinte à la catégorie ` +
+          `« ${strategy.asset_category} » — ne peut pas être exécutée sur ${asset.symbol} ` +
+          `(catégorie « ${asset.category} »).`
+      );
+    }
+  }
+}
+
+// Seul point de passage partagé par les 3 chemins d'exécution (runBacktest,
+// evaluateLiveStep, stepReplay) : la garde ci-dessus les protège tous les
+// trois sans dupliquer la verification a chaque appelant.
 export function buildEngineContext(strategy, asset, config, capital) {
+  assertAssetAllowed(strategy, asset);
+
   const spread = config.spread || 0;
   const commission = config.commission || 0;
   const slippage = config.slippage || 0;
