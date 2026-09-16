@@ -336,6 +336,16 @@ const research = {
   async gapAnalysis(symbol) {
     return apiFetch(`/research/gap-analysis?${new URLSearchParams({ symbol }).toString()}`);
   },
+  // RSI/ADX/EMA -- observations de marche descriptives (2026-09-17), jamais
+  // un signal ni un score de confiance. Periodes optionnelles (defauts
+  // conventionnels cote backend : RSI 14, ADX 14, EMA 21).
+  async indicators(symbol, timeframe, { rsiPeriod, adxPeriod, emaPeriod } = {}) {
+    const params = new URLSearchParams({ symbol, timeframe });
+    if (rsiPeriod) params.set('rsi_period', String(rsiPeriod));
+    if (adxPeriod) params.set('adx_period', String(adxPeriod));
+    if (emaPeriod) params.set('ema_period', String(emaPeriod));
+    return apiFetch(`/research/indicators?${params.toString()}`);
+  },
 };
 
 const alphatrade = {

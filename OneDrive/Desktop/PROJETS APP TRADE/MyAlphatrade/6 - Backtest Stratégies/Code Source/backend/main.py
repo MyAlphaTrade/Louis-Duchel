@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import gap_analysis
+import indicators
 import bcrypt
 import jwt
 import requests
@@ -1102,6 +1103,45 @@ def research_gap_analysis(symbol: str, user=Depends(get_current_user)):
             cash_gaps = _gaps_with_fill_times(gap_analysis.compute_cash_session_gaps(symbol, m15_bars), m15_bars)
             result["cash_session"] = {"gaps": cash_gaps, "stats": gap_analysis.aggregate_gap_stats(cash_gaps)} if cash_gaps else None
     return result
+
+
+@app.get("/research/indicators")
+def research_indicators(
+    symbol: str,
+    timeframe: str,
+    rsi_period: int = Query(default=14, ge=2, le=200),
+    adx_period: int = Query(default=14, ge=2, le=200),
+    ema_period: int = Query(default=21, ge=2, le=500),
+    user=Depends(get_current_user),
+):
+    """Module 7 / Recherche -- RSI, ADX, EMA traites comme des OBSERVATIONS
+    de marche (statistiques descriptives sur donnees reelles deja
+    importees), jamais comme des regles BUY/SELL ni un score de confiance
+    (voir indicators.py). Un actif/timeframe sans assez de bougies renvoie
+    insufficient_data=true plutot qu'une valeur approximee."""
+    bars = _load_market_data(symbol, timeframe, user)
+    if len(bars) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Pas assez de bougies {timeframe} pour {symbol} (trouve {len(bars)}) -- importez l'historique depuis Donnees de marche.",
+        )
+
+    rsi_series = indicators.compute_rsi(bars, period=rsi_period)
+    adx_series = indicators.compute_adx(bars, period=adx_period)
+    ema_series = indicators.compute_ema(bars, period=ema_period)
+
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "bar_count": len(bars),
+        "rsi": {"period": rsi_period, "series": rsi_series, "stats": indicators.summarize_rsi(rsi_series)},
+        "adx": {"period": adx_period, "series": adx_series, "stats": indicators.summarize_adx(adx_series)},
+        "ema": {
+            "period": ema_period,
+            "series": ema_series,
+            "stats": indicators.summarize_ema(bars, ema_series, ema_period),
+        },
+    }
 
 
 # ── Pont prix live MT5 (Module 4 / Paper Trading, mode Live) ───────────────

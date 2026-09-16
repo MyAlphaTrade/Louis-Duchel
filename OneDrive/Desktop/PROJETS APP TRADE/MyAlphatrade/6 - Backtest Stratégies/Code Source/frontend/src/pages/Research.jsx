@@ -5,21 +5,19 @@ import { bucketFillTimes } from "@/lib/gapHistogram";
 import { StatCard, STAT_CARD_COLORS } from "@/components/backtesting/SummaryStats";
 import {
   Microscope, CheckCircle2, Clock, TrendingUp, Sigma, Loader2, AlertTriangle,
-  Lock,
+  Lock, Activity, Gauge, ChevronDown,
 } from "lucide-react";
 
-// Feuille de route affichee honnetement -- rien ici n'est calcule par le
-// backend pour l'instant (seule l'analyse de gap, ci-dessus dans la page,
-// est reelle). Louis (16-17/09/2026) veut TOUS les indicateurs/correlations
-// possibles a terme ; ces cartes montrent la cible sans jamais pretendre
-// qu'elle est deja implementee.
+const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
+
+// Feuille de route affichee honnetement pour ce qui n'est PAS encore
+// implemente (Fair Value Gaps, Order Blocks, correlations inter-TF).
+// RSI/ADX/EMA sont sortis de cette liste le 17/09/2026 -- ce sont
+// desormais de vraies observations calculees (voir IndicatorSection).
 const ROADMAP_INDICATORS = [
-  { name: "EMA 9/21 cross", note: "Deja disponible comme regle de stratégie (Module 2) — pas encore agrege ici en indicateur de marché." },
-  { name: "RSI (14)", note: "À venir." },
-  { name: "ADX / force de tendance", note: "À venir." },
   { name: "Fair Value Gaps (FVG)", note: "À venir." },
   { name: "Order Blocks", note: "À venir." },
-  { name: "Corrélations D1 → M15/M5", note: "À venir." },
+  { name: "Corrélations D1 → M15/M5", note: "À venir — nécessite un historique cohérent sur les deux timeframes pour le même actif." },
 ];
 
 function GapSection({ title, data, note }) {
@@ -101,11 +99,99 @@ function GapSection({ title, data, note }) {
   );
 }
 
+// RSI/ADX/EMA -- OBSERVATIONS DE MARCHÉ descriptives (Wilder pour RSI/ADX,
+// EMA classique amorcée par SMA). Jamais transformées en signal BUY/SELL ni
+// en score de confiance (voir backend/indicators.py pour les conventions
+// de calcul exactes, documentées et testées).
+function IndicatorSection({ data, error, loading }) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl bg-[#0d1220] border border-[#1a2332] p-5 flex items-center gap-2 text-slate-500">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-xs">Calcul des indicateurs…</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-2xl bg-amber-500/5 border border-amber-500/20 p-5 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-slate-400">{error.message}</p>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const rsi = data.rsi.stats;
+  const adx = data.adx.stats;
+  const ema = data.ema.stats;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-[#0d1220] border border-[#1a2332] p-5">
+        <h4 className="text-xs font-bold text-white mb-1">RSI ({data.rsi.period}) — force relative</h4>
+        <p className="text-[10.5px] text-slate-600 mb-4">
+          Wilder (1978), moyenne des gains/pertes lissée. Zones 70/30 = terminologie conventionnelle de l'indicateur, pas une règle de déclenchement.
+        </p>
+        {rsi.insufficient_data ? (
+          <p className="text-xs text-slate-500">Pas assez de bougies {data.timeframe} pour calculer un RSI({data.rsi.period}) fiable.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon={Gauge} label="Dernière valeur" value={rsi.last} color={STAT_CARD_COLORS.amber} />
+            <StatCard icon={Sigma} label="Moyenne / médiane" value={`${rsi.mean} / ${rsi.median}`} color={STAT_CARD_COLORS.neutral} />
+            <StatCard icon={TrendingUp} label="Temps en survente (≤30)" value={`${rsi.pct_oversold}%`} color={STAT_CARD_COLORS.profit} />
+            <StatCard icon={TrendingUp} label="Temps en surachat (≥70)" value={`${rsi.pct_overbought}%`} color={STAT_CARD_COLORS.loss} />
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-[#0d1220] border border-[#1a2332] p-5">
+        <h4 className="text-xs font-bold text-white mb-1">ADX ({data.adx.period}) — force de tendance</h4>
+        <p className="text-[10.5px] text-slate-600 mb-4">
+          Wilder (1978), +DI/-DI/DX lissés. Seuils 25/20 = terminologie conventionnelle (tendance/range), pas une règle de déclenchement.
+        </p>
+        {adx.insufficient_data ? (
+          <p className="text-xs text-slate-500">Pas assez de bougies {data.timeframe} pour calculer un ADX({data.adx.period}) fiable.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon={Gauge} label="Dernière valeur" value={adx.last} color={STAT_CARD_COLORS.amber} />
+            <StatCard icon={Sigma} label="Moyenne / médiane" value={`${adx.mean} / ${adx.median}`} color={STAT_CARD_COLORS.neutral} />
+            <StatCard icon={Activity} label="Temps en tendance (≥25)" value={`${adx.pct_trending}%`} color={STAT_CARD_COLORS.blue} />
+            <StatCard icon={Activity} label="Temps en range (≤20)" value={`${adx.pct_ranging}%`} color={STAT_CARD_COLORS.violet} />
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-[#0d1220] border border-[#1a2332] p-5">
+        <h4 className="text-xs font-bold text-white mb-1">EMA ({data.ema.period}) — position du prix</h4>
+        <p className="text-[10.5px] text-slate-600 mb-4">
+          Moyenne mobile exponentielle classique, amorcée par la SMA des {data.ema.period} premières clôtures. Statistiques de position, pas un signal de croisement.
+        </p>
+        {ema.insufficient_data ? (
+          <p className="text-xs text-slate-500">Pas assez de bougies {data.timeframe} pour calculer une EMA({data.ema.period}) fiable.</p>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon={Gauge} label="Dernière valeur" value={ema.last} color={STAT_CARD_COLORS.amber} />
+            <StatCard icon={TrendingUp} label="Prix au-dessus" value={`${ema.pct_price_above}%`} color={STAT_CARD_COLORS.profit} />
+            <StatCard icon={TrendingUp} label="Prix en-dessous" value={`${ema.pct_price_below}%`} color={STAT_CARD_COLORS.loss} />
+            <StatCard icon={Sigma} label="Traversées prix/EMA" value={ema.crossings} color={STAT_CARD_COLORS.neutral} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Research() {
   const { selectedAsset } = useAsset();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [timeframe, setTimeframe] = useState("M15");
+  const [indicatorsData, setIndicatorsData] = useState(null);
+  const [indicatorsLoading, setIndicatorsLoading] = useState(true);
+  const [indicatorsError, setIndicatorsError] = useState(null);
 
   useEffect(() => {
     if (!selectedAsset?.symbol) return;
@@ -119,6 +205,19 @@ export default function Research() {
       .catch((err) => { if (mounted) { setError(err); setLoading(false); } });
     return () => { mounted = false; };
   }, [selectedAsset?.symbol]);
+
+  useEffect(() => {
+    if (!selectedAsset?.symbol) return;
+    let mounted = true;
+    setIndicatorsLoading(true);
+    setIndicatorsError(null);
+    setIndicatorsData(null);
+    base44.research
+      .indicators(selectedAsset.symbol, timeframe)
+      .then((res) => { if (mounted) { setIndicatorsData(res); setIndicatorsLoading(false); } })
+      .catch((err) => { if (mounted) { setIndicatorsError(err); setIndicatorsLoading(false); } });
+    return () => { mounted = false; };
+  }, [selectedAsset?.symbol, timeframe]);
 
   return (
     <div className="p-6 lg:p-10">
@@ -169,13 +268,33 @@ export default function Research() {
         </div>
       )}
 
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-white">Indicateurs de marché — observations</h3>
+            <p className="text-[11px] text-slate-600 mt-0.5">Statistiques descriptives, jamais un signal ni un score de confiance.</p>
+          </div>
+          <div className="relative">
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-xl bg-[#0d1220] border border-[#1a2332] text-sm text-slate-300 focus:outline-none focus:border-amber-500/40"
+            >
+              {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-600 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+        <IndicatorSection data={indicatorsData} error={indicatorsError} loading={indicatorsLoading} />
+      </div>
+
       <div className="mt-8 rounded-2xl bg-[#0d1220] border border-[#1a2332] p-5">
         <div className="flex items-center gap-2 mb-1">
           <Lock className="w-3.5 h-3.5 text-slate-600" />
-          <h3 className="text-sm font-bold text-white">Indicateurs, validations & corrélations inter-timeframes</h3>
+          <h3 className="text-sm font-bold text-white">Reste à venir</h3>
         </div>
         <p className="text-[11px] text-slate-600 mb-4">
-          Périmètre cible complet — à ce stade, seule l'analyse de gap ci-dessus est réellement calculée.
+          Pas encore implémenté — présenté ici pour rester honnête sur le périmètre réel.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {ROADMAP_INDICATORS.map((ind) => (
