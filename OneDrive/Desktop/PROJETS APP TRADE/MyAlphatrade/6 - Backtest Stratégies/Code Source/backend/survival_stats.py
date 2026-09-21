@@ -13,9 +13,19 @@ D1  Temps de comblement = duree jusqu'a l'evenement "comble". Un temps commun
     alpha = 0,05.
 D2  IC principal : bootstrap percentile bilateral a 95 %, 10 000
     rerechantillonnages avec remise, stratifie par groupe (tailles observees
-    conservees), graine 20260918, tau fixe (jamais recalcule par
+    conservees), graine maitre 20260918, tau fixe (jamais recalcule par
     rerechantillon). Sensibilite sans poids de decision : bootstrap par
     blocs de semaines ISO.
+D2-flux (amendement verrouille, 2026-09-21) : chaque analyse bootstrap recoit
+    un flux pseudo-aleatoire deterministe DISTINCT, derive de la graine
+    maitre et d'une etiquette explicite (`H1:iid`, `H1:blocs`,
+    `D4:2024-S2`, `D7:...`). Une etiquette n'est jamais reutilisee ; aucun
+    flux n'est partage entre deux analyses.
+D2-percentiles (amendement verrouille, 2026-09-21) : sur les repliques
+    triees par ordre croissant (indices a partir de 0), les bornes sont aux
+    indices floor(25*(B-1)/1000) et floor(975*(B-1)/1000), sans
+    interpolation ; B = nombre de repliques VALIDES (10 000 -> 249 et 9749 ;
+    1 000 -> 24 et 974).
 
 Note de verification (D2) : toutes les observations eligibles ont un horizon
 reel >= tau, donc AUCUNE censure n'existe avant tau. L'integrale est alors
@@ -23,12 +33,13 @@ exactement egale a la moyenne des min(T_i, tau). Le bootstrap utilise cette
 identite pour la vitesse ; les tests verifient l'egalite avec le calcul
 Kaplan-Meier.
 
-Detail d'implementation (a confirmer en revue de coherence) : l'intervalle
-percentile prend, sur les repliques triees, les indices
-floor(0,025*(B-1)) et floor(0,975*(B-1)), sans interpolation.
+Libelle du verdict (amendement verrouille, 2026-09-21) : un IC principal qui
+contient 0 est "non concluante", jamais "non soutenue" -- ce n'est pas la
+preuve d'une absence d'effet.
 
 Module pur : aucun acces DB, aucune donnee.
 """
+import hashlib
 import math
 import random
 from statistics import median
@@ -42,6 +53,31 @@ READING_CLAUSE = (
     "pas, a lui seul, d'attribuer cette difference a la vitesse typique ou "
     "a la traine."
 )
+
+
+def derive_rng(label, master_seed=DEFAULT_SEED):
+    """D2-flux : flux pseudo-aleatoire deterministe derive de la graine maitre
+    et d'une etiquette explicite. Graine du generateur = SHA-256 de
+    "{graine_maitre}|{etiquette}" (UTF-8), lu comme entier big-endian ; ne
+    depend donc pas du traitement interne des graines textuelles de Python."""
+    if not isinstance(label, str) or not label:
+        raise ValueError("Etiquette de flux obligatoire (chaine non vide).")
+    digest = hashlib.sha256(f"{master_seed}|{label}".encode("utf-8")).digest()
+    return random.Random(int.from_bytes(digest, "big"))
+
+
+class LabelLedger:
+    """Garantit qu'aucune etiquette de flux n'est reutilisee au sein d'un
+    meme run (D2-flux : jamais de flux partage entre analyses)."""
+
+    def __init__(self):
+        self._used = set()
+
+    def claim(self, label):
+        if label in self._used:
+            raise ValueError(f"Etiquette de flux deja utilisee : {label!r}.")
+        self._used.add(label)
+        return label
 
 
 def censor_at_tau(times, events, tau):
@@ -136,17 +172,26 @@ def logrank_test(times_a, events_a, times_b, events_b):
     }
 
 
-def percentile_interval(values, lo=0.025, hi=0.975):
+def percentile_indices(b):
+    """D2-percentiles : indices (a partir de 0) des bornes 2,5 % et 97,5 %
+    pour `b` repliques valides, en arithmetique ENTIERE, sans interpolation."""
+    if b < 1:
+        raise ValueError("Aucune replique : intervalle percentile indefini.")
+    return 25 * (b - 1) // 1000, 975 * (b - 1) // 1000
+
+
+def percentile_interval(values):
     a = sorted(values)
-    b = len(a)
-    return a[int(lo * (b - 1))], a[int(hi * (b - 1))]
+    lo, hi = percentile_indices(len(a))
+    return a[lo], a[hi]
 
 
-def bootstrap_delta_rmst_iid(capped_a, capped_b, n_boot=DEFAULT_N_BOOT, seed=DEFAULT_SEED):
+def bootstrap_delta_rmst_iid(capped_a, capped_b, label, n_boot=DEFAULT_N_BOOT, master_seed=DEFAULT_SEED):
     """IC principal (D2). `capped_*` = min(T_i, tau) par observation ; le
     groupe a est "range", b "tendance". Stratifie : les tailles des deux
-    groupes sont conservees a chaque replique."""
-    rng = random.Random(seed)
+    groupes sont conservees a chaque replique. `label` : etiquette du flux
+    (D2-flux), obligatoire -- jamais de flux par defaut partage."""
+    rng = derive_rng(label, master_seed)
     randrange = rng.randrange
     na, nb = len(capped_a), len(capped_b)
     if na == 0 or nb == 0:
@@ -156,10 +201,10 @@ def bootstrap_delta_rmst_iid(capped_a, capped_b, n_boot=DEFAULT_N_BOOT, seed=DEF
         mean_a = sum(capped_a[randrange(na)] for _ in range(na)) / na
         mean_b = sum(capped_b[randrange(nb)] for _ in range(nb)) / nb
         reps.append(mean_a - mean_b)
-    return {"interval": percentile_interval(reps), "n_boot": n_boot, "seed": seed}
+    return {"interval": percentile_interval(reps), "n_boot": n_boot, "master_seed": master_seed, "label": label}
 
 
-def bootstrap_delta_rmst_blocks(blocks, n_boot=DEFAULT_N_BOOT, seed=DEFAULT_SEED):
+def bootstrap_delta_rmst_blocks(blocks, label, n_boot=DEFAULT_N_BOOT, master_seed=DEFAULT_SEED):
     """Sensibilite (D2) : semaines rerechantillonnees avec remise. `blocks` :
     {cle_de_bloc: [("a"|"b", temps_plafonne), ...]}. Les repliques ou un
     groupe est vide sont ecartees ET comptees."""
@@ -167,7 +212,7 @@ def bootstrap_delta_rmst_blocks(blocks, n_boot=DEFAULT_N_BOOT, seed=DEFAULT_SEED
     nk = len(keys)
     if nk == 0:
         raise ValueError("Bootstrap par blocs impossible : aucun bloc.")
-    rng = random.Random(seed)
+    rng = derive_rng(label, master_seed)
     randrange = rng.randrange
     reps, discarded = [], 0
     for _ in range(n_boot):
@@ -186,7 +231,8 @@ def bootstrap_delta_rmst_blocks(blocks, n_boot=DEFAULT_N_BOOT, seed=DEFAULT_SEED
         reps.append(sum_a / n_a - sum_b / n_b)
     return {
         "interval": percentile_interval(reps) if reps else None,
-        "n_valid": len(reps), "n_discarded": discarded, "n_blocks": nk, "n_boot": n_boot, "seed": seed,
+        "n_valid": len(reps), "n_discarded": discarded, "n_blocks": nk, "n_boot": n_boot,
+        "master_seed": master_seed, "label": label,
     }
 
 
@@ -195,14 +241,16 @@ def excludes_zero(interval):
 
 
 def h1_verdict(primary_interval, block_interval=None):
-    """H1 est "soutenue" si l'IC principal exclut 0 (D1). Si l'IC par blocs
-    inclut 0 alors que le principal l'exclut : libelle descriptif de D2, le
-    verdict de H1 restant celui du critere principal."""
+    """H1 est "soutenue" si l'IC principal exclut 0 (D1) ; sinon "non
+    concluante" (amendement verrouille : un IC contenant 0 n'est pas la
+    preuve d'une absence d'effet). Si l'IC par blocs inclut 0 alors que le
+    principal l'exclut : libelle descriptif de D2, le verdict de H1 restant
+    celui du critere principal."""
     supported = excludes_zero(primary_interval)
     note = None
     if supported and block_interval is not None and not excludes_zero(block_interval):
         note = "soutenu, non robuste a la dependance intra-semaine"
-    return {"h1_supported": supported, "label": "soutenue" if supported else "non soutenue", "sensitivity_note": note}
+    return {"h1_supported": supported, "label": "soutenue" if supported else "non concluante", "sensitivity_note": note}
 
 
 def describe_group(times, events, tau):

@@ -7,7 +7,7 @@ import unittest
 
 from data_integrity import (
     REFERENCE_LAST_BAR, REFERENCE_N, REFERENCE_SHA256, bars_fingerprint, file_sha256_lf,
-    sha256_lf_normalized, sidecar_text, verify_reference,
+    reference_series, sha256_lf_normalized, sidecar_text, verify_reference,
 )
 
 
@@ -67,6 +67,24 @@ class TestVerifyReference(unittest.TestCase):
         tampered = [BARS[0], bar("2026-01-01T00:15:00Z", 1.5, 2.5, 1.0, 9.9)]
         r = verify_reference(tampered, expected_n=2, expected_last="2026-01-01T00:15:00Z", expected_sha256=sha(LINE_1 + LINE_2))
         self.assertFalse(r["ok"])
+
+
+class TestReferenceSeries(unittest.TestCase):
+    def test_keeps_bars_up_to_the_reference_inclusive_and_nothing_after(self):
+        bars = BARS + [bar("2026-01-01T00:30:00Z", 9.0, 9.0, 9.0, 9.0)]
+        self.assertEqual(reference_series(bars, last_bar="2026-01-01T00:15:00Z"), BARS)
+
+    def test_a_partial_later_bar_never_reaches_the_series_and_never_changes_its_fingerprint(self):
+        partial = bar("2026-01-01T00:30:00Z", 2.0, 2.2, 1.9, 2.1)        # bougie posterieure stockee partielle
+        rewritten = bar("2026-01-01T00:30:00Z", 2.0, 3.0, 1.5, 2.9)      # meme bougie, OHLC final apres import
+        f1 = bars_fingerprint(reference_series(BARS + [partial], last_bar="2026-01-01T00:15:00Z"))
+        f2 = bars_fingerprint(reference_series(BARS + [rewritten], last_bar="2026-01-01T00:15:00Z"))
+        self.assertEqual(f1, f2)
+        self.assertEqual(f1, (2, sha(LINE_1 + LINE_2)))
+
+    def test_default_bound_is_the_locked_reference_bar(self):
+        late = bar("2026-09-16T00:45:00Z", 1.0, 1.0, 1.0, 1.0)
+        self.assertEqual(reference_series([late]), [])
 
 
 class TestLfNormalizedHash(unittest.TestCase):

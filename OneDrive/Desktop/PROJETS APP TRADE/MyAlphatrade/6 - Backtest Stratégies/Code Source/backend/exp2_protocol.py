@@ -12,11 +12,14 @@ Ce module code UNIQUEMENT ce qui est verrouille :
 Hors perimetre (non verrouille) : analyse de stabilite (D4), estimation de
 puissance (D7). Ne modifie aucune donnee ; n'importe pas main.py.
 
-Points a confirmer en revue de coherence :
-- tau = plus petit horizon reel parmi les observations eligibles de l'analyse
-  (groupes range et tendance) ; le groupe "intermediaire" n'y entre pas.
+Regles verrouillees rappelees ici :
+- tau = plus petit horizon reel parmi les observations eligibles des SEULS
+  groupes range et tendance ; le groupe "intermediaire" n'y entre jamais
+  (regle D2/tau, verrouillee 2026-09-21 ; tau_hist = 42 765 min).
 - horizon reel = duree entre T_event et l'horodatage de la derniere bougie
   de sa fenetre de 2000 bougies M15 (verrouille, D1).
+- Etiquettes des flux bootstrap de l'analyse principale : `H1:iid` et
+  `H1:blocs` (D2-flux).
 """
 import bisect
 import re
@@ -35,6 +38,8 @@ PROSPECTIVE_START = "2026-09-17T00:00:00Z"
 HORIZON_BARS = 2000
 TRIGGER_MIN_PER_GROUP = 60
 TEST_GROUPS = ("range", "tendance")
+LABEL_H1_IID = "H1:iid"
+LABEL_H1_BLOCKS = "H1:blocs"
 _CANONICAL_TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
@@ -108,9 +113,17 @@ def blind_counts(m15_bars, prospective_start=PROSPECTIVE_START, horizon_bars=HOR
 
 def compute_tau(eligible):
     """tau = plus petit horizon reel (minutes) parmi les observations
-    eligibles, calcule a partir des bougies uniquement (D1)."""
+    eligibles, calcule a partir des bougies uniquement (D1). Regle
+    verrouillee : seules les observations des groupes range et tendance y
+    entrent ; une observation d'un autre groupe (intermediaire, contexte
+    indisponible) ou sans horizon complet est REFUSEE, jamais ignoree."""
     if not eligible:
         raise ValueError("Aucune observation eligible : tau non defini.")
+    for o in eligible:
+        if o["zone"] not in TEST_GROUPS:
+            raise ValueError(f"tau : groupe non admis {o['zone']!r} (seuls range et tendance).")
+        if isinstance(o["horizon_min"], bool) or not isinstance(o["horizon_min"], int):
+            raise ValueError("tau : horizon reel entier obligatoire (observation mature).")
     return min(o["horizon_min"] for o in eligible)
 
 
@@ -136,16 +149,30 @@ def eligible_list_sha256(eligible) -> str:
 
 
 def attest_reference_state(m15_bars, prospective_start=PROSPECTIVE_START):
-    """Attestation (D6) : verification de la reference historique et
-    inventaire, sans interpretation, des bougies posterieures a la
-    reference. Une bougie posterieure mais anterieure au debut prospectif
-    (ex. celle de 00:45, stockee partielle) est LISTEE, pas cachee."""
+    """Attestation (D6, formulation corrigee le 2026-09-21). Distingue
+    explicitement :
+    - la derniere bougie de REFERENCE cloturee (`REFERENCE_LAST_BAR`) et
+      l'empreinte de la serie jusqu'a elle (`reference`) ;
+    - les bougies POSTERIEURES a la reference (`later_bars`), listees une a
+      une sans interpretation -- par exemple la bougie de 00:45 du 16/09,
+      stockee partielle a 00:47:17 : elle EXISTE dans la base, est hors
+      reference et hors toute serie d'analyse, et sera ecrasee par le
+      premier import (collision attendue, D5). Chacune est marquee
+      prospective (T >= debut prospectif) ou anterieure a ce debut ;
+    - la serie effectivement UTILISEE par les analyses historiques
+      (D4/D7) : les bougies <= reference uniquement (`series_used`).
+    Aucune affirmation « aucune bougie posterieure n'existe » n'est faite :
+    seul l'inventaire l'est."""
     ref = verify_reference(m15_bars)
-    after = [b["timestamp"] for b in m15_bars if b["timestamp"] > ref["expected_last_bar"]]
+    last = ref["expected_last_bar"]
+    later = [b["timestamp"] for b in m15_bars if b["timestamp"] > last]
     return {
         "reference": ref,
-        "bars_after_reference": after,
-        "n_prospective_bars": sum(1 for t in after if t >= prospective_start),
+        "last_closed_reference_bar": last,
+        "series_used": {"up_to": last, "n": ref["n"], "sha256": ref["sha256"]},
+        "later_bars": [{"timestamp": t, "prospective": t >= prospective_start} for t in later],
+        "n_later_bars": len(later),
+        "n_prospective_bars": sum(1 for t in later if t >= prospective_start),
         "prospective_start": prospective_start,
     }
 
@@ -170,7 +197,7 @@ def _time_and_event(o, tau):
     return float(tau), False
 
 
-def run_primary_analysis(observations_with_outcomes, tau, n_boot=DEFAULT_N_BOOT, seed=DEFAULT_SEED):
+def run_primary_analysis(observations_with_outcomes, tau, n_boot=DEFAULT_N_BOOT, master_seed=DEFAULT_SEED):
     """Analyse principale (D1/D2). Entree : observations eligibles avec
     `zone`, `t_event`, `filled`, `fill_minutes`. Sortie : tout ce qui est
     pre-enregistre, le verdict ne dependant QUE du critere principal."""
@@ -185,17 +212,18 @@ def run_primary_analysis(observations_with_outcomes, tau, n_boot=DEFAULT_N_BOOT,
     desc = {g: describe_group(times[g], events[g], tau) for g in TEST_GROUPS}
     delta = desc["range"]["rmst"] - desc["tendance"]["rmst"]
 
-    primary = bootstrap_delta_rmst_iid(times["range"], times["tendance"], n_boot=n_boot, seed=seed)
+    primary = bootstrap_delta_rmst_iid(times["range"], times["tendance"], LABEL_H1_IID, n_boot=n_boot, master_seed=master_seed)
 
     blocks = {}
     for g, tag in (("range", "a"), ("tendance", "b")):
         for o, (t, _) in zip(groups[g], te[g]):
             iso = _parse(o["t_event"]).isocalendar()
             blocks.setdefault((iso[0], iso[1]), []).append((tag, t))
-    block = bootstrap_delta_rmst_blocks(blocks, n_boot=n_boot, seed=seed)
+    block = bootstrap_delta_rmst_blocks(blocks, LABEL_H1_BLOCKS, n_boot=n_boot, master_seed=master_seed)
 
     return {
         "tau_minutes": tau,
+        "bootstrap_streams": {"primary": primary["label"], "blocks": block["label"]},
         "delta_rmst_range_minus_tendance": delta,
         "primary_ci_95": primary["interval"],
         "verdict": h1_verdict(primary["interval"], block["interval"]),

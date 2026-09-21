@@ -48,6 +48,14 @@ def bars_fingerprint(bars, up_to_ts=None):
     return n, h.hexdigest()
 
 
+def reference_series(bars, last_bar=REFERENCE_LAST_BAR):
+    """Serie HISTORIQUE utilisee par les analyses D4/D7 : les bougies dont le
+    timestamp est <= la derniere bougie de reference, rien d'autre. Toute
+    bougie posterieure (partielle ou non, prospective ou non) en est exclue,
+    de sorte qu'aucun import ulterieur ne peut modifier ces analyses."""
+    return [b for b in bars if b["timestamp"] <= last_bar]
+
+
 def verify_reference(bars, expected_n=REFERENCE_N, expected_last=REFERENCE_LAST_BAR, expected_sha256=REFERENCE_SHA256):
     """Verifie que la portion historique couverte par la reference est
     inchangee (nombre, derniere bougie, SHA-256)."""

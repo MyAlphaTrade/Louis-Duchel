@@ -117,6 +117,26 @@ class TestTauAndCanonicalList(unittest.TestCase):
         with self.assertRaises(ValueError):
             p.compute_tau([])
 
+    def test_intermediate_group_never_enters_tau_it_is_refused_not_ignored(self):
+        lower = {"t_event": "2026-10-07T14:30:00Z", "zone": "intermediaire", "horizon_min": 40000}
+        with self.assertRaises(ValueError):
+            p.compute_tau(self.ELIGIBLE + [lower])
+        with self.assertRaises(ValueError):
+            p.compute_tau([{"t_event": "2026-10-07T14:30:00Z", "zone": "indisponible", "horizon_min": 40000}])
+
+    def test_through_the_eligibility_filter_a_smaller_intermediate_horizon_does_not_lower_tau(self):
+        obs = [
+            {"t_event": "2026-10-05T14:30:00Z", "zone": "range", "mature": True, "horizon_min": 42765},
+            {"t_event": "2026-10-06T14:30:00Z", "zone": "tendance", "mature": True, "horizon_min": 43200},
+            {"t_event": "2026-10-07T14:30:00Z", "zone": "intermediaire", "mature": True, "horizon_min": 40000},
+        ]
+        self.assertEqual(p.compute_tau(p.select_eligible(obs, prospective_only=False)), 42765)
+
+    def test_tau_requires_an_integer_real_horizon(self):
+        for bad in (None, 1.5, True):
+            with self.assertRaises(ValueError):
+                p.compute_tau([{"t_event": "2026-10-05T14:30:00Z", "zone": "range", "horizon_min": bad}])
+
     def test_serialization_is_sorted_lf_utf8_and_matches_a_literal_hash(self):
         literal = "2026-10-05T14:30:00Z|range|42765\n2026-10-06T14:30:00Z|tendance|43200\n"
         self.assertEqual(p.serialize_eligible(self.ELIGIBLE), literal.encode("utf-8"))
@@ -154,7 +174,7 @@ class TestOutcomesAndPrimaryAnalysis(unittest.TestCase):
         return obs
 
     def test_hand_computed_delta_and_decomposition(self):
-        r = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=300, seed=1)
+        r = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=300, master_seed=1)
         # range : (50*15 + 10*1000)/60 = 10750/60 ; tendance : (30*300 + 30*1000)/60 = 650
         self.assertAlmostEqual(r["descriptive"]["range"]["rmst"], 10750 / 60)
         self.assertAlmostEqual(r["descriptive"]["tendance"]["rmst"], 650.0)
@@ -167,7 +187,7 @@ class TestOutcomesAndPrimaryAnalysis(unittest.TestCase):
         )
 
     def test_verdict_statuses_and_sensitivities_are_reported(self):
-        r = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=300, seed=1)
+        r = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=300, master_seed=1)
         self.assertTrue(r["verdict"]["h1_supported"])             # IC exclut 0 (ecart tres net)
         self.assertLess(r["primary_ci_95"][1], 0)
         self.assertTrue(r["sensitivity_logrank"]["estimable"])
@@ -181,7 +201,7 @@ class TestOutcomesAndPrimaryAnalysis(unittest.TestCase):
     def test_filled_after_tau_is_censored_at_tau_and_reported_separately(self):
         obs = self.synthetic_observations()
         obs[0] = {**obs[0], "filled": True, "fill_minutes": 1500}  # comble APRES tau=1000 : censure a tau, pas un comble
-        d = p.run_primary_analysis(obs, tau=1000, n_boot=50, seed=1)["descriptive"]["range"]
+        d = p.run_primary_analysis(obs, tau=1000, n_boot=50, master_seed=1)["descriptive"]["range"]
         self.assertEqual(d["n_filled_after_tau"], 1)
         self.assertEqual(d["n_filled_by_tau"], 49)
         self.assertAlmostEqual(d["rmst"], (49 * 15 + 11 * 1000) / 60)
@@ -195,17 +215,37 @@ class TestOutcomesAndPrimaryAnalysis(unittest.TestCase):
         a = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=200)
         b = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=200)
         self.assertEqual(a["primary_ci_95"], b["primary_ci_95"])
-        self.assertEqual(a["sensitivity_block_bootstrap"]["seed"], 20260918)
+        self.assertEqual(a["sensitivity_block_bootstrap"]["master_seed"], 20260918)
+
+    def test_primary_and_block_bootstraps_use_the_two_locked_distinct_streams(self):
+        r = p.run_primary_analysis(self.synthetic_observations(), tau=1000, n_boot=50)
+        self.assertEqual(r["bootstrap_streams"], {"primary": "H1:iid", "blocks": "H1:blocs"})
+        self.assertEqual(r["sensitivity_block_bootstrap"]["label"], "H1:blocs")
 
 
 class TestAttestationAndTriggerRecord(unittest.TestCase):
-    def test_bars_after_the_reference_are_listed_not_hidden(self):
-        bars = [{"timestamp": t, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0} for t in (
-            "2026-09-16T00:15:00Z", "2026-09-16T00:30:00Z", "2026-09-16T00:45:00Z", "2026-09-17T00:00:00Z")]
-        a = p.attest_reference_state(bars)
-        self.assertEqual(a["bars_after_reference"], ["2026-09-16T00:45:00Z", "2026-09-17T00:00:00Z"])
-        self.assertEqual(a["n_prospective_bars"], 1)  # seule la bougie du 17 est prospective
+    BARS = [{"timestamp": t, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0} for t in (
+        "2026-09-16T00:15:00Z", "2026-09-16T00:30:00Z", "2026-09-16T00:45:00Z", "2026-09-17T00:00:00Z")]
+
+    def test_later_bars_are_listed_one_by_one_and_flagged_not_hidden(self):
+        a = p.attest_reference_state(self.BARS)
+        self.assertEqual(a["last_closed_reference_bar"], "2026-09-16T00:30:00Z")
+        self.assertEqual(a["later_bars"], [
+            {"timestamp": "2026-09-16T00:45:00Z", "prospective": False},   # la bougie partielle : signalee, jamais masquee
+            {"timestamp": "2026-09-17T00:00:00Z", "prospective": True},
+        ])
+        self.assertEqual((a["n_later_bars"], a["n_prospective_bars"]), (2, 1))
         self.assertFalse(a["reference"]["ok"])        # serie synthetique != reference reelle
+
+    def test_series_used_stops_at_the_reference_and_never_includes_a_later_bar(self):
+        a = p.attest_reference_state(self.BARS)
+        self.assertEqual(a["series_used"]["up_to"], "2026-09-16T00:30:00Z")
+        self.assertEqual(a["series_used"]["n"], 2)   # 00:15 et 00:30 seulement
+
+    def test_attestation_never_claims_that_no_later_bar_exists(self):
+        only_reference = self.BARS[:2]
+        a = p.attest_reference_state(only_reference)
+        self.assertEqual((a["later_bars"], a["n_later_bars"], a["n_prospective_bars"]), ([], 0, 0))
 
     def test_trigger_record_is_deterministic_lf_with_fixed_field_order(self):
         kwargs = dict(
