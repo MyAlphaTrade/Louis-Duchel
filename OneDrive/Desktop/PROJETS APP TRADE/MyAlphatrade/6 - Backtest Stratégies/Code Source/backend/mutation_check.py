@@ -15,10 +15,10 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-S, E, P, D, W = ("survival_stats.py", "exp2_protocol.py", "power_design.py", "stability_analysis.py",
-                 "data_integrity.py")
-T_S, T_E, T_P, T_D, T_W = ("test_survival_stats", "test_exp2_protocol", "test_power_design",
-                           "test_stability_analysis", "test_data_integrity")
+S, E, P, D, W, I = ("survival_stats.py", "exp2_protocol.py", "power_design.py", "stability_analysis.py",
+                    "data_integrity.py", "import_protocol.py")
+T_S, T_E, T_P, T_D, T_W, T_I = ("test_survival_stats", "test_exp2_protocol", "test_power_design",
+                                "test_stability_analysis", "test_data_integrity", "test_import_protocol")
 
 MUTATIONS = [
     # (nom, fichier, ancien, nouveau, modules de test)
@@ -60,6 +60,39 @@ MUTATIONS = [
     ("D4 : seuil de lisibilite exclusif", D, "counts_for_period[g] >= minimum", "counts_for_period[g] > minimum", [T_D]),
     ("D4 : meme etiquette de flux pour toutes les periodes", D, 'ledger.claim(f"D4:{period}")', 'ledger.claim("D4:x")', [T_D]),
     ("Integrite : la reference exclut sa propre derniere bougie", W, 'b["timestamp"] <= last_bar]', 'b["timestamp"] < last_bar]', [T_W, T_D]),
+    # --- D5 / R1 : garde-fou d'import (import_protocol.py) ---
+    ("D5 : la bougie partielle n'est plus liee a son OHLC stocke", I,
+     'return all(collision["old"].get(f) == KNOWN_PARTIAL_BARS[ts][f] for f in OHLC_FIELDS)', "return True", [T_I]),
+    ("D5 : une bougie partielle est admise meme si ce n'est pas la derniere stockee", I,
+     "if ts != last_stored_ts or ts not in KNOWN_PARTIAL_BARS:", "if ts not in KNOWN_PARTIAL_BARS:", [T_I]),
+    ("D5 : start_date anterieur accepte", I, "if start != last_stored:", "if start > last_stored:", [T_I]),
+    ("D5 : start_date posterieur accepte", I, "if start != last_stored:", "if start < last_stored:", [T_I]),
+    ("D5 : bougie du lot anterieure a start_date acceptee", I,
+     'if canonical_ts(c["timestamp"]) < start:', "if False:", [T_I]),
+    ("D5 : le close n'entre plus dans la collision", I,
+     "return any(old.get(f) != new.get(f) for f in OHLC_FIELDS)", "return any(old.get(f) != new.get(f) for f in OHLC_FIELDS[:3])", [T_I]),
+    ("D5 : le volume et le spread entrent dans la collision", I,
+     "return any(old.get(f) != new.get(f) for f in OHLC_FIELDS)",
+     "return any(old.get(f) != new.get(f) for f in OHLC_FIELDS + INFORMATIVE_FIELDS)", [T_I]),
+    ("D5 : un chevauchement identique est traite comme collision", I, "elif _ohlc_differs(old, c):", "elif True:", [T_I]),
+    ("D5 : les anomalies ne bloquent plus", I, 'if result["anomalies"]:', "if False:", [T_I]),
+    ("D5 : l'ecrivain est appele avant les controles", I,
+     "    plan = plan_import(existing_by_timestamp, candles, start_date)\n    write(plan)\n",
+     "    write(None)\n    plan = plan_import(existing_by_timestamp, candles, start_date)\n", [T_I]),
+    ("D5 : une serie vide est acceptee", I, "if not existing:", "if False:", [T_I]),
+    # --- D5 / durcissement (2026-09-21) : exception 00:45 fermee par construction ---
+    ("D5 : la table des bougies partielles redevient mutable", I,
+     "KNOWN_PARTIAL_BARS = MappingProxyType({\n"
+     '    "2026-09-16T00:45:00Z": MappingProxyType({"open": 28997.4, "high": 29001.9, "low": 28991.9, "close": 28993.65}),\n'
+     "})",
+     'KNOWN_PARTIAL_BARS = {\n'
+     '    "2026-09-16T00:45:00Z": {"open": 28997.4, "high": 29001.9, "low": 28991.9, "close": 28993.65},\n'
+     '}', [T_I]),
+    ("D5 : plan_import reaccepte un parametre partial_bars generique", I,
+     "def plan_import(existing_by_timestamp, candles, start_date):",
+     "def plan_import(existing_by_timestamp, candles, start_date, partial_bars=None):\n"
+     "    if partial_bars:\n"
+     "        globals()['KNOWN_PARTIAL_BARS'] = {**KNOWN_PARTIAL_BARS, **partial_bars}", [T_I]),
 ]
 
 

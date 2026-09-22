@@ -8,9 +8,24 @@ Regles verrouillees, codees ici sous forme de fonctions PURES :
   UTC arrondie au quart d'heure inferieur, moins 15 min). Raison : le code
   d'import actuel prend `date_to = maintenant` (bougie en formation
   incluse) et, sans `start_date`, re-telecharge depuis l'an 2000.
-- Collisions : au plus UNE attendue -- la derniere bougie precedemment
-  stockee, si elle etait partielle. Toute collision sur une bougie
-  anterieure est une ANOMALIE : arret et rapport avant tout autre calcul.
+- Collision (D5, tranchee le 2026-09-21, R1 -- arret strict) : meme
+  horodatage deja present ET OHLC different (comparaison EXACTE, aucune
+  tolerance numerique). Un chevauchement a OHLC identique est `unchanged` :
+  aucune ecriture. Volume et spread ne determinent pas la collision ; ils
+  sont rapportes a titre informatif.
+- `start_date` doit etre EGAL a la derniere bougie actuellement stockee ; un
+  `start_date` different (anterieur ou posterieur), ou une bougie du lot
+  anterieure a `start_date`, refuse l'import AVANT toute ecriture.
+- Une collision n'est admise que sur la derniere bougie stockee, et
+  seulement si elle est explicitement identifiee comme partielle
+  (`KNOWN_PARTIAL_BARS` : horodatage ET OHLC partiel constate a l'attestation
+  D6). Exception de premier import : la bougie 2026-09-16T00:45:00Z. Des
+  qu'elle est remplacee par sa version cloturee, elle n'est plus identifiee
+  comme partielle : toute collision ulterieure sur elle est une anomalie.
+- Toute autre collision (bougie deja cloturee ou anterieure) est une ANOMALIE
+  BLOQUANTE : arret avant toute ecriture, aucun ecrasement, rapport de
+  l'ancien et du nouvel OHLC. Le rapport est adresse a Louis, qui decide de la
+  suite.
 - Un import produit une entree de journal append-only (contenu ci-dessous),
   commitee a chaque import (decision de commit : hors de ce module).
 
@@ -25,18 +40,42 @@ explicitement differe) :
   5. ecriture, puis verify_reference + journal + commit.
 Le controle 3-4 est volontairement AVANT l'ecriture : detecter une
 anomalie apres l'ecriture serait trop tard, l'historique aurait deja ete
-ecrase.
+ecrase. `plan_import` (pure) porte tous les controles ; `guarded_import`
+n'appelle l'ecrivain fourni QU'APRES un plan valide. Le endpoint
+/market-data/import de main.py n'est PAS modifie et n'est pas protege : un
+import du protocole doit passer par `guarded_import`.
 
 Module pur : aucun acces DB ni MT5.
 """
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import MappingProxyType
 
 MAX_INTERVAL_REPORT_MINUTES = 60  # liste des intervalles > 60 min (D5)
+OHLC_FIELDS = ("open", "high", "low", "close")          # seuls champs qui determinent une collision
+INFORMATIVE_FIELDS = ("volume", "spread")               # rapportes, jamais determinants
+
+# Bougie UNIQUE, explicitement identifiee comme partielle (horodatage ET OHLC
+# partiel constate a l'attestation D6). DURCISSEMENT (2026-09-21) : cette
+# exception historique est fermee par construction, pas seulement par
+# convention -- aucune fonction de ce module n'accepte de parametre pour
+# l'etendre ou la remplacer, et la table elle-meme est IMMUABLE
+# (MappingProxyType : toute tentative d'ajout/modification leve TypeError).
+# Reconnaitre une AUTRE bougie comme partielle exige de modifier ce module et
+# releve d'un amendement date, jamais d'un argument d'appel ni d'une mutation
+# a chaud de cette table.
+KNOWN_PARTIAL_BARS = MappingProxyType({
+    "2026-09-16T00:45:00Z": MappingProxyType({"open": 28997.4, "high": 29001.9, "low": 28991.9, "close": 28993.65}),
+})
 
 
 class ImportAnomaly(Exception):
-    """Collision sur une bougie anterieure a la derniere bougie stockee."""
+    """Import refuse AVANT toute ecriture (collision non admise, `start_date`
+    incorrect, ...). `details` porte le rapport structure."""
+
+    def __init__(self, message, details=None):
+        super().__init__(message)
+        self.details = details or {}
 
 
 def _to_utc(dt):
@@ -75,24 +114,123 @@ def compute_import_window(last_stored_ts, now_utc):
     return {"start_date": start.astimezone(timezone.utc).isoformat(), "end_date": end.isoformat()}
 
 
-def classify_collisions(collision_timestamps, last_stored_ts):
-    """Separe la collision attendue (derniere bougie stockee) des anomalies
-    (toute autre bougie)."""
-    expected = [t for t in collision_timestamps if t == last_stored_ts]
-    anomalies = [t for t in collision_timestamps if t != last_stored_ts]
+def canonical_ts(raw) -> str:
+    """Instant UTC canonique `YYYY-MM-DDTHH:MM:SSZ` d'un horodatage ISO 8601
+    (meme regle que la couche de fusion de main.py : un horodatage naif est
+    suppose UTC)."""
+    dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _ohlc_differs(old, new):
+    return any(old.get(f) != new.get(f) for f in OHLC_FIELDS)
+
+
+def _snapshot(data):
+    return {f: data.get(f) for f in OHLC_FIELDS + INFORMATIVE_FIELDS}
+
+
+def classify_candles(existing_by_canonical, candles):
+    """Classe chaque bougie du lot, SANS aucune regle de protocole :
+    absente -> `to_insert` ; presente a OHLC identique -> `unchanged` ;
+    presente a OHLC different -> `collisions` (ancien et nouvel etat).
+    Meme semantique que `_merge_market_data` de main.py (test de parite)."""
+    to_insert, collisions, unchanged = [], [], 0
+    for c in candles:
+        ts = canonical_ts(c["timestamp"])
+        old = existing_by_canonical.get(ts)
+        if old is None:
+            to_insert.append({**c, "timestamp": ts})
+        elif _ohlc_differs(old, c):
+            collisions.append({"timestamp": ts, "old": _snapshot(old), "new": _snapshot(c), "candle": {**c, "timestamp": ts}})
+        else:
+            unchanged += 1
+    return to_insert, collisions, unchanged
+
+
+def _is_identified_partial(collision, last_stored_ts):
+    """Reconnaissance de LA bougie partielle unique -- source unique
+    `KNOWN_PARTIAL_BARS`, jamais parametrable par l'appelant."""
+    ts = collision["timestamp"]
+    if ts != last_stored_ts or ts not in KNOWN_PARTIAL_BARS:
+        return False
+    return all(collision["old"].get(f) == KNOWN_PARTIAL_BARS[ts][f] for f in OHLC_FIELDS)
+
+
+def classify_collisions(collisions, last_stored_ts):
+    """R1 : seule est ATTENDUE une collision sur la derniere bougie stockee
+    explicitement identifiee comme partielle (horodatage et OHLC partiel
+    stocke, `KNOWN_PARTIAL_BARS`). Toute autre collision est une ANOMALIE."""
+    expected = [c for c in collisions if _is_identified_partial(c, last_stored_ts)]
+    anomalies = [c for c in collisions if not _is_identified_partial(c, last_stored_ts)]
     return {"expected": expected, "anomalies": anomalies}
 
 
-def preflight_check(collision_timestamps, last_stored_ts):
-    """A appeler AVANT toute ecriture. Leve ImportAnomaly si une bougie
-    anterieure serait ecrasee."""
-    result = classify_collisions(collision_timestamps, last_stored_ts)
+def _describe(collision):
+    old, new = collision["old"], collision["new"]
+    ohlc = ", ".join(f"{f} {old[f]} -> {new[f]}" for f in OHLC_FIELDS)
+    info = ", ".join(f"{f} {old[f]} -> {new[f]}" for f in INFORMATIVE_FIELDS)
+    return f"{collision['timestamp']} : {ohlc} (informatif : {info})"
+
+
+def preflight_check(collisions, last_stored_ts):
+    """A appeler AVANT toute ecriture. Leve ImportAnomaly (avec rapport de
+    l'ancien et du nouvel OHLC) pour toute collision non admise par R1."""
+    result = classify_collisions(collisions, last_stored_ts)
     if result["anomalies"]:
         raise ImportAnomaly(
-            "Collision sur une bougie anterieure a la derniere bougie stockee "
-            f"({last_stored_ts}) : {result['anomalies']}. Import abandonne avant ecriture."
+            "Collision non admise (seule la derniere bougie stockee, explicitement identifiee comme "
+            f"partielle, peut etre mise a jour ; derniere bougie stockee : {last_stored_ts}) : "
+            + " ; ".join(_describe(c) for c in result["anomalies"])
+            + ". Import abandonne avant ecriture, aucun ecrasement.",
+            {"anomalies": [{k: c[k] for k in ("timestamp", "old", "new")} for c in result["anomalies"]]},
         )
     return result
+
+
+def plan_import(existing_by_timestamp, candles, start_date):
+    """Decision COMPLETE d'un import du protocole (D5, R1), sans aucun acces
+    base : leve ImportAnomaly AVANT toute ecriture, sinon retourne le plan.
+    `existing_by_timestamp` : {horodatage ISO quelconque : donnees de la bougie}
+    ; `candles` : dicts `timestamp/open/high/low/close[/volume/spread]`.
+    Aucun parametre pour designer une bougie partielle : source unique
+    `KNOWN_PARTIAL_BARS`."""
+    existing = {canonical_ts(ts): data for ts, data in existing_by_timestamp.items()}
+    if not existing:
+        raise ImportAnomaly("Aucune bougie stockee : un import du protocole prolonge une serie existante. "
+                            "Import refuse avant ecriture.")
+    last_stored = max(existing)
+    start = canonical_ts(start_date)
+    if start != last_stored:
+        raise ImportAnomaly(
+            f"start_date {start} different de la derniere bougie stockee {last_stored} : import refuse avant ecriture.",
+            {"start_date": start, "last_stored": last_stored},
+        )
+    for c in candles:
+        if canonical_ts(c["timestamp"]) < start:
+            raise ImportAnomaly(
+                f"Bougie {canonical_ts(c['timestamp'])} du lot anterieure a start_date {start} : import refuse avant ecriture.",
+                {"start_date": start, "candle": canonical_ts(c["timestamp"])},
+            )
+    to_insert, collisions, unchanged = classify_candles(existing, candles)
+    classified = preflight_check(collisions, last_stored)
+    return {
+        "start_date": start,
+        "last_stored": last_stored,
+        "to_insert": to_insert,
+        "to_update": [c["candle"] for c in classified["expected"]],
+        "unchanged": unchanged,
+        "expected_collisions": [c["timestamp"] for c in classified["expected"]],
+    }
+
+
+def guarded_import(existing_by_timestamp, candles, start_date, write):
+    """Import garde : `write(plan)` n'est appele QU'APRES un plan valide. Toute
+    anomalie leve ImportAnomaly sans que `write` soit jamais invoque."""
+    plan = plan_import(existing_by_timestamp, candles, start_date)
+    write(plan)
+    return plan
 
 
 def interval_report(bars, threshold_minutes=MAX_INTERVAL_REPORT_MINUTES):
